@@ -305,9 +305,19 @@ with open(log_path, 'a') as f:
       exit 1
     fi
 
-    if [ "$new_attempts" -ge "$SECURITY_MAX_ATTEMPTS" ]; then
-      echo "[autorun] check: $sec_count security finding(s); attempt $new_attempts/$SECURITY_MAX_ATTEMPTS reached — hardcoded block (cap exhausted)" >&2
-      policy_block check security "$sec_count security findings; $new_attempts/$SECURITY_MAX_ATTEMPTS attempts exhausted" || true
+    # Semantics: SECURITY_MAX_ATTEMPTS is the number of /build FIX attempts
+    # to permit. Counter ticks per /check cycle that finds security findings.
+    # Cycle N detects → /build fix #N runs → /check cycle N+1 verifies.
+    # So bail when new_attempts STRICTLY EXCEEDS max — that means:
+    #   max=3 → log "1/3", "2/3", "3/3" all continue (each followed by a
+    #   build fix attempt); on the 4th detection (counter=4 > 3) we bail
+    #   because all 3 fix attempts have demonstrably failed to resolve.
+    # Off-by-one corrected 2026-05-07 (was `>=`, allowing only 2 fix
+    # attempts before bail). User intent: "we attempt 3 resolutions and
+    # log it and stop after 3 attempts".
+    if [ "$new_attempts" -gt "$SECURITY_MAX_ATTEMPTS" ]; then
+      echo "[autorun] check: $sec_count security finding(s); $SECURITY_MAX_ATTEMPTS fix attempts exhausted (this is detection #$new_attempts) — hardcoded block" >&2
+      policy_block check security "$sec_count security findings; $SECURITY_MAX_ATTEMPTS fix attempts exhausted" || true
       render_morning_report
       exit 1
     fi
@@ -412,12 +422,71 @@ with open(log_path, 'a') as f:
       if [ "$cap_reached" = "true" ]; then
         echo "[autorun] check: verdict=NO_GO + cap_reached=true — terminal block (no re-cycle)" >&2
         policy_block check verdict "synthesis emitted NO_GO with cap_reached (terminal; do not re-cycle)" || true
-      else
-        echo "[autorun] check: verdict=NO_GO — hardcoded block (AC#5)" >&2
-        policy_block check verdict "synthesis emitted NO_GO" || true
+        render_morning_report
+        exit 1
       fi
-      render_morning_report
-      exit 1
+
+      # Verdict-axis attempt counter — same pattern as the security-axis
+      # counter above. NO_GO verdicts get up to VERDICT_MAX_FIX_ATTEMPTS
+      # /build fix attempts (default 3, env-overridable) before hardcoded
+      # block. Audit at .verdict-attempts.log (JSONL).
+      #
+      # Shipped 2026-05-07 as part of pipeline-iterative-resolution-loops
+      # (broader generalization of the security-axis counter).
+      local VERDICT_MAX_ATTEMPTS VERDICT_ATTEMPTS_FILE VERDICT_LOG_FILE
+      local v_current_attempts v_new_attempts v_ts
+      VERDICT_MAX_ATTEMPTS="${VERDICT_MAX_FIX_ATTEMPTS:-3}"
+      VERDICT_ATTEMPTS_FILE="$SIDECAR_DIR/.verdict-attempts"
+      VERDICT_LOG_FILE="$SIDECAR_DIR/.verdict-attempts.log"
+
+      v_current_attempts=0
+      if [ -f "$VERDICT_ATTEMPTS_FILE" ]; then
+        v_current_attempts="$(cat "$VERDICT_ATTEMPTS_FILE" 2>/dev/null || echo 0)"
+      fi
+      v_current_attempts="${v_current_attempts:-0}"
+      case "$v_current_attempts" in
+        ''|*[!0-9]*) v_current_attempts=0 ;;
+      esac
+      v_new_attempts=$((v_current_attempts + 1))
+      if ! printf '%s\n' "$v_new_attempts" > "$VERDICT_ATTEMPTS_FILE" 2>/dev/null; then
+        echo "[autorun] check: failed to write $VERDICT_ATTEMPTS_FILE — falling back to integrity block" >&2
+        policy_block check integrity "verdict-attempt counter file unwritable" || true
+        render_morning_report
+        exit 1
+      fi
+
+      v_ts="$(date -u +%FT%TZ)"
+      if ! python3 -c "
+import json, sys
+log_path, ts, run_id, attempt, max_attempts = sys.argv[1:]
+row = {
+    'timestamp': ts,
+    'run_id': run_id,
+    'axis': 'verdict',
+    'verdict': 'NO_GO',
+    'attempt': int(attempt),
+    'max_attempts': int(max_attempts),
+}
+with open(log_path, 'a') as f:
+    f.write(json.dumps(row) + '\n')
+" "$VERDICT_LOG_FILE" "$v_ts" "${RUN_ID:-unknown}" "$v_new_attempts" "$VERDICT_MAX_ATTEMPTS" 2>/dev/null; then
+        echo "[autorun] check: failed to append $VERDICT_LOG_FILE — falling back to integrity block" >&2
+        policy_block check integrity "verdict-attempt log unwritable" || true
+        render_morning_report
+        exit 1
+      fi
+
+      # Bail strictly above max — same semantics as security counter
+      # (gives N actual /build fix attempts before exhaustion).
+      if [ "$v_new_attempts" -gt "$VERDICT_MAX_ATTEMPTS" ]; then
+        echo "[autorun] check: verdict=NO_GO; $VERDICT_MAX_ATTEMPTS fix attempts exhausted (this is detection #$v_new_attempts) — hardcoded block" >&2
+        policy_block check verdict "synthesis emitted NO_GO; $VERDICT_MAX_ATTEMPTS fix attempts exhausted" || true
+        render_morning_report
+        exit 1
+      fi
+
+      echo "[autorun] check: verdict=NO_GO; attempt $v_new_attempts/$VERDICT_MAX_ATTEMPTS — logged to .verdict-attempts.log; continuing pipeline (NO_GO findings remain in check.md for downstream review)" >&2
+      # Fall through — DO NOT exit. Pipeline continues to /build.
       ;;
     GO_WITH_FIXES)
       echo "[autorun] check: verdict=GO_WITH_FIXES — applying verdict_policy"
@@ -428,9 +497,23 @@ with open(log_path, 'a') as f:
       # warn path: terminate iteration loop (GO_WITH_FIXES means "stop, but
       # emit followups for /build" — not a re-cycle trigger). The function
       # returns 0; gate command sees success and stops re-cycling.
+      # Also: reset verdict-attempt counter (clean enough to proceed).
+      if [ -f "$SIDECAR_DIR/.verdict-attempts" ]; then
+        rm -f "$SIDECAR_DIR/.verdict-attempts"
+        printf '{"timestamp":"%s","run_id":"%s","axis":"verdict","event":"counter-reset","reason":"go-with-fixes"}\n' \
+          "$(date -u +%FT%TZ)" "${RUN_ID:-unknown}" \
+          >> "$SIDECAR_DIR/.verdict-attempts.log" 2>/dev/null || true
+      fi
       ;;
     GO)
       echo "[autorun] check: verdict=GO — clean"
+      # Reset verdict-attempt counter (clean check).
+      if [ -f "$SIDECAR_DIR/.verdict-attempts" ]; then
+        rm -f "$SIDECAR_DIR/.verdict-attempts"
+        printf '{"timestamp":"%s","run_id":"%s","axis":"verdict","event":"counter-reset","reason":"clean-go"}\n' \
+          "$(date -u +%FT%TZ)" "${RUN_ID:-unknown}" \
+          >> "$SIDECAR_DIR/.verdict-attempts.log" 2>/dev/null || true
+      fi
       ;;
     *)
       echo "[autorun] check: ERROR — unknown verdict value: $verdict" >&2

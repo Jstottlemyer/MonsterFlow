@@ -1571,9 +1571,12 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# test_check_verdict_no_go_hardcoded_block  (AC#5)
+# test_check_verdict_no_go_attempt_counter_first_cycle
+# (Replaces v0.9.0 AC#5 hardcoded-block test. Per
+# pipeline-iterative-resolution-loops spec: first NO_GO cycle is
+# attempt 1/3 — pipeline continues, does NOT bail.)
 # ---------------------------------------------------------------------------
-case_ "test_check_verdict_no_go_hardcoded_block"
+case_ "test_check_verdict_no_go_attempt_counter_first_cycle"
 CC_DIR="$TMPROOT/check-c6"; mkdir -p "$CC_DIR"
 SLUG_C="check-nogo"
 FIX="$CC_DIR/synth.txt"
@@ -1590,16 +1593,19 @@ set +e
 (
   eval "$(setup_check_case "$CC_DIR" "$SLUG_C" "$FIX")"
   export AUTORUN_VERDICT_POLICY=warn
+  rm -f "$PROJECT_DIR/docs/specs/$SLUG_C/.verdict-attempts" 2>/dev/null || true
   bash "$CHECK_SH" >"$CC_DIR/out" 2>"$CC_DIR/err"
   echo $? > "$CC_DIR/rc"
 )
 set -e
 RC="$(cat "$CC_DIR/rc" 2>/dev/null || echo 99)"
-BLOCK_AXIS="$(state_get "$CC_DIR" "(d.get('blocks') or [{}])[0].get('axis','')")"
-if [ "$RC" -eq 1 ] && [ "$BLOCK_AXIS" = "verdict" ]; then
-  ok test_check_verdict_no_go_hardcoded_block
+ATTEMPTS_FILE="$CC_DIR/project/docs/specs/$SLUG_C/.verdict-attempts"
+ATTEMPTS_VAL="$(cat "$ATTEMPTS_FILE" 2>/dev/null || echo MISSING)"
+# First NO_GO cycle should NOT bail (rc=0 expected; counter ticked to 1).
+if [ "$RC" -eq 0 ] && [ "$ATTEMPTS_VAL" = "1" ]; then
+  ok test_check_verdict_no_go_attempt_counter_first_cycle
 else
-  fail test_check_verdict_no_go_hardcoded_block "rc=$RC axis='$BLOCK_AXIS' (NO_GO must block even when verdict_policy=warn)"
+  fail test_check_verdict_no_go_attempt_counter_first_cycle "rc=$RC attempts='$ATTEMPTS_VAL' (expected rc=0 attempts=1; first cycle should not bail under iterative-resolution counter)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1668,9 +1674,12 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# test_check_security_findings_hardcoded_block  (AC#4)
+# test_check_security_findings_attempt_counter_first_cycle
+# (Replaces v0.9.0 AC#4 hardcoded-block test. Per
+# pipeline-iterative-resolution-loops spec: first cycle with security
+# findings is attempt 1/3 — pipeline continues, does NOT bail.)
 # ---------------------------------------------------------------------------
-case_ "test_check_security_findings_hardcoded_block"
+case_ "test_check_security_findings_attempt_counter_first_cycle"
 CC_DIR="$TMPROOT/check-c9"; mkdir -p "$CC_DIR"
 SLUG_C="check-sec"
 FIX="$CC_DIR/synth.txt"
@@ -1686,16 +1695,20 @@ EOF
 set +e
 (
   eval "$(setup_check_case "$CC_DIR" "$SLUG_C" "$FIX")"
+  # Ensure counter starts at 0 (no prior cycle).
+  rm -f "$PROJECT_DIR/docs/specs/$SLUG_C/.security-attempts" 2>/dev/null || true
   bash "$CHECK_SH" >"$CC_DIR/out" 2>"$CC_DIR/err"
   echo $? > "$CC_DIR/rc"
 )
 set -e
 RC="$(cat "$CC_DIR/rc" 2>/dev/null || echo 99)"
-BLOCK_AXIS="$(state_get "$CC_DIR" "(d.get('blocks') or [{}])[0].get('axis','')")"
-if [ "$RC" -eq 1 ] && [ "$BLOCK_AXIS" = "security" ]; then
-  ok test_check_security_findings_hardcoded_block
+ATTEMPTS_FILE="$CC_DIR/project/docs/specs/$SLUG_C/.security-attempts"
+ATTEMPTS_VAL="$(cat "$ATTEMPTS_FILE" 2>/dev/null || echo MISSING)"
+# First cycle should NOT bail (rc=0 expected; counter ticked to 1).
+if [ "$RC" -eq 0 ] && [ "$ATTEMPTS_VAL" = "1" ]; then
+  ok test_check_security_findings_attempt_counter_first_cycle
 else
-  fail test_check_security_findings_hardcoded_block "rc=$RC axis='$BLOCK_AXIS' (expected rc=1 axis=security)"
+  fail test_check_security_findings_attempt_counter_first_cycle "rc=$RC attempts='$ATTEMPTS_VAL' (expected rc=0 attempts=1; first cycle should not bail under iterative-resolution counter)"
 fi
 
 # ---------------------------------------------------------------------------
