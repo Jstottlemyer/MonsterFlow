@@ -6,7 +6,7 @@
 <title>MonsterFlow — structured pipeline for Claude Code</title>
 <meta name="description" content="MonsterFlow is an 8-command pipeline for Claude Code that adds structured planning, multi-agent review, and execution discipline to any project.">
 <meta property="og:title" content="MonsterFlow — structured pipeline for Claude Code">
-<meta property="og:description" content="An 8-command pipeline for Claude Code: 40 reviewers across 5 multi-agent gates. The system measures whether its own reviewers are worth anything. Compile, don't retrieve.">
+<meta property="og:description" content="Autonomous coding for Claude Code. Queue features tonight, wake to merged PRs. 41 reviewer agents across 5 gates, judged and synthesized — measured for what they actually catch.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://jstottlemyer.github.io/MonsterFlow/">
 <meta property="og:image" content="https://jstottlemyer.github.io/MonsterFlow/social-image.png">
@@ -310,6 +310,317 @@
   }
   pre.install .prompt { color: var(--muted); user-select: none; }
 
+  /* Hero install snippet — same shape as the full Install section's pre.install
+     but tighter padding + centered + max-width capped so it sits cleanly under
+     the CTAs without dominating the hero. */
+  .hero-install {
+    max-width: 560px;
+    margin: 28px auto 8px;
+    text-align: left;
+  }
+  .hero-install pre.install {
+    font-size: 13px;
+    padding: 14px 18px;
+  }
+  @media (max-width: 640px) {
+    .hero-install pre.install { font-size: 12px; padding: 12px 14px; }
+  }
+  .hero-install .copy-btn { top: 8px; right: 8px; }
+
+  /* Sub-hero stripe rows — small, low-key, content-only. Used for the
+     "what this is NOT" line and the stability/component-status row. Lives
+     between the hero header and the first narrative section. Centered,
+     muted, pill-separator (·) between items. */
+  .stripe {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--line);
+    line-height: 1.7;
+  }
+  .stripe strong { color: var(--fg); font-weight: 600; }
+  .stripe .sep { color: var(--line); margin: 0 8px; user-select: none; }
+  .stripe.status .pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    margin: 2px 4px;
+    font-size: 12px;
+    color: var(--fg);
+  }
+  .stripe.status .pill .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .stripe.status .pill .dot.green { background: var(--green); }
+  .stripe.status .pill .dot.cyan { background: var(--accent-2); }
+  .stripe.status .pill .dot.warn { background: var(--warn); }
+  .stripe.status .pill .label { color: var(--muted); margin-right: 4px; }
+  @media (max-width: 640px) {
+    .stripe { font-size: 12px; padding: 12px 16px; }
+    .stripe .sep { margin: 0 5px; }
+  }
+
+  /* Judge sample card — embedded excerpt of a real /check synthesis output
+     in the autorun section. Concrete demonstration of what lands in the
+     morning, styled like a terminal/log artifact rather than marketing copy. */
+  .judge-sample {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent-2);
+    border-radius: 12px;
+    margin: 16px 0 8px;
+    overflow: hidden;
+    font-size: 14px;
+  }
+  .judge-sample-header {
+    background: var(--bg-3);
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .judge-sample-tag {
+    color: var(--accent-2);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .judge-sample-meta { color: var(--muted); }
+  .judge-sample-meta code {
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 0;
+  }
+  .judge-sample-body { padding: 20px 22px 22px; }
+  .judge-sample-h {
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+  .verdict-block {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 6px;
+    background: rgba(244,114,182,0.12);
+    color: var(--pink);
+    border: 1px solid rgba(244,114,182,0.35);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .judge-sample-prose {
+    margin: 0 0 18px;
+    color: var(--fg);
+    line-height: 1.6;
+    font-size: 14px;
+  }
+  .judge-sample-h5 {
+    margin: 18px 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .judge-sample-grid {
+    display: grid;
+    grid-template-columns: 130px 130px 1fr;
+    gap: 0;
+    font-size: 13px;
+    border-top: 1px solid var(--line);
+  }
+  .judge-row {
+    display: contents;
+  }
+  .judge-row > span {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+  }
+  .judge-row:last-child > span { border-bottom: none; }
+  .judge-dim {
+    font-weight: 600;
+    color: var(--fg);
+    font-size: 13px;
+  }
+  .judge-verdict {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .judge-verdict.warn { color: var(--warn); }
+  .judge-verdict.block { color: var(--pink); }
+  .judge-finding {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .judge-finding code {
+    background: var(--bg-3);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--accent-2);
+    font-size: 12px;
+  }
+  .judge-sample-footnote {
+    margin: 18px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+  .judge-sample-footnote strong { color: var(--fg); }
+  @media (max-width: 720px) {
+    .judge-sample-grid { grid-template-columns: 1fr; }
+    .judge-row > span {
+      border-bottom: none;
+      padding: 6px 12px;
+    }
+    .judge-row > span:first-child { padding-top: 14px; }
+    .judge-row > span:last-child { padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+    .judge-row:last-child > span:last-child { border-bottom: none; }
+  }
+
+  /* Bounded-retry callout — visualizes the 3-attempt rule (the "we try
+     to solve but don't burn tokens endlessly" trust signal). Three pips
+     in a row showing attempt 1 → attempt 2 → attempt 3 → halt + log,
+     framed as a feature card rather than a sub-clause in prose. */
+  .retry-card {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 22px 24px;
+    margin: 16px 0 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  .retry-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--green) 0%, var(--green) 33%, var(--warn) 33%, var(--warn) 66%, var(--pink) 66%, var(--pink) 100%);
+  }
+  .retry-card .retry-eyebrow {
+    color: var(--accent-2);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .retry-card .retry-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--fg);
+    margin: 0 0 6px;
+  }
+  .retry-card .retry-sub {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0 0 18px;
+    line-height: 1.55;
+  }
+  .retry-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .retry-step {
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .retry-step .step-n {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 8px;
+    color: #0a0a0f;
+  }
+  .retry-step .step-label {
+    font-weight: 600;
+    color: var(--fg);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .retry-step .step-body {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .retry-step.s1 .step-n { background: var(--green); }
+  .retry-step.s2 .step-n { background: var(--green); }
+  .retry-step.s3 .step-n { background: var(--warn); }
+  .retry-step.halt {
+    background: rgba(244,114,182,0.08);
+    border-color: rgba(244,114,182,0.35);
+  }
+  .retry-step.halt .step-n {
+    background: var(--pink);
+    color: #fff;
+    font-size: 10px;
+    width: auto;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 11px;
+  }
+  .retry-card .retry-foot {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 0;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  .retry-card .retry-foot strong { color: var(--fg); }
+  @media (max-width: 720px) {
+    .retry-row { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 480px) {
+    .retry-row { grid-template-columns: 1fr; }
+  }
+
+  /* Hero "who-line" — single line under the tagline calling out audience.
+     Concrete enough that a stranger self-identifies in under a second. */
+  .hero-who {
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 720px;
+    margin: -16px auto 28px;
+    line-height: 1.55;
+  }
+  .hero-who strong { color: var(--fg); font-weight: 600; }
+
   /* Copy-to-clipboard button on install snippets. JS at bottom of body
      wires every .copy-btn to copy the .install-snippet sibling's textContent. */
   .install-wrap { position: relative; }
@@ -442,31 +753,126 @@
 <header class="hero">
   <div class="wrap">
     <img src="social-image.png" alt="The MonsterFlow mascot — a friendly six-armed coding monster wearing a leather harness, each arm typing on a different floating terminal window." class="hero-image">
-    <span class="eyebrow">8-command pipeline · Claude Code · v0.10.10</span>
-    <h1>You say WHAT.<br>Claude handles HOW.</h1>
-    <p class="hero-hook">Multi-agent review at every review gate. And then the system measures whether those reviews are worth anything.</p>
+    <span class="eyebrow">Autonomous coding for Claude Code · v0.10.10</span>
+    <h1>Queue features tonight.<br>Wake up to merged PRs.</h1>
+    <p class="hero-hook">When I'm asleep or buried in the day job, I want the pipeline to keep moving but not blindly — so autorun runs the same gates I'd step through manually, takes up to three swings at fixing what fails, and leaves a PR or a failure report waiting in the morning.</p>
     <p class="tagline">
-      A structured planning, multi-agent review, and execution-discipline pipeline for
-      <a href="https://claude.com/claude-code">Claude Code</a>.
-      Ships <strong>41 reviewers</strong> — 30 always-available pipeline personas, 9 domain personas, plus 2 focused Claude Code subagents.
-      Each phase calls only the slice it needs. One <code>/wrap</code> at the end compiles what you learned into durable memory.
+      An 8-command pipeline for <a href="https://claude.com/claude-code">Claude Code</a>: <code>/spec → /spec-review → /plan → /check → /build</code>, plus <code>/autorun</code> when you want to queue features and walk away. Specialist reviewer agents run in parallel at every gate, their findings judged and synthesized before the next phase starts. Whatever the pipeline catches, ships, or halts on — it logs the trail so you can audit what actually mattered in the morning.
+    </p>
+    <p class="hero-who">
+      <strong>Built for solo developers and small teams</strong> using Claude Code on personal or production projects. MIT-licensed, local install, no hosted service.
     </p>
     <div class="cta">
       <a class="btn primary" href="#install">Install</a>
       <a class="btn" href="https://github.com/Jstottlemyer/MonsterFlow">View on GitHub</a>
     </div>
-    <p class="cta-secondary">Or jump to <a href="#pipeline">the pipeline ↓</a></p>
+    <div class="hero-install">
+      <div class="install-wrap">
+        <pre class="install"><code class="install-snippet"><span class="prompt">$ </span>git clone https://github.com/Jstottlemyer/MonsterFlow.git ~/Projects/MonsterFlow
+<span class="prompt">$ </span>cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh</code></pre>
+        <button class="copy-btn" type="button" aria-label="Copy install command">Copy</button>
+      </div>
+    </div>
   </div>
 </header>
+
+<div class="stripe not-line">
+  Not a Claude Code replacement<span class="sep">·</span>not a chat UI<span class="sep">·</span>not a hosted service<br>
+  Just slash-commands and agents that live in your repo.
+</div>
+
+<div class="stripe status">
+  <span class="pill"><span class="dot green"></span><span class="label">Pipeline core</span> stable since v0.7</span>
+  <span class="pill"><span class="dot cyan"></span><span class="label">Persona Metrics</span> shipping</span>
+  <span class="pill"><span class="dot warn"></span><span class="label">Dynamic roster</span> in flight</span>
+</div>
+
+<section id="autorun" class="narrative">
+  <div class="wrap">
+    <h2>Autorun — queue tonight, ship tomorrow</h2>
+    <p class="lede">Drop one or more feature briefs into <code>queue/</code>, set a cron, walk away. Each feature runs through the same five gates you'd step through manually — <code>/spec-review</code>, <code>/plan</code>, <code>/check</code>, <code>/build</code>, then a PR — except autorun is a little more permissive than I'd be over my own shoulder. It lets clean runs ship and quarantines messy ones for morning triage instead of paging me at 3am.</p>
+
+    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">What lands when you open your laptop.</strong> The Judge step at every gate dedupes findings across the parallel reviewers, resolves contradictions, and writes one synthesized artifact you can read in two minutes. A real morning artifact looks like this:</p>
+
+    <div class="judge-sample">
+      <div class="judge-sample-header">
+        <span class="judge-sample-tag">/check synthesis</span>
+        <span class="judge-sample-meta"><code>docs/specs/account-type-agent-scaling/check.md</code></span>
+      </div>
+      <div class="judge-sample-body">
+        <h4 class="judge-sample-h">Overall Verdict: <span class="verdict-block">NO-GO</span> — revise plan, then re-run /check</h4>
+        <p class="judge-sample-prose">The plan's design intent is sound and the wave structure is well-shaped, but two file-grounded errors in the resolver pseudocode will fail acceptance criteria on day one. Codex independently verified both against the live repo. Until these are corrected in the plan (not just acknowledged), <code>/build</code> would produce a resolver that emits no personas for one of the three gates and crashes on a nonexistent ranking field.</p>
+        <h5 class="judge-sample-h5">Reviewer Verdicts</h5>
+        <div class="judge-sample-grid">
+          <div class="judge-row"><span class="judge-dim">Completeness</span><span class="judge-verdict warn">PASS WITH NOTES</span><span class="judge-finding">AC #11 ("tell Claude to reconfigure") has no discoverable trigger surface</span></div>
+          <div class="judge-row"><span class="judge-dim">Sequencing</span><span class="judge-verdict warn">PASS WITH NOTES</span><span class="judge-finding">SP1–SP3 spec patches have no scheduled task ID; T5.3 marked parallel with own dependencies</span></div>
+          <div class="judge-row"><span class="judge-dim">Risk</span><span class="judge-verdict warn">PASS WITH NOTES</span><span class="judge-finding">python3-missing path undefined; participation v2 reader-resilience claim not test-backed</span></div>
+          <div class="judge-row"><span class="judge-dim">Scope discipline</span><span class="judge-verdict warn">PASS WITH NOTES</span><span class="judge-finding">Wave 4 autorun snapshot mechanism is heavy for an R14-rated Low risk; ~1 session of cuttable scope</span></div>
+          <div class="judge-row"><span class="judge-dim">Testability</span><span class="judge-verdict warn">PASS WITH NOTES</span><span class="judge-finding"><code>install.sh --reconfigure</code> round-trip has no test task; 6/14 ACs partial coverage, 2/14 outright gap</span></div>
+          <div class="judge-row"><span class="judge-dim">Codex adversarial</span><span class="judge-verdict block">DO NOT BUILD AS WRITTEN</span><span class="judge-finding">Resolver references nonexistent <code>score</code> field; gate-to-directory mapping wrong; participation schema v2 violates <code>additionalProperties: false</code></span></div>
+        </div>
+        <p class="judge-sample-footnote">5 of 5 Claude reviewers PASS WITH NOTES; Codex returns hard FAIL with three file-grounded blockers verified against the live repo. Net verdict: <strong>NO-GO</strong> — Codex's blockers cannot be deferred to <code>/build</code> because they invalidate the plan's central pseudocode.</p>
+      </div>
+    </div>
+
+    <p class="lede" style="margin-top:24px">That morning I read the verdict, fixed the three Codex blockers in the plan, re-queued the spec, and the next overnight run shipped clean. The artifact above is real — it lives at <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/docs/specs/account-type-agent-scaling/check.md"><code>docs/specs/account-type-agent-scaling/check.md</code></a>. Every overnight run leaves something this concrete behind.</p>
+
+    <h3 style="margin-top:40px;font-size:20px;font-weight:600">Three swings, then it halts</h3>
+    <p class="lede" style="margin-top:0">When a gate flags an architectural or security blocker, autorun doesn't give up on the first cycle — and it doesn't loop forever either. It takes up to three logged swings at the same blocker, then halts and hands the run off to me. The cap is configurable per project; the audit trail is JSONL on disk.</p>
+
+    <div class="retry-card">
+      <div class="retry-eyebrow">Bounded retry · the trust signal</div>
+      <p class="retry-title">Try to solve. Don't burn tokens endlessly.</p>
+      <p class="retry-sub">Same blocker × 3 attempts → halt with a full audit trail. Counter resets on a clean check.</p>
+      <div class="retry-row">
+        <div class="retry-step s1">
+          <span class="step-n">1</span><span class="step-label">First swing</span>
+          <div class="step-body">Build attempts the fix; check re-runs.</div>
+        </div>
+        <div class="retry-step s2">
+          <span class="step-n">2</span><span class="step-label">Second swing</span>
+          <div class="step-body">Same blocker still flagged → counter ticks.</div>
+        </div>
+        <div class="retry-step s3">
+          <span class="step-n">3</span><span class="step-label">Third swing</span>
+          <div class="step-body">Last attempt before the budget runs out.</div>
+        </div>
+        <div class="retry-step halt">
+          <span class="step-n">HALT</span><span class="step-label">Hand off</span>
+          <div class="step-body">Stops + writes the trail. No fourth swing, no runaway tokens.</div>
+        </div>
+      </div>
+      <p class="retry-foot"><strong>Why three.</strong> One swing isn't enough — the first cycle often catches a real fix that the next check would clear. Five is too many — by then the model is usually circling. Three matches the rate at which a real blocker either resolves or stays stuck. Cap is set per axis and configurable: <code>SECURITY_MAX_FIX_ATTEMPTS</code> today, broadening to all blocking axes via the <code>pipeline-iterative-resolution-loops</code> spec. Audit log: <code>docs/specs/&lt;slug&gt;/.security-attempts.log</code> (one JSONL row per attempt, with run id and finding ids).</p>
+    </div>
+
+    <h3 style="margin-top:40px;font-size:20px;font-weight:600">How the night actually goes</h3>
+    <ul>
+      <li><strong>Per-feature.</strong> Spec-review → plan → check → build → PR. Each gate's reviewers run in parallel; their findings get judged, deduped, and synthesized before the next gate starts.</li>
+      <li><strong>Permissive overnight.</strong> Most contract / docs / test findings get logged as follow-ups and let the run keep moving. Architectural and security findings route through the bounded-retry loop above.</li>
+      <li><strong>Clean runs ship; messy ones quarantine.</strong> Auto-merge fires only when zero warnings accumulated and no Codex high-severity findings remain. Anything else lands as a PR awaiting review — I wake to artifacts and a queue, not a stuck pipeline.</li>
+      <li><strong>STOP file.</strong> Touch <code>queue/STOP</code> any time and the next iteration boundary halts cleanly. Mid-flight runs finish what they're on; the queue stops.</li>
+    </ul>
+
+    <h3 style="margin-top:32px;font-size:20px;font-weight:600">Queue your first overnight run</h3>
+    <pre style="background:var(--bg-2);border:1px solid var(--line);padding:14px 16px;border-radius:8px;overflow-x:auto;margin:0 0 16px"><code># Drop a brief into queue/ as <slug>.spec.md, then:
+0 22 * * * cd ~/Projects/MonsterFlow && scripts/autorun/autorun-batch.sh --mode=overnight</code></pre>
+    <p class="lede" style="margin-top:0">Or kick off a single slug right now: <code>scripts/autorun/run.sh &lt;slug&gt;</code>. Either path writes per-stage artifacts under <code>queue/&lt;slug&gt;/</code> and the durable record under <code>docs/specs/&lt;slug&gt;/</code>.</p>
+
+    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Want the long version?</strong> The full policy framework — every override, every audit trail, every known limitation — lives at <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/docs/specs/autorun-overnight-policy/spec.md"><code>docs/specs/autorun-overnight-policy/</code></a>. In flight: <code>dynamic-roster-per-gate</code> picks the best-fit reviewer slice per gate based on what your spec actually mentions; <code>pipeline-iterative-resolution-loops</code> generalizes the three-attempt pattern beyond the security axis. Both tracked in <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/BACKLOG.md"><code>BACKLOG.md</code></a>.</p>
+  </div>
+</section>
 
 <section id="why" class="narrative">
   <div class="wrap">
     <div class="aside">
       <p>
-        <strong>Why this exists.</strong> I've always been a builder, so when none of the harnesses I could find had the self-learning loops I wanted — a fully self-improving harness that adapts to how the user actually leverages the tool — I built one. The 5 multi-agent gates give the leverage. The judging is what gives me the trust.
+        <strong>Why this exists.</strong> I've always been a builder, so when none of the harnesses I could find had all the self-learning loops I wanted — a fully self-improving harness that adapts to how the user actually leverages the tool — I built one. My years of coding, architecting, and leading grew and changed my skills, my time became more valuable to guide others, and my fingers crept further from the keyboard in a Faustian deal to provide more value. As I sit looking at my 7 CMUX tabs and my MonsterFlow harness, I feel I can build anything, just not everything — even I have limits and can only get my ideas out so quickly.
       </p>
       <p>
-        As one of my friends recently confessed: I don't ship code anymore, I ship outcomes.
+        MonsterFlow is partly my answer to that distance — when I can't be on every keystroke, I want to at least know which of the reviewers are catching what matters and which are noise dressed up as rigor. The 5 multi-agent gates give the leverage. The judging is what gives me the trust.
+      </p>
+      <p>
+        Early signals are encouraging — drift on a few personas I'd otherwise have kept around, a wave-sequencer persona suggested by an adversarial Codex review and now earning its slot, graph-driven queries hitting 10–20× fewer tokens than full-corpus reads on the codebases I've benchmarked. Whether any of that holds across more features and more contributors is the next 50 wraps' worth of homework. As one of my friends recently confessed: I don't ship code anymore, I ship outcomes.
       </p>
       <!-- TODO: when the LinkedIn post is published, swap href below to its
            permalink. Keep the docs/why-monsterflow.md fallback in the repo so
@@ -479,7 +885,7 @@
 <section id="pipeline" class="narrative">
   <div class="wrap">
     <h2>The pipeline</h2>
-    <p class="lede">Five gates between an idea and shipped code. Specialist agents run in parallel at each one — their findings judged, deduplicated, and synthesized before the next phase starts. After the first /spec you can jump to /autobuild if you want less control or to run things overnight. Otherwise step through process gate by gate and evaluate the plan as you go</p>
+    <p class="lede">Five gates between an idea and shipped code. Specialist agents run in parallel at each one — their findings judged, deduplicated, and synthesized before the next phase starts. After the first <code>/spec</code> you can jump to <code>/autorun</code> if you want less control or to run things overnight. Otherwise step through gate by gate and evaluate the plan as you go.</p>
     <div class="mermaid-frame">
       <pre class="mermaid">
 flowchart TD
@@ -610,7 +1016,7 @@ flowchart LR
       </pre>
     </div>
     <p class="lede" style="margin-top:24px"><strong style="color:var(--accent-2)">Compile, don't retrieve.</strong> Capture is cheap during the session (<code>"capture this: X"</code> → <code>_raw/</code>). Distillation happens once at <code>/wrap</code>. Reads at the start of the next session are free — the wiki is already structured, the graph is already built, memory is already loaded.</p>
-    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Measured weekly.</strong> Graph-driven queries on real codebases land <strong style="color:var(--accent-2)">~10–20× fewer tokens</strong> than full-corpus reads — 14.2× on a 1.5K-node codebase, 16.4× on a 2.2K-node one. <code>scripts/benchmark-json.sh</code> writes data to <code>dashboard/data/&lt;project&gt;.jsonl</code>; see the <a href="dashboard.html">example dashboard</a> for what it looks like, then run <code>open ~/Projects/MonsterFlow/dashboard/index.html</code> from a clone to see your own data.</p>
+    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Measured weekly.</strong> Graph-driven queries on real codebases land <strong style="color:var(--accent-2)">~10–20× fewer tokens</strong> than full-corpus reads — 14.2× on a 1.5K-node codebase, 16.4× on a 2.2K-node one. <code>scripts/benchmark-json.sh</code> writes data to <code>dashboard/data/&lt;project&gt;.jsonl</code>; see the <a href="dashboard.html">example dashboard</a> for what it looks like, or open <code>dashboard/index.html</code> from your local clone to see your own data.</p>
   </div>
 </section>
 
@@ -664,50 +1070,11 @@ flowchart TD
         <tr><td><code>/plan</code></td><td>Architecture + implementation design (incl. wave-sequencer for data-contract precedence)</td><td>7 designers</td></tr>
         <tr><td><code>/check</code></td><td>Last gate before code — validates the plan; + Codex adversarial pass (optional)</td><td>5 validators</td></tr>
         <tr><td><code>/build</code></td><td>Parallel execution with verification discipline; + Codex implementation review (optional)</td><td>Superpowers</td></tr>
-        <tr><td><code>/autorun</code></td><td>Headless autorun pipeline — queues a spec and drives all 8 stages unattended. <strong>Single-slug per invocation</strong> (per AC#24); multi-spec queues use <code>autorun-batch.sh --mode=overnight</code> (the flag name preserved). Per-axis warn/block policy framework (<code>verdict</code>, <code>branch</code>, <code>codex_probe</code>, <code>verify_infra</code>) lets you say <em>"warn overnight, block in supervised mode"</em>. <strong>Security findings now route through a 3-attempt iterative resolution loop</strong> (default cap, env-overridable) instead of halting on the first cycle — integrity issues + verdict NO_GO remain hardcoded blocks. Works cross-project: engine scripts stay in MonsterFlow, target git/docs/queue live in <code>$PWD</code>.</td><td>Shell</td></tr>
+        <tr><td><code>/autorun</code></td><td>Queues a spec and drives all 8 stages unattended. One slug per invocation; multi-spec queues use <code>autorun-batch.sh --mode=overnight</code>. Permissive overnight: contract / docs / test findings get logged as follow-ups; architectural and security findings get up to three logged attempts to converge before halting. Works cross-project — engine scripts stay in MonsterFlow, target repo's git/docs/queue live in <code>$PWD</code>. See the <a href="#autorun">Autorun section</a> above.</td><td>Shell</td></tr>
         <tr><td><code>/flow</code></td><td>Displays the workflow reference card</td><td>—</td></tr>
         <tr><td><code>/wrap</code></td><td>Session wrap-up — three automatic insight phases feed one triage gate (CLAUDE.md · Memory · hooks · skills), then git loose ends. Variants: <code>quick</code> (fast, skips insights) · <code>full</code> (forces soft-skip phases)</td><td>—</td></tr>
       </tbody>
     </table></div>
-  </div>
-</section>
-
-<section id="autorun" class="narrative">
-  <div class="wrap">
-    <h2>Autorun — the overnight loop, with self-healing iteration <span style="color:var(--muted);font-weight:400">(v0.7+ policy framework, v0.9+ resolution loops)</span></h2>
-    <p class="lede">When I'm asleep or buried in my day job at Intuit, I want the pipeline to keep moving, but not blindly. Autorun runs the same gates I'd step through manually, except when something fails it gets up to three swings at fixing itself before it halts and hands me a PR or a failure report in the morning. The principle is more permissive overnight than supervised, except where security really shouldn't bend, and even there we now give it three logged attempts to converge — because the v0.9.0 sessions taught me that one blocking finding on cycle 1 with no chance to apply a fix and re-check is a faustian deal you're paying for in tokens, sleep, and momentum.</p>
-
-    <p class="lede" style="margin-top:24px;color:var(--fg);font-weight:600">Iterative resolution loops <span style="color:var(--muted);font-weight:400">(new in v0.9.x)</span></p>
-    <p>The friction in long autorun sessions wasn't gates being too strict — it was the first finding halting the run with no chance to apply a fix, re-check, and converge. So now every blocking security finding gets up to three logged attempts: the pipeline routes the finding through, /build takes a swing, /check re-runs, and the counter ticks up only when the same axis still trips. After three attempts on the same axis it halts and surfaces — that's the cap, not the first cycle. Audit trail at <code>docs/specs/&lt;slug&gt;/.security-attempts.log</code> (JSONL per attempt, with run_id and finding_ids), counter resets to zero on a clean check, and the cap is configurable via <code>SECURITY_MAX_FIX_ATTEMPTS</code> (default 3) — set it higher when you're pushing through a messy long-running spec, lower for paranoid environments. Integrity blocks (malformed sidecar JSON, schema mismatch) are exempt from the loop because they signal the synthesizer is broken, not that work is in-progress, and iterating on a broken parser just burns tokens. Broader generalization to NO_GO verdicts and architectural-class blocks (with per-axis user-selectable counts) is the next slice — see <code>pipeline-iterative-resolution-loops</code> in the backlog.</p>
-
-    <p class="lede" style="margin-top:24px;color:var(--fg);font-weight:600">Per-axis policy</p>
-    <p>Four overrideable axes — <code>verdict</code>, <code>branch</code>, <code>codex_probe</code>, <code>verify_infra</code> — each independently set to <code>warn</code> or <code>block</code>. <code>--mode=overnight</code> warns on everything; <code>--mode=supervised</code> blocks on everything. Per-axis env vars override the mode preset. Two classes remain <em>hardcoded blocks</em> regardless of mode (security used to be a third — now flows through the iterative loop above):</p>
-    <ul>
-      <li><strong>Integrity issues</strong> — malformed sidecar JSON, schema mismatch, missing required fields</li>
-      <li><strong>Verdict NO_GO</strong> — synthesis's deliberate "this is broken" signal</li>
-    </ul>
-
-    <p class="lede" style="margin-top:24px;color:var(--fg);font-weight:600">Sticky run-degraded gate</p>
-    <p>Any single warn during a run sets <code>RUN_DEGRADED=1</code> (sticky). Auto-merge fires only when <code>RUN_DEGRADED=0 AND CODEX_HIGH_COUNT=0</code>. Non-clean runs ship as a PR awaiting review — you wake to artifacts + a PR, not a halted pipeline.</p>
-
-    <p class="lede" style="margin-top:24px;color:var(--fg);font-weight:600">Single-slug invocation + queue-loop wrapper</p>
-    <p><code>run.sh &lt;slug&gt;</code> processes exactly one slug per invocation. Multi-spec queues call the new <code>autorun-batch.sh</code> wrapper, which iterates <code>queue/*.spec.md</code> and honors <code>queue/STOP</code> at iteration boundaries. <strong>Cron migration:</strong></p>
-    <pre style="background:var(--bg-code);padding:14px 16px;border-radius:8px;overflow-x:auto"><code># Before (≤ v0.6):
-0 22 * * * cd /path/to/repo && scripts/autorun/run.sh
-
-# After (v0.7+):
-0 22 * * * cd /path/to/repo && scripts/autorun/autorun-batch.sh --mode=overnight</code></pre>
-
-    <p class="lede" style="margin-top:24px;color:var(--fg);font-weight:600">Single-fence verdict extractor (D33)</p>
-    <p>Synthesis emits a fenced <code>check-verdict</code> block at the end of its output; a deterministic shell+Python post-processor (<code>_policy_json.py extract-fence</code>) extracts it to <code>check-verdict.json</code>. Multi-fence detection — more than one <code>check-verdict</code> fence — blocks as a possible prompt-injection attempt. NFKC-normalize + zero-width-strip happens <em>before</em> scanning, so disguised-character fences (homoglyph attacks) get caught.</p>
-
-    <p class="lede" style="margin-top:24px;color:var(--fg);font-weight:600;color:#d93">Known v1 limitation</p>
-    <p style="border-left:3px solid #d93;padding-left:14px;color:var(--fg)">D33 multi-fence rejection blocks the easy attack class but does <strong>not</strong> authenticate a single fence quoted from reviewed content. If synthesis omits its own fence and reviewed content quotes a single fake one, count==1 passes and a forged GO ships. Mitigation is <strong>detection-hardening, not prevention</strong>. <strong>For repos processing untrusted spec sources</strong> (third-party PRs, externally-authored queue items), set <code>verdict_policy=block</code> and disable unattended auto-merge until the architectural fix lands. The fix is carved into the <code>autorun-verdict-deterministic</code> follow-up spec — deterministic verdict aggregation from structured reviewer outputs (drops the synthesis-emits-sidecar pattern entirely).</p>
-
-    <p class="lede" style="margin-top:24px">Full design + 26 acceptance criteria for the policy framework: <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/docs/specs/autorun-overnight-policy/spec.md"><code>docs/specs/autorun-overnight-policy/</code></a>. The 3-attempt iterative-resolution loop is shipped today for the security axis (audit trail at <code>.security-attempts.log</code>); broader per-axis user-selectable counts are next, tracked in <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/BACKLOG.md"><code>BACKLOG.md</code></a> as <code>pipeline-iterative-resolution-loops</code>.</p>
-
-    <p class="lede" style="margin-top:24px;color:var(--fg);font-weight:600">In flight</p>
-    <p><code>dynamic-roster-per-gate</code> — content-aware best-fit persona selection per gate. The resolver intersects spec.md <code>tags:</code> with each persona's <code>fit_tags:</code>, ranks by <code>(fit_score × load_bearing_rate)</code>, and dispatches up to <code>agent_budget</code> with a tier rule (≥1 Opus + remaining Sonnet workers, Codex additive). Three-tier override matches the v0.9.0 <code>gate_mode</code> pattern: constitution → spec.md → CLI. <strong>Currently iterating via autorun against itself</strong> (the spec dogfoods its own framework). Spec source: <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/docs/specs/dynamic-roster-per-gate/spec.md"><code>docs/specs/dynamic-roster-per-gate/spec.md</code></a>. Five sibling specs carved from this MVP — constitution rename, escape hatches, debugging affordances, rate-limit fallback, broader iterative-resolution — all tracked in BACKLOG.</p>
   </div>
 </section>
 
@@ -779,8 +1146,8 @@ cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh">Copy</button><pre class="inst
 
 <section id="agents">
   <div class="wrap">
-    <h2>Agent roster <span style="color:var(--muted);font-weight:400">— 41 total (39 personas + 2 subagents)</span></h2>
-    <p class="lede">30 always-available pipeline personas + 9 domain personas + 2 focused Claude Code subagents (<code>autorun-shell-reviewer</code>, <code>persona-metrics-validator</code>). A session calls only the slice for the current phase — never all 41 at once.</p>
+    <h2>Agent roster <span style="color:var(--muted);font-weight:400">— 41 reviewers, called in slices</span></h2>
+    <p class="lede">39 personas (30 always-available pipeline + 9 domain) plus 2 focused Claude Code subagents (<code>autorun-shell-reviewer</code>, <code>persona-metrics-validator</code>). A session calls only the slice for the current phase — never all 41 at once. The cards below show which slice runs at which gate.</p>
     <div class="grid">
       <div class="card">
         <h3>Review · <code>/spec-review</code> <span class="count">6</span></h3>
