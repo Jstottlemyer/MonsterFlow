@@ -1,3 +1,7 @@
+---
+fit_tags: [data, migration]
+---
+
 # Data Model Design
 
 **Stage:** /plan (Design)

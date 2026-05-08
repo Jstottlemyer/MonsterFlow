@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monsterflow.dev/schemas/v1/persona-frontmatter.schema.json",
+  "title": "MonsterFlow persona.md frontmatter (v1)",
+  "description": "Every persona under personas/{review,plan,check}/ MUST declare fit_tags:. Pick 1–3 values from tag-enum.schema.json that describe the content axes the persona reviews. Multi-tag personas (e.g., risk: [scalability, security, integration]) are matched on union with spec tags. See personas/<gate>/*.md for examples.",
+  "type": "object",
+  "properties": {
+    "fit_tags": {
+      "type": "array",
+      "items": { "$ref": "tag-enum.schema.json" },
+      "uniqueItems": true,
+      "minItems": 1
+    }
+  },
+  "required": ["fit_tags"],
+  "additionalProperties": true
+}

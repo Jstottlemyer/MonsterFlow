@@ -1,3 +1,7 @@
+---
+fit_tags: [ux, docs]
+---
+
 # Stakeholder Analysis
 
 **Stage:** /review (PRD Review)

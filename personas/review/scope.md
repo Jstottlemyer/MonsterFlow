@@ -1,3 +1,7 @@
+---
+fit_tags: [docs, refactor]
+---
+
 # Scope Analysis
 
 **Stage:** /review (PRD Review)

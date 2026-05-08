@@ -1,3 +1,7 @@
+---
+fit_tags: [docs]
+---
+
 # Plan Completeness
 
 **Stage:** /check (Plan Review)

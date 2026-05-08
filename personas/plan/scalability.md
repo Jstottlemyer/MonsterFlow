@@ -1,3 +1,7 @@
+---
+fit_tags: [scalability]
+---
+
 # Scalability Analysis
 
 **Stage:** /plan (Design)

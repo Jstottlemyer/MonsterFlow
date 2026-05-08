@@ -1,3 +1,7 @@
+---
+fit_tags: [ux]
+---
+
 # User Experience Analysis
 
 **Stage:** /plan (Design)

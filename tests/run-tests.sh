@@ -105,6 +105,8 @@ TESTS=(
   test-permissiveness.sh
   # pipeline-gate-permissiveness W5.5 — Edge Case 16 spec.md additions
   test-spec-edge-case-16.sh
+  # dynamic-roster-1-tags — persona fit_tags presence/enum/nonempty/unique
+  test-persona-fit-tags.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).

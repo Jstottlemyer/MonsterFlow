@@ -1,3 +1,7 @@
+---
+fit_tags: [docs, integration]
+---
+
 # Requirements Completeness
 
 **Stage:** /review (PRD Review)

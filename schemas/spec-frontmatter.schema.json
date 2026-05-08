@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://monsterflow.dev/schemas/v1/spec-frontmatter.schema.json",
+  "title": "MonsterFlow spec.md frontmatter (v1, slice-1 stub)",
+  "description": "Slice 1 stub. Only validates the optional tags: field. additionalProperties: true is intentional in v1; tightened in slice-2 (`dynamic-roster-2-baseline`) when /spec Phase 3 LLM-propose-user-confirm wires up.",
+  "type": "object",
+  "properties": {
+    "tags": {
+      "type": "array",
+      "items": { "$ref": "tag-enum.schema.json" },
+      "uniqueItems": true,
+      "default": []
+    }
+  },
+  "additionalProperties": true
+}

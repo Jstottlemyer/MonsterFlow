@@ -1,3 +1,7 @@
+---
+fit_tags: [security]
+---
+
 # Security Architect
 
 **Stage:** /check (Plan Review)

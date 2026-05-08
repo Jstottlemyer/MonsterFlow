@@ -506,6 +506,19 @@ for stage in check code-review plan review; do
     done
 done
 
+# >>> dynamic-roster-1-tags: schemas/ propagation
+# Symlinks JSON Schema files into adopter's ~/.claude/schemas/ so future
+# slices can resolve $ref by relative path. Sentinel-bracketed for
+# idempotent re-runs (matches feedback_install_adopter_default_flip.md).
+mkdir -p "$CLAUDE_DIR/schemas"
+echo ""
+echo "Installing JSON schemas..."
+for schema in "$REPO_DIR"/schemas/*.json; do
+    [ -f "$schema" ] || continue
+    link_file "$schema" "$CLAUDE_DIR/schemas/$(basename "$schema")"
+done
+# <<< dynamic-roster-1-tags: schemas/ propagation
+
 # --- Domain agents ---
 # Link into a stable user-agnostic path so /kickoff can always find them
 # regardless of where the user cloned the repo.

@@ -1,3 +1,7 @@
+---
+fit_tags: [security]
+---
+
 # Security Analysis
 
 **Stage:** /plan (Design)

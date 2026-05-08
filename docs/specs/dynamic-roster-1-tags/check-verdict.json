@@ -1,0 +1,24 @@
+{
+  "schema_version": 2,
+  "prompt_version": "check-verdict@2.0",
+  "verdict": "GO_WITH_FIXES",
+  "blocking_findings": [
+    {"persona": "completeness", "finding_id": "ck-a1f3c9d2e0", "summary": "Add chmod +x for new tests/test-persona-fit-tags.sh in T7 + verification grep in T11"},
+    {"persona": "completeness", "finding_id": "ck-b4e8d27a16", "summary": "Add JSON-loadability smoke check for the 3 new schemas/*.json files"},
+    {"persona": "risk", "finding_id": "ck-c5d9078b3f", "summary": "Add fail-open guard validating _python_check JSON output before report() consumes it"},
+    {"persona": "risk", "finding_id": "ck-d6c1ea4b29", "summary": "Specify one-commit-per-task in Wave B (T8 then T9 then T10) for partial-failure recovery"},
+    {"persona": "testability", "finding_id": "ck-e7b203fa5d", "summary": "Capture BASELINE_PASS pre-Wave-A so A7 +4 PASS assertion is mechanically verifiable"},
+    {"persona": "testability", "finding_id": "ck-f8a4159c7b", "summary": "Replace A15 manual sentinel ritual with permanent negative-path fixture set under tests/fixtures/persona-fit-tags/"}
+  ],
+  "security_findings": [],
+  "generated_at": "2026-05-07T00:00:00Z",
+  "iteration": 1,
+  "iteration_max": 2,
+  "mode": "permissive",
+  "mode_source": "frontmatter",
+  "class_breakdown": {"architectural": 0, "security": 0, "contract": 0, "documentation": 0, "tests": 5, "scope-cuts": 1, "unclassified": 0},
+  "class_inferred_count": 0,
+  "followups_file": null,
+  "cap_reached": false,
+  "stage": "check"
+}

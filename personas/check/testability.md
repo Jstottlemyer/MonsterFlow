@@ -1,3 +1,7 @@
+---
+fit_tags: [refactor]
+---
+
 # Testability and Verifiability
 
 **Stage:** /check (Plan Review)

@@ -1,3 +1,7 @@
+---
+fit_tags: [scalability, integration]
+---
+
 # Technical Feasibility
 
 **Stage:** /review (PRD Review)

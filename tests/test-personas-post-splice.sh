@@ -56,8 +56,18 @@ for f in "${personas[@]}"; do
     continue
   fi
 
-  # Invariant 2: first non-blank line is an h1 (persona title preserved).
-  first_line="$(awk 'NF { print; exit }' "$f")"
+  # Invariant 2: first non-blank line (post YAML frontmatter, if any) is an h1
+  # (persona title preserved). dynamic-roster-1-tags introduced optional
+  # `---\nfit_tags: [...]\n---` frontmatter; skip past it before the h1 check.
+  first_line="$(awk '
+    BEGIN { in_fm = 0; seen = 0 }
+    /^---$/ {
+      if (!seen && in_fm == 0) { in_fm = 1; seen = 1; next }
+      if (in_fm == 1) { in_fm = 0; next }
+    }
+    in_fm == 1 { next }
+    NF { print; exit }
+  ' "$f")"
   case "$first_line" in
     \#\ *) ;;  # h1 ok
     *) note_fail "$rel — first non-blank line is not an h1 title: '$first_line'"; continue ;;

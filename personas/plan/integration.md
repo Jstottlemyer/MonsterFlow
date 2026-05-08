@@ -1,3 +1,7 @@
+---
+fit_tags: [integration]
+---
+
 # Integration Analysis
 
 **Stage:** /plan (Design)

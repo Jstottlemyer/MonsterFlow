@@ -2,6 +2,23 @@
 
 All notable changes to `MonsterFlow` are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Tag schema (slice 1 of `dynamic-roster-per-gate`):** closed 9-value tag enum (`schemas/v1/tag-enum.schema.json`) + spec frontmatter stub (`schemas/v1/spec-frontmatter.schema.json`) + persona frontmatter (`schemas/v1/persona-frontmatter.schema.json`) — required `fit_tags:` on all personas.
+- `tests/test-persona-fit-tags.sh` — validates presence, enum-membership, non-empty, no-duplicates across all 19 pipeline personas. Includes negative-path fixtures under `tests/fixtures/persona-fit-tags/{bad-missing,bad-empty,bad-enum,bad-duplicate}/`.
+- `fit_tags:` frontmatter backfilled on all 19 pipeline personas (review 6, plan 7, check 6).
+
+### Changed
+
+- `install.sh` symlinks `schemas/` into adopter's `~/.claude/schemas/`, sentinel-bracketed for idempotent re-run.
+- All 19 persona files gained one frontmatter block. **Note:** `_roster.compute_persona_content_hash` rotates once for every persona — `dashboard/data/persona-rankings.jsonl` will show `persona_content_hash` deltas on next snapshot. No action needed; rebuild is automatic.
+
+### Notes
+
+- No runtime behavior changes ship in this release. `fit_tags:` is dormant data until slice 3 (`dynamic-roster-3-tier`) wires the resolver.
+
 ## [0.9.0] - 2026-05-05
 
 Pipeline-gate permissiveness — applies the autorun overnight policy framework's per-axis warn/block model to the pipeline gates (`/spec-review`, `/plan`, `/check`). Default flips from de-facto strict (halt-on-anything) to **permissive** with a 7-class finding taxonomy that routes contract / documentation / tests / scope-cuts findings to a `followups.jsonl` artifact instead of blocking. Architectural and security findings continue to halt. Spec / plan / check artifacts: `docs/specs/pipeline-gate-permissiveness/`.

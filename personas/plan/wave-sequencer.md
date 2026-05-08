@@ -1,3 +1,7 @@
+---
+fit_tags: [refactor, integration]
+---
+
 # Wave Sequencing
 
 **Stage:** /plan (Design)

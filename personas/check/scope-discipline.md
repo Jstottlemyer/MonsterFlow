@@ -1,3 +1,7 @@
+---
+fit_tags: [docs, refactor]
+---
+
 # Scope Discipline
 
 **Stage:** /check (Plan Review)

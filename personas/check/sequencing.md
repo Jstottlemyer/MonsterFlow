@@ -1,3 +1,7 @@
+---
+fit_tags: [refactor, integration]
+---
+
 # Sequencing and Dependencies
 
 **Stage:** /check (Plan Review)

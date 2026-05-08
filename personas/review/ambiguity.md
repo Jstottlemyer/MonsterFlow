@@ -1,3 +1,7 @@
+---
+fit_tags: [docs, ux]
+---
+
 # Ambiguity Analysis
 
 **Stage:** /review (PRD Review)

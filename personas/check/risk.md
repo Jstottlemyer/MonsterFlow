@@ -1,3 +1,7 @@
+---
+fit_tags: [scalability, security, integration]
+---
+
 # Risk Assessment
 
 **Stage:** /check (Plan Review)
