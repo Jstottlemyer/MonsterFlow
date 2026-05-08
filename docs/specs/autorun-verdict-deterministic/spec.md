@@ -1,11 +1,20 @@
+---
+name: autorun-verdict-deterministic
+description: Replace synthesis-emits-fence verdict-emission with deterministic aggregation over per-reviewer JSON sidecars; closes single-fence-spoof residual class by structurally removing the LLM from the verdict-emission path.
+created: 2026-05-07
+status: draft
+session_roster: defaults + codex-adversary mandatory at spec-review and check
+gate_mode: strict
+gate_max_recycles: 2
+tags: [pipeline, security, integrity, schema, integration]
+---
+
 # Autorun Verdict Deterministic Spec
 
 **Created:** 2026-05-07
 **Constitution:** none — session roster only
 **Confidence:** Scope 0.95 / UX 0.90 / Data 0.95 / Integration 0.92 / Edge 0.90 / Acceptance 0.92 (avg 0.92)
 **Session Roster:** defaults (6 spec-review + 7 plan + 6 check personas) + **Codex adversarial reviewer at `/spec-review` AND `/check` (mandatory)**. Security-architect (default check persona) is load-bearing for this spec.
-**gate_mode:** strict
-**gate_max_recycles:** 2
 
 > Session roster only — run /kickoff later to make this a persistent constitution.
 
