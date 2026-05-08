@@ -1,6 +1,6 @@
 ---
 name: dynamic-roster-per-gate
-description: Content-aware best-fit persona selection per gate — tag-matching + load-bearing-rate + ≥1 Opus tier rule, with constitution + spec.md + CLI override layers
+description: Content-aware best-fit persona selection per gate — tag-matching + load-bearing-rate + (≥1 Opus, ≥1 Sonnet, 50/50 remainder) tier-mix rule with tag-gated Codex, layered constitution + spec.md + CLI overrides
 created: 2026-05-06
 status: draft
 session_roster: defaults-only (no constitution)
@@ -19,7 +19,7 @@ tags: [pipeline, integration, scalability, data]
 
 ## Summary
 
-Extend `scripts/resolve-personas.sh` (shipped in `account-type-agent-scaling`) from budget-driven to **content-aware** persona selection. The resolver reads `spec.md` `tags:` (set at `/spec` time), intersects with each persona's declared `fit_tags`, and ranks the eligible roster by `(fit_score × load_bearing_rate)`. The top-N are dispatched up to `agent_budget`. A tier-mixing rule guarantees ≥1 Opus reviewer per panel (rest Sonnet), with `tier_pins` override at constitution + spec level. Codex stays additive (different lineage; outside the tier math). Three-tier override precedence — constitution → spec.md → CLI flag — matches the v0.9.0 `gate_mode` pattern.
+Extend `scripts/resolve-personas.sh` (shipped in `account-type-agent-scaling`) from budget-driven to **content-aware** persona selection. The resolver reads `spec.md` `tags:` (set at `/spec` time), intersects with each persona's declared `fit_tags`, and ranks the eligible roster by `(fit_score × load_bearing_rate)`. The top-N are dispatched up to `agent_budget`. A tier-mixing rule guarantees **≥1 Opus + ≥1 Sonnet on every panel of N≥2, with the remainder split 50/50** (cost-conscious tiebreak: extra seat → Sonnet). Codex runs **tag-gated** — additive when the spec's tags intersect `codex_fit_tags` (default: security, integration, migration, scalability), skipped otherwise even if authenticated. `tier_pins` override at constitution + spec level. Three-tier override precedence — constitution → spec.md → CLI flag — matches the v0.9.0 `gate_mode` pattern.
 
 This is the natural follow-up to `pipeline-gate-permissiveness` (v0.9.0): permissiveness decided *what to do with findings*; dynamic-roster decides *which agents are best-suited to find them in the first place*. A sibling spec (`pipeline-gate-rightsizing`, BACKLOG L) handles the orthogonal axis of *how many* agents to dispatch per work-class — this spec handles *which*.
 
@@ -43,16 +43,47 @@ This is the natural follow-up to `pipeline-gate-permissiveness` (v0.9.0): permis
 - **`spec.md` frontmatter `tags:` field** — closed enum: `[security, data, api, ux, integration, scalability, docs, refactor, migration]`. Multi-value (array). Set by `/spec` Phase 3 self-review pass via LLM-propose-user-confirm flow. Required for new specs created post-feature-ship; existing specs grandfathered (treated as empty intersection → ranking-only fallback).
 - **Persona frontmatter `fit_tags:` field** — same closed enum subset per persona. Backfilled into all 19 existing personas (6 review + 7 plan + 6 check) as a one-time migration; LLM proposes, user reviews. Future personas declare at creation.
 - **`scripts/resolve-personas.sh` extension** — adds content-tag intersection + `(fit_score × load_bearing_rate)` ranking. Output format extended: stdout emits `<persona>:<tier>` (e.g., `completeness:opus\nsequencing:sonnet`); `selection.json` adds a `tier` field per row. Codex stays unchanged (separate line, no tier suffix).
-- **Tier rule** — orchestrator (host Claude session) is Opus (already is); reviewer panel ≥1 Opus + remaining N-1 Sonnet. Hard constraint, not preference.
+- **Tier rule (updated 2026-05-07)** — orchestrator (host Claude session) is Opus (already is); reviewer panel must include **≥1 Opus AND ≥1 Sonnet**, with the remainder (N − opus_min − sonnet_min) split **50/50** between Opus and Sonnet. Hard constraint, not preference. Codex runs **additively when the spec's tags fit** (see `codex_fit_tags` below); otherwise skipped even if authenticated.
+- **Tier-mix algorithm** (deterministic, panel size N):
+  ```
+  if N == 1:
+      panel = [{tier: opus}]                          # opus_min wins; sonnet floor unsatisfiable
+  else:
+      base_opus    = max(opus_min, floor(N / 2))      # at least opus_min, at least half
+      base_sonnet  = N - base_opus
+      if base_sonnet < sonnet_min:
+          base_sonnet = sonnet_min
+          base_opus   = N - base_sonnet
+      # Tiebreak for odd remainder: extra seat goes to remainder_tiebreak (default: sonnet, cost-conscious)
+      panel = base_opus × {tier: opus} + base_sonnet × {tier: sonnet}
+  ```
+  Panel-size table at the defaults (`opus_min=1`, `sonnet_min=1`, `remainder_tiebreak: sonnet`):
+
+  | N | Opus | Sonnet | Notes |
+  |---|------|--------|-------|
+  | 1 | 1 | 0 | opus_min wins; warning emitted (sonnet floor unsatisfiable) |
+  | 2 | 1 | 1 | exactly the floors |
+  | 3 | 1 | 2 | floor(3/2)=1; extra → Sonnet (cost tiebreak) |
+  | 4 | 2 | 2 | clean 50/50 |
+  | 5 | 2 | 3 | floor(5/2)=2; extra → Sonnet |
+  | 6 | 3 | 3 | clean 50/50 |
+  | 7 | 3 | 4 | floor(7/2)=3; extra → Sonnet |
+  | 8 | 4 | 4 | clean 50/50 |
+
+  Highest-(fit_score × load_bearing_rate)-ranked personas claim Opus seats first; remaining personas fill Sonnet seats in score order. `tier_pins` honored before the algorithm runs (pinned personas occupy their pinned-tier seat; remaining seats follow the rule).
+- **Codex tag-gating** — Codex runs when `spec.tags ∩ codex_fit_tags ≠ ∅`. Default `codex_fit_tags: [security, integration, migration, scalability]` (architectural-class tags). Docs-only / refactor-only specs skip Codex even if authenticated. When authentication is missing, Codex is silently skipped regardless of tags (existing behavior).
 - **Constitution-level `tier_policy` block** (in renamed `pipeline-config.md`):
   ```yaml
   tier_policy:
     orchestrator: opus
     panel:
-      opus_min: 1            # default; spec/CLI can raise
-      default_worker: sonnet
-      codex: additive        # not counted in panel
-    tier_pins:               # optional; persona → tier
+      opus_min: 1                                # default; spec/CLI can raise
+      sonnet_min: 1                              # default; ≥1 Sonnet on panels of N≥2
+      remainder_split: even                      # alternatives: opus-heavy | sonnet-heavy
+      remainder_tiebreak: sonnet                 # cost-conscious default for odd remainder
+      codex: tag-gated                           # alternatives: additive | disabled
+      codex_fit_tags: [security, integration, migration, scalability]
+    tier_pins:                                   # optional; persona → tier
       # check:
       #   scope-discipline: opus
   ```
@@ -102,7 +133,8 @@ This is the natural follow-up to `pipeline-gate-permissiveness` (v0.9.0): permis
 **Rationale:**
 
 - **Why tag-matching + rankings (not pure rankings):** rankings alone are content-blind — a security-heavy spec routes to whichever personas happen to load-bear most often, not the personas best-suited to security work. Tags add the content axis without abandoning the empirical signal.
-- **Why ≥1 Opus floor (not pure budget-driven tiering):** Anthropic's 90.2% finding (Opus lead + Sonnet workers) is the published precedent. We extend it one step: even within the worker panel, one Opus reviewer preserves a strong voice that Sonnet workers can't fully replicate. Cost discipline comes from the rest being Sonnet.
+- **Why ≥1 Opus + ≥1 Sonnet + 50/50 remainder (not all-Sonnet workers, not all-Opus):** Anthropic's 90.2% finding (Opus lead + Sonnet workers) is the published precedent for orchestrator/worker tier-mixing. We extend it within the worker panel: a guaranteed Opus voice preserves architectural depth, a guaranteed Sonnet voice preserves cost discipline, and the 50/50 remainder lets larger panels lean on their natural even-split shape (rather than one tier dominating). Cost discipline at small N comes from the cost-conscious tiebreak (extra seat → Sonnet).
+- **Why Codex tag-gated (not always-on if authenticated):** Codex is high-cost, high-signal — should run on architectural / security / migration specs where its independent-lineage adversarial review pays off, NOT on docs-only or refactor-only specs where the marginal value is low. Default `codex_fit_tags: [security, integration, migration, scalability]` matches the work-class patterns where Codex has historically caught H1 findings (e.g., autorun-overnight-policy v6 nonce trust-boundary, autorun-verdict-deterministic execution-model gap). Adopters can override to `additive` (always-on) or `disabled` per their tier tolerance.
 - **Why three-tier override (not constitution-only):** v0.9.0 just shipped this pattern for `gate_mode` — adopters already understand the precedence. Architectural specs genuinely need `opus_min: 2`; docs-only specs could go all-Sonnet. The override layers give the right knobs.
 - **Why content-tags persisted (not LLM-inferred at resolver time):** classifier non-determinism means the same spec could route to different personas on different days. Persisted tags are deterministic, auditable, and editable by humans.
 
@@ -211,11 +243,14 @@ fit_tags: [security, integration]              # closed enum, multi-value
     "orchestrator": "opus",
     "panel": {
       "opus_min": 1,
-      "default_worker": "sonnet",
-      "codex": "additive"
+      "sonnet_min": 1,
+      "remainder_split": "even",
+      "remainder_tiebreak": "sonnet",
+      "codex": "tag-gated",
+      "codex_fit_tags": ["security", "integration", "migration", "scalability"]
     },
     "tier_pins": {},
-    "spec_overridable_keys": ["opus_min", "tier_pins"],
+    "spec_overridable_keys": ["opus_min", "sonnet_min", "remainder_split", "remainder_tiebreak", "tier_pins", "codex_fit_tags"],
     "security_floor": "opus"
   }
 }
@@ -373,6 +408,12 @@ tier_policy:
 
 1. **Budget < opus_min** → opus_min wins; sole selected persona is Opus. Gate stdout shows: `[tier-policy] budget=1, opus_min=1 → <persona>:opus (sole panel)`.
 
+   **N=1 edge with sonnet_min=1** → `opus_min` takes precedence over `sonnet_min` at N=1 (cannot satisfy both with one seat). Gate stdout: `[tier-policy] budget=1, opus_min=1, sonnet_min=1 → opus_min wins; sonnet_min=1 not satisfied (panel size insufficient)`. Warning, not halt.
+
+   **Budget < opus_min + sonnet_min (e.g., budget=1, opus_min=1, sonnet_min=1)** → same as N=1 above; opus_min wins. If `opus_min=2, sonnet_min=1, budget=2` → opus_min wins both seats; sonnet floor not satisfied; warning emitted. Constitution authors choosing aggressive `opus_min` are responsible for budget alignment.
+
+   **Codex tag-gating** (Edge 24): when `codex: tag-gated` and `spec.tags ∩ codex_fit_tags == ∅`, Codex is skipped even if authenticated; gate stdout shows `[tier-policy] Codex skipped (tags=<list> ∩ codex_fit_tags=<list> = ∅)`. When `codex: additive` (legacy/override), Codex always runs when authenticated. When `codex: disabled`, never runs.
+
 2. **Empty tag intersection** → fall back to ranking-only (today's behavior). One-line warning at gate stdout: `[tier-policy] no fit_tags match spec.tags; falling back to load_bearing_rate ranking`.
 
 3. **Cold-start (no rankings AND no/empty fit_tags)** → resolver uses existing seed-list fallback (the per-gate hardcoded list); tier rule still applied.
@@ -423,9 +464,29 @@ A1. **Tag-matching baseline:** spec with `tags: [security, data]` + budget=4 dis
 
 A2. **Opus floor:** every dispatched panel includes ≥1 Opus reviewer when `opus_min ≥ 1`. Verified across all three gates (`/spec-review`, `/plan`, `/check`).
 
-A3. **Top-1 wins Opus:** when `opus_min=1`, the persona with highest combined score gets Opus; rest Sonnet.
+A2b. **Sonnet floor:** every dispatched panel of N≥2 includes ≥1 Sonnet reviewer when `sonnet_min ≥ 1`. At N=1, opus_min wins and sonnet_min is unsatisfied (warning emitted, no halt — per Edge Case 1).
 
-A4. **Multi-Opus:** when `opus_min=2`, the top-2 by combined score get Opus.
+A3. **Top-ranked wins Opus seats:** when `opus_min=1` and panel size N=2, the persona with highest combined score gets Opus; the other gets Sonnet. For N=3, the top score gets Opus, the next two get Sonnet (tiebreak: extra → Sonnet per `remainder_tiebreak: sonnet`).
+
+A3b. **50/50 remainder split:** for the panel-size table at default tier_policy (opus_min=1, sonnet_min=1, remainder_tiebreak=sonnet), the actual Opus/Sonnet counts match the table:
+
+| N | Expected Opus | Expected Sonnet |
+|---|--------------|----------------|
+| 2 | 1 | 1 |
+| 3 | 1 | 2 |
+| 4 | 2 | 2 |
+| 5 | 2 | 3 |
+| 6 | 3 | 3 |
+| 7 | 3 | 4 |
+| 8 | 4 | 4 |
+
+Test fixture must run the full N=2..8 row set and assert exact tier counts per row.
+
+A4. **Multi-Opus override:** when `opus_min=2`, the top-2 by combined score get Opus, then the 50/50 remainder rule applies to the rest (e.g., `opus_min=2`, N=4 → 2 Opus + 2 Sonnet; `opus_min=2`, N=5 → 2 Opus from the floor + remainder=3 split → 1 more Opus + 2 Sonnet, total 3 Opus + 2 Sonnet via `max(opus_min, floor(N/2))`).
+
+A4b. **Tiebreak override:** when `remainder_tiebreak: opus` (constitution-overridden), N=3 → 2 Opus + 1 Sonnet (extra → Opus). Test asserts both tiebreak directions produce the documented panel.
+
+A4c. **Codex tag-gating:** when `codex: tag-gated`, Codex runs iff `spec.tags ∩ codex_fit_tags ≠ ∅`. Test fixtures: (a) spec with `tags: [security]` → Codex runs (matches `codex_fit_tags`); (b) spec with `tags: [docs]` → Codex skipped (no intersection); (c) spec with `tags: [docs, integration]` → Codex runs (one match suffices); (d) `codex: additive` override → Codex always runs when authenticated regardless of tags; (e) `codex: disabled` → never runs. Each case verified across all three gates.
 
 A5. **`tier_pins` override:** pinned personas always get pinned tier, regardless of combined score; remaining `opus_min - len(pins)` slots fall through to combined-score rule.
 
