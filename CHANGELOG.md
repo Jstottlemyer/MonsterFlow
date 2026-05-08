@@ -4,8 +4,6 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
-(no unreleased changes)
-
 ## [0.10.10] - 2026-05-07
 
 ### Added
