@@ -105,7 +105,7 @@ TESTS=(
   test-permissiveness.sh
   # pipeline-gate-permissiveness W5.5 — Edge Case 16 spec.md additions
   test-spec-edge-case-16.sh
-  # dynamic-roster-1-tags — persona fit_tags presence/enum/nonempty/unique
+  # dynamic-roster-1-tags — persona tag-schema integrity validation
   test-persona-fit-tags.sh
 )
 

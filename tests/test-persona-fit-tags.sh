@@ -32,10 +32,68 @@ for schema in schemas/tag-enum.schema.json \
   fi
 done
 
-# ---- Optional fixture-based negative-path checks (must-fix testability-M2) ----
-# Each bad fixture must FAIL the same _python_check, proving the validator catches
-# missing/empty/enum/duplicate violations. Skipped silently if dir is absent.
-FIXTURE_DIR="tests/fixtures/persona-fit-tags"
+# ---- Negative-path fixtures generated inline (must-fix testability-M2) ----
+# Fixtures live as heredocs in this script (not on-disk under tests/fixtures/)
+# so the slice-1 dormancy grep (A9) only matches schemas + this test file.
+# Each bad fixture must FAIL the same _python_check, proving the validator
+# catches missing/empty/enum/duplicate violations.
+FIXTURE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/persona-fit-tags-fixtures.XXXXXX")" || {
+  echo "FAIL test harness — mktemp -d failed"
+  exit 2
+}
+# Defense-in-depth against mktemp returning empty: refuse to proceed with an
+# empty FIXTURE_DIR (would make `mkdir -p "/bad-missing"` write at filesystem root).
+if [ -z "$FIXTURE_DIR" ] || [ "$FIXTURE_DIR" = "/" ]; then
+  echo "FAIL test harness — mktemp returned empty or root path: '$FIXTURE_DIR'"
+  exit 2
+fi
+trap 'rm -rf "$FIXTURE_DIR"' EXIT
+
+mkdir -p "$FIXTURE_DIR/bad-missing" \
+         "$FIXTURE_DIR/bad-empty" \
+         "$FIXTURE_DIR/bad-enum" \
+         "$FIXTURE_DIR/bad-duplicate"
+
+cat > "$FIXTURE_DIR/bad-missing/no-tag-line.md" <<'EOF'
+---
+name: no-tag-line
+description: Persona file without the required tag line — must be rejected
+---
+
+# No Tag Line
+
+Body.
+EOF
+
+cat > "$FIXTURE_DIR/bad-empty/empty-tag-line.md" <<'EOF'
+---
+fit_tags: []
+---
+
+# Empty Tag Line
+
+Body.
+EOF
+
+cat > "$FIXTURE_DIR/bad-enum/typo-tag-line.md" <<'EOF'
+---
+fit_tags: [securty, data]
+---
+
+# Typo Tag Line
+
+Body.
+EOF
+
+cat > "$FIXTURE_DIR/bad-duplicate/duplicate-tag-line.md" <<'EOF'
+---
+fit_tags: [security, security]
+---
+
+# Duplicate Tag Line
+
+Body.
+EOF
 
 # ---- Core check: invoke once, capture JSON report ----
 _python_check() {
@@ -181,6 +239,7 @@ print(sum(len(v) for v in d.values()))
       FAIL=$((FAIL+1))
     else
       echo "PASS fixture_bad_${kind}_is_rejected"
+      PASS=$((PASS+1))
     fi
   done
 fi

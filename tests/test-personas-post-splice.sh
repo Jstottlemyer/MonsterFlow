@@ -57,8 +57,8 @@ for f in "${personas[@]}"; do
   fi
 
   # Invariant 2: first non-blank line (post YAML frontmatter, if any) is an h1
-  # (persona title preserved). dynamic-roster-1-tags introduced optional
-  # `---\nfit_tags: [...]\n---` frontmatter; skip past it before the h1 check.
+  # (persona title preserved). dynamic-roster-1-tags added an optional YAML
+  # frontmatter block to persona files; skip past it before the h1 check.
   first_line="$(awk '
     BEGIN { in_fm = 0; seen = 0 }
     /^---$/ {
