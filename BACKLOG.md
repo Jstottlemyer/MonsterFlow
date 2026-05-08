@@ -8,6 +8,25 @@ Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready
 
 ---
 
+## ULTRAPROMPT extraction plan (from 2026-05-06 Codex session; recovered 2026-05-07)
+
+- **`ultraprompt-extraction` (NEW spec candidate — meta-plan; spawns 6 child specs)** — full extraction plan lives at `extractionplan.md` (project root, 294 lines). Six durable-proof / resumability / feature-local-state additions sequenced in rollout order. Each is independently shippable; #1-#3 are observational/mechanical (low-risk), #4-#6 change workflow behavior more visibly.
+  1. **Feature Artifact Index** (S-M) — `scripts/build-feature-artifact-index.py` writes `docs/specs/<feature>/artifact-index.yaml` after every stage transition. Aggregates spec/review/plan/check artifacts + verdict summary + followup counts + raw paths + survival metrics + latest commit. Read-only over existing files. Tests: complete / partial / malformed / missing-followups fixtures.
+  2. **Build Evidence Checker** (M) — `scripts/check-build-evidence.py` mechanical proof checker before `/build` declares done. Catches missing screenshots/test logs, unresolved followups, NO_GO verdicts, security findings without disposition, claimed-but-absent evidence paths. JSON + Markdown reports. New schema `build-evidence.schema.json`.
+  3. **Check Gate Packet** (M) — `scripts/build-check-gate-packet.py` writes `check/gate-packet.yaml` before `/check` synthesis. Hashes spec/review/plan + selected personas from `selection.json` + raw output paths + gate mode/source/iteration + Codex path + sidecar schema version. Makes the trust boundary explicit instead of inferred.
+  4. **Manual Pipeline Checkpoints** (S) — `scripts/feature-checkpoint.py` appends to `docs/specs/<feature>/run.md` per stage with timestamp + status + artifact paths + verdict. Cheap manual resumption parity with autorun's `run-state.json`.
+  5. **Optional Feature Tickets** (M) — opt-in `docs/specs/<feature>/tickets/T-001-*.md` for `/build` wave tasks. Frontmatter (id/feature/status/wave/blocked_by/owner/file_paths/evidence/handoff). Generated from plan.md task breakdown. Closeout requires evidence-checker pass. Tickets included in artifact-index.
+  6. **Deterministic Research Trigger** (S) — `scripts/research-trigger.py` preflight at `/spec` + `/plan` flagging when terms (current/latest/API/vendor/model/version/regulation/pricing/etc.) require live research. No network access itself; just produces `research-trigger.json`. `/plan` warns when triggered but no research evidence recorded.
+  - **Why:** durable proof + resumability + feature-local state are the gaps Codex surfaced after scanning the repo. MonsterFlow already has strong concepts (persona gates, autorun state, gate-mode, dashboard) but weaker mechanical enforcement at the trust boundaries. Each priority closes a specific honesty gap (#2: false-completion; #3: trust-packet inferred-vs-explicit; #6: stale-memory dependency drift).
+  - **Non-goals (explicit):** do NOT copy ULTRAPROMPT's client/payment workspace model, MCP server bundling, project-manager orchestrator-only control plane, or vault-repo separation. Do NOT weaken existing persona-metrics / gate-mode / autorun / dashboard contracts.
+  - **Sequencing:** rollout order is the spec sequence (#1 → #6). #1-#3 unblocked. #5 depends on #1+#2 stable (tickets included in artifact-index, closeout uses evidence-checker). #4 + #6 unblocked but lower priority per Codex.
+  - **Compatibility rules:** legacy feature directories must continue to work; new scripts warn (don't fail) when optional artifacts missing; hard failures reserved for integrity issues / invalid slugs / claimed-but-absent proof.
+  - **Size:** L total (six children S-M each); recommend opening as 6 separate `/spec` runs rather than one mega-spec. Start with #1 (lowest risk, observational).
+  - **Source:** `extractionplan.md` at project root (Codex-authored 2026-05-06; full text). Read in full before opening child specs.
+  - **Codex review recommended on #2 (Build Evidence Checker)** — touches /build completion semantics; class:integrity risk if checker misses a false-completion path. Standard /check sufficient for the other five.
+
+---
+
 ## Pipeline + install discipline (from 2026-05-05 autorun-overnight-policy session)
 
 - **`pipeline-codex-coverage-extension` (NEW spec candidate, 2026-05-07)** — extend Codex adversarial review from its current `/spec-review` + `/check` surface to `/plan` and `/build` wave-final. Codex is silently skipped today at `/plan` (per `findings.schema.json`'s `personas[]` description: *"Codex doesn't run at /plan in v1"*) and absent at `/build` entirely.
