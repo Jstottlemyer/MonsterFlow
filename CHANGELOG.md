@@ -4,20 +4,42 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+(no unreleased changes)
+
+## [0.10.9] - 2026-05-07
+
+Consolidated entry covering v0.10.0 → v0.10.9 (10 patch tags, 2026-05-06 to 2026-05-07). Per-tag granularity collapsed because CHANGELOG was not updated between auto-bumps; future tags will be entered between bumps to preserve granularity (see memory `feedback_auto_bump_changelog_warning.md`).
+
 ### Added
 
-- **Tag schema (slice 1 of `dynamic-roster-per-gate`):** closed 9-value tag enum (`schemas/v1/tag-enum.schema.json`) + spec frontmatter stub (`schemas/v1/spec-frontmatter.schema.json`) + persona frontmatter (`schemas/v1/persona-frontmatter.schema.json`) — required `fit_tags:` on all personas.
-- `tests/test-persona-fit-tags.sh` — validates presence, enum-membership, non-empty, no-duplicates across all 19 pipeline personas. Includes negative-path fixtures under `tests/fixtures/persona-fit-tags/{bad-missing,bad-empty,bad-enum,bad-duplicate}/`.
-- `fit_tags:` frontmatter backfilled on all 19 pipeline personas (review 6, plan 7, check 6).
+- **Tag schema (slice 1 of `dynamic-roster-per-gate`):** closed 9-value tag enum (`schemas/v1/tag-enum.schema.json`) + spec frontmatter stub (`schemas/v1/spec-frontmatter.schema.json`) + persona frontmatter (`schemas/v1/persona-frontmatter.schema.json`) — required `fit_tags:` on all personas. (v0.10.0)
+- `tests/test-persona-fit-tags.sh` — validates presence, enum-membership, non-empty, no-duplicates across all 19 pipeline personas. Includes negative-path fixtures under `tests/fixtures/persona-fit-tags/{bad-missing,bad-empty,bad-enum,bad-duplicate}/`. (v0.10.0)
+- `fit_tags:` frontmatter backfilled on all 19 pipeline personas (review 6, plan 7, check 6). (v0.10.0)
+- `feat(autorun)`: iterative-resolution loops — verdict-axis counter + off-by-one fix. (v0.10.0)
+- `feat(autorun)`: security-axis 3-attempt counter + per-run rotate wrapper. (v0.10.0)
+- BACKLOG: `pipeline-autorun-heartbeat` adds verifier-evidence-pedantry detection (lever e). (v0.10.2)
+- BACKLOG: `pipeline-autorun-source-of-truth-consolidation` (supersedes earlier `pipeline-autorun-run-archive` framing). (v0.10.3)
+- BACKLOG: `pipeline-autorun-final-status-render` — single-screen exit summary + /flow card. (v0.10.4)
+- BACKLOG: `pipeline-codex-coverage-extension` — extend Codex review from /spec-review + /check to /plan + /build wave-final. (v0.10.9)
 
 ### Changed
 
-- `install.sh` symlinks `schemas/` into adopter's `~/.claude/schemas/`, sentinel-bracketed for idempotent re-run.
-- All 19 persona files gained one frontmatter block. **Note:** `_roster.compute_persona_content_hash` rotates once for every persona — `dashboard/data/persona-rankings.jsonl` will show `persona_content_hash` deltas on next snapshot. No action needed; rebuild is automatic.
+- `install.sh` symlinks `schemas/` into adopter's `~/.claude/schemas/`, sentinel-bracketed for idempotent re-run. (v0.10.0)
+- All 19 persona files gained one frontmatter block. **Note:** `_roster.compute_persona_content_hash` rotates once for every persona — `dashboard/data/persona-rankings.jsonl` will show `persona_content_hash` deltas on next snapshot. No action needed; rebuild is automatic. (v0.10.0)
+- `dynamic-roster-per-gate` spec **tier-mix rule updated**: `≥1 Opus + remaining N-1 Sonnet` → `≥1 Opus + ≥1 Sonnet + remainder split 50/50`, with cost-conscious tiebreak (extra seat → Sonnet) for odd remainders. New `tier_policy` keys: `sonnet_min`, `remainder_split`, `remainder_tiebreak`. Deterministic panel-size table for N=2..8 added to spec. (v0.10.8 → v0.10.9 net)
+- `dynamic-roster-per-gate` spec **Codex policy** stays `additive` by default (initial v0.10.8 amendment introduced a `tag-gated` mode; reverted in v0.10.9 after evidence audit — Codex's track record of H1/H2 saves on autorun-overnight-policy v6, autorun-verdict-deterministic, and dynamic-roster-per-gate run #6 doesn't justify the gating complexity). Two-state knob: `additive | disabled`.
+- A9 grep contract tightened on slice-1 personas (`dynamic-roster-1-tags` attempt 3 fix). (v0.10.1)
+- Settings: dropped `"model": "opus"` pin from `settings/settings.json`; harness now picks the model itself for new sessions. (v0.10.7)
+
+### Removed / Rejected
+
+- **`autorun-verdict-deterministic` spec REJECTED** after /spec-review surfaced 8 critical gaps + 4× H1 from Codex (load-bearing: `claude -p` reviewers have stdout, not file-write authority — sidecar emission unimplementable). The cost of closing the v6 single-fence-spoof residual exceeds its narrow attack-surface value. v6 multi-fence detection + NFKC normalization + zero-width stripping remain the baseline. BACKLOG entry preserves all 8 surfaced CGs for any future revisit. (v0.10.5 → v0.10.7 attempt + rejection)
+- BACKLOG: `pipeline-gate-permissiveness` row removed (shipped as v0.9.0). (v0.10.0)
 
 ### Notes
 
-- No runtime behavior changes ship in this release. `fit_tags:` is dormant data until slice 3 (`dynamic-roster-3-tier`) wires the resolver.
+- No runtime behavior changes ship in this release window beyond the v0.10.0 autorun loops + counters; the v0.10.8 / v0.10.9 tier-mix rule and Codex policy clarifications are spec-only (slice 2+ of dynamic-roster-per-gate will wire them at code level).
+- `fit_tags:` remains dormant data until slice 3 (`dynamic-roster-3-tier`) wires the resolver.
 
 ## [0.9.0] - 2026-05-05
 
