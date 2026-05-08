@@ -10,6 +10,19 @@ Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready
 
 ## Pipeline + install discipline (from 2026-05-05 autorun-overnight-policy session)
 
+- **`pipeline-codex-coverage-extension` (NEW spec candidate, 2026-05-07)** — extend Codex adversarial review from its current `/spec-review` + `/check` surface to `/plan` and `/build` wave-final. Codex is silently skipped today at `/plan` (per `findings.schema.json`'s `personas[]` description: *"Codex doesn't run at /plan in v1"*) and absent at `/build` entirely.
+  - **Why:** Codex catches plan-vs-codebase-reality drift — a different job than Claude reviewers do (Claude verifies plan-against-itself; Codex verifies plan-against-Python/CLI/codebase, per memory `feedback_codex_catches_plan_vs_reality_drift.md`). Track record: H1/H2 saves on autorun-overnight-policy v6 (nonce trust-boundary), autorun-verdict-deterministic (4× H1 including unimplementable-execution-model gap), dynamic-roster-per-gate run #6 (security findings). 3 confirmed saves at the gates where it's wired; `/plan` likely has the same hit rate (synthesizer-against-pseudocode is exactly the drift class Codex catches). `/build` wave-final adds an end-of-implementation reality check — does the diff match the plan's ACs?
+  - **Cost reality:** ChatGPT subscription + ~30s wall-clock per invocation. Materially cheaper than an Opus dispatch. The "Codex is always-on if authenticated" default in `dynamic-roster-per-gate` (additive policy) makes coverage extension a net win, not a cost burden.
+  - **Spec needs:**
+    - `/plan` Phase 2b (new) — Codex adversarial review of synthesized `plan.md` against `spec.md` + relevant codebase paths. Output to `docs/specs/<feature>/plan/raw/codex-adversary.md`. Adversarial prompt: challenge plan's pseudocode field names against actual schemas, plan's CLI flags against actual `--help` output, plan's import paths against actual files.
+    - `/build` wave-final — Codex review of accumulated wave commits against the plan's ACs. Output to `docs/specs/<feature>/build/raw/codex-adversary.md`. Adversarial prompt: which ACs are unaddressed by the diff? Which commits violate the plan's stated approach?
+    - `commands/_codex_probe.sh` — extend invocation paths (currently 2 callers; will be 4).
+    - `findings.schema.json` description update — drop the *"Codex doesn't run at /plan in v1"* note.
+    - Test fixtures: 3 per new gate (auth-present-runs, auth-missing-skips, prompt-version-bump).
+  - **Sequencing:** unblocked. Independent of `dynamic-roster-per-gate` shipping; Codex is `additive` by default in both worlds.
+  - **Size:** M (mostly plumbing extension to 2 new gates + adversarial-prompt design + ~6 test fixtures).
+  - **Codex review optional** — meta-irony aside, this spec mostly extends an existing pattern; standard /check sufficient.
+
 ## Carved from `dynamic-roster-per-gate` MVP scope (2026-05-06; per scope-discipline run #6 recommendation)
 
 - **`pipeline-autorun-final-status-render` (NEW spec candidate)** — when `autorun-batch.sh` exits, render a single-screen final summary: per-slug verdict (shipped/failed/halted), PR URLs, failure stage + reason, total wallclock, total cost (token + dollar if available), and the `/flow` workflow reference card so the user re-loads context for the next session in one screen instead of `autorun status` + `tail run.log` + `cat queue/index.md` + per-slug `check.md` reads. Should also handle: graceful "no slugs ran" / STOP-file-halt / partial-completion cases.
