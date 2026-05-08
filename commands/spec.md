@@ -203,8 +203,8 @@ Skip Phase 0.5 only for bug-fix work (work-size option a) and small changes wher
    ```
    [Spec | Confidence: 0.72 | Need: edge cases, acceptance]
    ```
-7. **Manual gate: 0.90** — when overall confidence ≥ 0.90, announce readiness.
-8. **Max 12 questions** — if you hit 12 and confidence < 0.90, note uncertainties and ask if the user wants to continue or proceed with open questions marked.
+7. **Manual gate: 0.95** — when overall confidence ≥ 0.95, announce readiness.
+8. **Max 12 questions** — if you hit 12 and confidence < 0.95, note uncertainties and ask if the user wants to continue or proceed with open questions marked.
 9. **Constitution constraints** — if a constitution exists, check answers against its principles. Flag conflicts.
 
 ### Question Strategy
@@ -303,7 +303,7 @@ When the gate is met (manual approval or auto-run criteria — see below):
    [How we know it's done — testable statements]
 
    ## Open Questions
-   [Anything below 0.90 confidence, if proceeding with gaps]
+   [Anything below 0.95 confidence, if proceeding with gaps]
    ```
 
 2. **Self-review pass** (hybrid — new):
@@ -358,14 +358,14 @@ if auto_enabled
 else if auto_enabled AND average >= auto_threshold AND min < auto_floor:
       prompt: "Auto-run blocked: <dim> at <score> (floor: <floor>). Proceed manually?"
 else:
-      manual mode (normal 0.90 approval gate)
+      manual mode (normal 0.95 approval gate)
 ```
 
 **Auto-run never runs when the user is mid-sentence.** Any incoming message during the auto-proceed flow interrupts and reverts to manual mode.
 
 ## Key Principles
 
-- **0.90 confidence gate** — no rushing through Q&A
+- **0.95 confidence gate** — no rushing through Q&A
 - **One question at a time** — don't overwhelm
 - **Multiple choice with a recommendation** — every Q has Claude's lean and reasoning
 - **YAGNI ruthlessly** — remove unnecessary features
