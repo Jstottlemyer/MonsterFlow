@@ -757,7 +757,7 @@
     <h1>Queue features tonight.<br>Wake up to merged PRs.</h1>
     <p class="hero-hook">When I'm asleep or buried in the day job, I want the pipeline to keep moving but not blindly — so autorun runs the same gates I'd step through manually, takes up to three swings at fixing what fails, and leaves a PR or a failure report waiting in the morning.</p>
     <p class="tagline">
-      An 8-command pipeline for <a href="https://claude.com/claude-code">Claude Code</a>: <code>/spec → /spec-review → /plan → /check → /build</code>, plus <code>/autorun</code> when you want to queue features and walk away. Specialist reviewer agents run in parallel at every gate, their findings judged and synthesized before the next phase starts. Whatever the pipeline catches, ships, or halts on — it logs the trail so you can audit what actually mattered in the morning.
+      An 8-command pipeline for <a href="https://claude.com/claude-code">Claude Code</a>: <code>/spec → /spec-review → /plan → /check → /build</code>, plus <code>/autorun</code> when you want to queue features and walk away. Specialist reviewer agents — <em>personas</em>, each tuned to one concern like security or scope — run in parallel at every <em>gate</em> (the pause points between phases where work gets reviewed). Their findings get judged and synthesized before the next phase starts.
     </p>
     <p class="hero-who">
       <strong>Built for solo developers and small teams</strong> using Claude Code on personal or production projects. MIT-licensed, local install, no hosted service.
@@ -896,7 +896,7 @@ flowchart TD
     P["/plan\napi · data-model · ux · scalability\nsecurity · integration · wave-sequencer"]:::plan
     JS2["Judge · Dedupe · Synth → plan.md"]:::synth
     C["/check\ncompleteness · sequencing · risk\nscope-discipline · testability"]:::gate
-    JS3["Judge · Dedupe · Synth → check.md\nthree-tier verdict (v0.9+)"]:::synth
+    JS3["Judge · Dedupe · Synth → check.md\nthree-tier verdict"]:::synth
     V1["GO\nclean pass"]:::verdictGo
     V2["GO_WITH_FIXES\nwarn → followups.jsonl\n(common case in permissive mode)"]:::verdictWarn
     V3["NO_GO\narchitectural · security · unclassified\nhalt"]:::verdictBlock
@@ -946,7 +946,7 @@ flowchart TD
     classDef verdictBlock fill:#7f1d1d,stroke:#fca5a5,color:#fee2e2,stroke-width:2px
       </pre>
     </div>
-    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Three-tier verdict at /check (v0.9.0+).</strong> The pipeline-gate-permissiveness change replaces the old binary halt-or-pass behavior with three verdicts: <code>GO</code> (clean pass), <code>GO_WITH_FIXES</code> (non-architectural findings warn-routed to <code>followups.jsonl</code> and consumed by /build wave 1 — the common case in permissive mode), and <code>NO_GO</code> (architectural, security, or unclassified findings halt the pipeline). The same verdict shape applies at <code>/spec-review</code> and <code>/plan</code>; <code>/check</code> remains the last gate before code.</p>
+    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Three-tier verdict at /check.</strong> Instead of a binary halt-or-pass, every gate emits one of three verdicts: <code>GO</code> (clean pass), <code>GO_WITH_FIXES</code> (non-architectural findings logged as follow-ups and consumed by <code>/build</code> wave 1 — the common case overnight), and <code>NO_GO</code> (architectural, security, or unclassified findings halt the pipeline). The same verdict shape applies at <code>/spec-review</code> and <code>/plan</code>; <code>/check</code> is the last gate before code.</p>
     <p class="lede" style="margin-top:24px">Each gate runs specialist agents in parallel; a <strong style="color:var(--fg)">Judge</strong> then clusters their raw output, attributes each finding to its source, and composes the synthesized artifact that drives the next phase. <code>spec.md</code> captures intent through Q&amp;A, then feeds 6 PRD reviewers → Judge → <code>review.md</code>; that feeds 7 design agents → Judge → <code>plan.md</code>; that feeds 5 plan validators → Judge → <code>check.md</code>. <code>/build</code> executes against the plan with TDD and verification discipline. <code>/wrap</code> distills what changed back into memory and the wiki. Small work skips the gates it doesn't need — <strong style="color:var(--fg)">same flow scales from a typo fix to a V2</strong>.</p>
     <p class="lede" style="margin-top:16px"><strong style="color:var(--fg)">Codex (optional).</strong> If <a href="#requirements">installed</a>, an OpenAI Codex agent runs an adversarial pass at <code>/spec-review</code>, <code>/check</code>, and <code>/build</code> — independent perspective from a different model family, joining the same Judge synthesis as the in-house personas. Silent skip if not set up.</p>
   </div>
@@ -959,7 +959,7 @@ flowchart TD
     <div class="mermaid-frame">
       <pre class="mermaid">
 flowchart LR
-    R["Roster<br/><sub>28 personas + Codex</sub>"]:::roster
+    R["Roster<br/><sub>39 personas + Codex</sub>"]:::roster
     G["3 multi-agent gates<br/><sub>/spec-review · /plan · /check</sub>"]:::gate
     E["findings.jsonl<br/>participation.jsonl<br/>survival.jsonl"]:::data
     W["/wrap Phase 1c<br/><sub>10-feature window<br/>drift → [TRIAGE]</sub>"]:::metrics
