@@ -1153,10 +1153,19 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "[autorun] $SLUG: DRY RUN — skipping codex-review"
 elif [ -f "$CODEX_OUTPUT_FILE" ]; then
   CODEX_AVAILABLE=1
-  CODEX_HIGH_COUNT="$(grep -c '^\*\*High:\*\*' "$CODEX_OUTPUT_FILE" 2>/dev/null || true)"
+  CODEX_HIGH_COUNT="$(grep -cE '^\*\*High( \[[^]]+\])?:\*\*' "$CODEX_OUTPUT_FILE" 2>/dev/null || true)"
   # Guard: integer-only (per autorun-shell-reviewer recommendation; matches
   # the canonical pattern in scripts/_gate_helpers.sh:111).
   case "$CODEX_HIGH_COUNT" in ''|*[!0-9]*) CODEX_HIGH_COUNT=0 ;; esac
+  # Per-axis split (post-PR Codex warn-route, 2026-05-09):
+  # WARN axes    — contract | tests | documentation | scope-cuts
+  # BLOCKING     — TOTAL - WARN (safe default: any unclassified or unknown
+  #                axis counts as blocking; closes the classification-gap
+  #                surface noted by autorun-shell-reviewer pre-commit pass).
+  CODEX_HIGH_WARN="$(grep -cE '^\*\*High \[(contract|tests|documentation|scope-cuts)\]:\*\*' "$CODEX_OUTPUT_FILE" 2>/dev/null || true)"
+  case "$CODEX_HIGH_WARN" in ''|*[!0-9]*) CODEX_HIGH_WARN=0 ;; esac
+  CODEX_HIGH_BLOCKING=$(( CODEX_HIGH_COUNT - CODEX_HIGH_WARN ))
+  [ "$CODEX_HIGH_BLOCKING" -lt 0 ] && CODEX_HIGH_BLOCKING=0
 else
   CODEX_PROBE_EXIT=0
   bash "$CODEX_PROBE_BIN" >/dev/null 2>&1 || CODEX_PROBE_EXIT=$?
@@ -1178,7 +1187,22 @@ else
       timeout "$TIMEOUT_CODEX" codex exec \
           --full-auto --ephemeral \
           --output-last-message "$CODEX_OUTPUT_FILE" \
-          "Review this PR for correctness, security issues, and adherence to spec. For each finding, prefix with **High:**, **Medium:**, or **Low:**." \
+          "Review this PR for correctness, security issues, and adherence to spec.
+
+For each finding, prefix with severity AND axis class:
+  **High [architectural]:** | **High [security]:** | **High [contract]:** | **High [tests]:** | **High [documentation]:** | **High [scope-cuts]:**
+  **Medium [...]:** (same axes)
+  **Low [...]:** (same axes)
+
+Axis semantics (matches MonsterFlow's v0.9.0 gate classification):
+- architectural: design/structure breaking the spec or core invariants — BLOCKS merge
+- security: secret leakage, auth bypass, injection, privilege escalation — BLOCKS merge
+- contract: API/CLI/JSON-shape drift from documented interface — non-blocking, logged to followups
+- tests: missing/weak test coverage for shipped behavior — non-blocking, logged to followups
+- documentation: README/CHANGELOG/docstring gaps — non-blocking, logged to followups
+- scope-cuts: spec said do X, PR did less than X — non-blocking, logged to followups
+
+If you cannot classify a finding, omit the axis bracket — unclassified High findings default to BLOCKING (safe default)." \
           < "$CODEX_CONTEXT" \
           2>/dev/null || CODEX_EXIT=$?
       rm -f "$CODEX_CONTEXT"
@@ -1186,9 +1210,19 @@ else
       if [ "$CODEX_EXIT" -eq 0 ] && [ -f "$CODEX_OUTPUT_FILE" ]; then
         CODEX_AVAILABLE=1
         log_run "codex-review" 0
-        CODEX_HIGH_COUNT="$(grep -c '^\*\*High:\*\*' "$CODEX_OUTPUT_FILE" 2>/dev/null || true)"
+        # Total High count (axis-agnostic — accepts both axis-tagged and legacy
+        # untagged "**High:**" lines for backward compatibility).
+        CODEX_HIGH_COUNT="$(grep -cE '^\*\*High( \[[^]]+\])?:\*\*' "$CODEX_OUTPUT_FILE" 2>/dev/null || true)"
         case "$CODEX_HIGH_COUNT" in ''|*[!0-9]*) CODEX_HIGH_COUNT=0 ;; esac
-        echo "[autorun] $SLUG: Codex High findings: $CODEX_HIGH_COUNT"
+        # Per-axis split (post-PR Codex warn-route, 2026-05-09).
+        # BLOCKING = TOTAL - WARN — safe-default arithmetic so any unknown or
+        # unclassified axis counts as blocking (no silent merge on hallucinated
+        # axis names).
+        CODEX_HIGH_WARN="$(grep -cE '^\*\*High \[(contract|tests|documentation|scope-cuts)\]:\*\*' "$CODEX_OUTPUT_FILE" 2>/dev/null || true)"
+        case "$CODEX_HIGH_WARN" in ''|*[!0-9]*) CODEX_HIGH_WARN=0 ;; esac
+        CODEX_HIGH_BLOCKING=$(( CODEX_HIGH_COUNT - CODEX_HIGH_WARN ))
+        [ "$CODEX_HIGH_BLOCKING" -lt 0 ] && CODEX_HIGH_BLOCKING=0
+        echo "[autorun] $SLUG: Codex High findings: $CODEX_HIGH_COUNT (blocking=$CODEX_HIGH_BLOCKING, warn-route=$CODEX_HIGH_WARN)"
       else
         echo "[autorun] $SLUG: Codex review skipped/timed out (exit $CODEX_EXIT)" >&2
         log_run "codex-review" "$CODEX_EXIT"
@@ -1229,14 +1263,16 @@ else
   esac
 fi
 
-# Persist codex_high_count into run-state.json (best-effort).
+# Persist codex_high_count + per-axis split into run-state.json (best-effort).
 if [ -f "$STATE_FILE" ]; then
-  python3 - "$STATE_FILE" "$CODEX_HIGH_COUNT" 2>/dev/null <<'PY' || true
+  python3 - "$STATE_FILE" "$CODEX_HIGH_COUNT" "${CODEX_HIGH_BLOCKING:-0}" "${CODEX_HIGH_WARN:-0}" 2>/dev/null <<'PY' || true
 import json, os, sys
-fp, hc = sys.argv[1], int(sys.argv[2])
+fp, hc, hb, hw = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
 with open(fp) as f:
     d = json.load(f)
 d["codex_high_count"] = hc
+d["codex_high_blocking"] = hb
+d["codex_high_warn"] = hw
 tmp = fp + ".tmp"
 with open(tmp, "w") as f:
     json.dump(d, f, indent=2)
@@ -1246,9 +1282,18 @@ PY
 fi
 
 # ---------------------------------------------------------------------------
-# Auto-merge gate composition (AC#7):
-#   merge_capable iff CODEX_HIGH_COUNT == 0 AND RUN_DEGRADED == 0
+# Auto-merge gate composition (post-PR per-axis warn-route, 2026-05-09):
+#   merge_capable iff CODEX_HIGH_BLOCKING == 0 AND RUN_DEGRADED == 0
 #                  AND verdict ∈ {GO, GO_WITH_FIXES}
+#
+# CODEX_HIGH_WARN findings (contract|tests|documentation|scope-cuts) do NOT
+# block merge — they are logged to followups.jsonl and surfaced in the PR body.
+# This mirrors v0.9.0's per-axis warn/block policy at /spec-review, /plan,
+# /check (which had been missed at this post-PR surface — meta-review fix).
+#
+# Unclassified High findings (no axis bracket) default to BLOCKING — safe
+# default that preserves legacy behavior when Codex emits the v0.10 prompt
+# format without axis tags.
 # ---------------------------------------------------------------------------
 check_stop
 
@@ -1268,8 +1313,15 @@ elif [ -f "$ARTIFACT_DIR/check.md" ]; then
   fi
 fi
 
+# Default CODEX_HIGH_BLOCKING to CODEX_HIGH_COUNT when the per-axis split was
+# not populated (e.g., Codex stage was skipped via DRY_RUN, or the split
+# variables weren't set on the cached-output path). Safe default = preserve
+# legacy behavior.
+CODEX_HIGH_BLOCKING="${CODEX_HIGH_BLOCKING:-$CODEX_HIGH_COUNT}"
+CODEX_HIGH_WARN="${CODEX_HIGH_WARN:-0}"
+
 MERGE_CAPABLE=0
-if [ "$CODEX_HIGH_COUNT" -eq 0 ] && [ "$RUN_DEGRADED" -eq 0 ]; then
+if [ "$CODEX_HIGH_BLOCKING" -eq 0 ] && [ "$RUN_DEGRADED" -eq 0 ]; then
   case "$VERDICT" in
     GO|GO_WITH_FIXES) MERGE_CAPABLE=1 ;;
   esac
@@ -1278,9 +1330,14 @@ fi
 # ---------------------------------------------------------------------------
 # autorun-merge-policy v0.11.0 dispatch — replaces the legacy merge gate.
 #
-# Composition with existing four-axis gate (preserved):
-#   merge_capable iff CODEX_HIGH_COUNT == 0 AND RUN_DEGRADED == 0
+# Composition with existing four-axis gate (per-axis Codex warn-route as of
+# 2026-05-09):
+#   merge_capable iff CODEX_HIGH_BLOCKING == 0 AND RUN_DEGRADED == 0
 #                 AND verdict ∈ {GO, GO_WITH_FIXES}
+#
+# CODEX_HIGH_BLOCKING = CODEX_HIGH_COUNT - CODEX_HIGH_WARN, where the warn
+# axes are contract|tests|documentation|scope-cuts (see Codex prompt at
+# stage entry). Unclassified or unknown-axis Highs default to blocking.
 #
 # is_clean_for_merge() refines only the verdict portion under permissive mode
 # (requires GO, not GO_WITH_FIXES) — see _merge_policy.sh.
