@@ -34,6 +34,16 @@ Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready
     - `~/.claude/Openrouter.apikey` (chmod 600, 74 bytes; OPENROUTER_API_KEY env loaded from this file at CCR start)
     - `@musistudio/claude-code-router` on npm; issues active May 5-8, 2026
     - Memory: `project_multi_model_roster.md` (original exploration framing)
+  - **Smoke test results (2026-05-08, ~$0.002 total cost):** GO on integration architecture.
+    - **Setup:** CCR v2.0.0 installed via `npm i -g @musistudio/claude-code-router`. Config schema is v2 (`Providers[]` + `Router{}` at `~/.claude-code-router/config.json`, NOT the simpler `~/.ccr/config.json` shape from the user's recipe). Env-var interpolation via `$OPENROUTER_API_KEY` works. `chmod 600` on config. CCR daemon listened on 127.0.0.1:3456.
+    - **Test 1 (plain chat):** PASS. Anthropic-shape POST to `/v1/messages` routed to Qwen3.6-27b returned correct `type: message` + `content: [{type: text, text: ...}]` shape. Model identifies as "Qwen, large language model developed by Alibaba Group's Tongyi Lab." 23 in / 334 out tokens. Actual model ID returned: `qwen/qwen3.6-27b-20260422` (date-suffixed; `qwen/qwen3.6-27b` is an alias).
+    - **Test 2 (tool use, Anthropic schema):** PASS. Qwen received Anthropic `tools[]` array with `Read` tool definition + `input_schema`, emitted correct `tool_use` block with `id`, `name: "Read"`, `input: {file_path: ...}`, and `stop_reason: tool_use`. 316 in / 145 out.
+    - **Test 3 (tool use, multi-turn round trip):** PASS. Submitted `tool_result` block with the Read tool output; Qwen synthesized final response with markdown formatting and correct `stop_reason: end_turn`. 367 in / 89 out.
+    - **Caching: confirmed DISABLED** (`cache_read_input_tokens: 0` across all 3 calls, as the user's research predicted). Real cost + latency hit on multi-turn cache reuse paths.
+    - **Verbose-output concern flagged:** Test 1 burned 334 output tokens for "Hello, I'm Qwen..." — Qwen likely emits internal reasoning that gets compacted. Raw output-token-rate cost advantage (4.7x cheaper than Sonnet) may erode on prompts where Qwen runs long internal chains. **Measure on a real spec-review prompt before promoting** — could blow up output costs vs Sonnet despite the per-token rate.
+    - **Cost vs Sonnet (raw rates):** input $0.32/M vs $3/M (9.4× cheaper); output $3.20/M vs $15/M (4.7× cheaper). On the smoke-test workload (706 in / 568 out): Qwen $0.002 vs Sonnet ~$0.011. Real-world ratio depends on output verbosity.
+    - **Tool-use parity: GO for Read schema.** Other Claude tools (Edit, Write, Grep, Glob, Bash) NOT yet tested — spec must include parity smoke tests for each tool the persona dispatch path uses before promoting Qwen to /check-eligible status.
+    - **Status:** parked per (c) decision until `dynamic-roster-per-gate` ships. Smoke test confirmed the architecture works and the tool-use floor is high enough for /spec-review remainder slot.
 
 ---
 
