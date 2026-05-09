@@ -1,5 +1,5 @@
 ---
-fit_tags: [docs, marketing, onboarding]
+fit_tags: [docs, ux]
 ---
 
 # Docs Clarity
