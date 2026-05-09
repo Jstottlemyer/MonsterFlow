@@ -5,7 +5,6 @@ created: 2026-05-08
 status: draft
 session_roster: defaults-only (no constitution)
 gate_mode: permissive
-gate_max_recycles: 2
 tags: [data, integration, security]
 parent_spec: dynamic-roster-per-gate
 slice: 1-of-5

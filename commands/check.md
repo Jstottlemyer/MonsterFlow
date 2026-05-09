@@ -83,8 +83,10 @@ fi
 GATE_MODE="${RESOLVE_OUT%%:*}"
 GATE_MODE_SOURCE="${RESOLVE_OUT#*:}"
 
-# Resolve and clamp gate_max_recycles (frontmatter integer, clamped to 1..5).
-# Helper writes a sentinel + one-time stderr warning if a clamp fired.
+# Resolve gate_max_recycles. As of 2026-05-09 the value is hardcoded to 3
+# (matches build_max_retries + SECURITY_MAX_FIX_ATTEMPTS). The helper still
+# exists for ABI compatibility; emits a deprecation warning if frontmatter
+# pins the field.
 GATE_MAX_RECYCLES=$(gate_max_recycles_clamp "$SPEC_PATH")
 
 export GATE_MODE GATE_MODE_SOURCE GATE_MAX_RECYCLES
@@ -93,7 +95,7 @@ export GATE_MODE GATE_MODE_SOURCE GATE_MAX_RECYCLES
 **Banner sentinels** (per `commands/_gate-mode.md` Section 5):
 - Per-user verbose default-flip banner: `~/.claude/.gate-mode-default-flip-warned-v0.9.0` (fires once per machine on first absent-frontmatter run since v0.9.0).
 - Per-spec one-liner: `docs/specs/<feature>/.gate-mode-warned` (fires after the per-user banner has fired, on absent frontmatter).
-- Recycles-clamped sentinel: `docs/specs/<feature>/.recycles-clamped` (managed by `gate_max_recycles_clamp`).
+- Recycles-deprecated sentinel: `docs/specs/<feature>/.recycles-deprecated` (managed by `gate_max_recycles_clamp`; fires once per spec when the deprecated frontmatter field is detected).
 
 **`--force-permissive` audit**: when `$GATE_MODE_SOURCE == "cli-force"`, append a JSONL row to `<SPEC_DIR>/.force-permissive-log` via `force_permissive_audit "$SPEC_DIR" "$ITERATION" "check" "$REASON"` (helper handles JSON-escaping the reason via python3). The 4-line stderr warning is already emitted by `gate_mode_resolve`. The audit log is **not gitignored** — preserving the trail is the whole point.
 
@@ -248,13 +250,12 @@ After Synthesis writes the verdict but BEFORE Phase 3 returns to the user, evalu
 **On fire** — print the canonical 3-line "next steps" block to stderr (verbatim from `commands/_gate-mode.md` Section 6.6 — substitute `<gate>` with `check`, `<N>` with `$GATE_MAX_RECYCLES`, `<K>` with the remaining-blocker count, and emit one finding line per remaining blocker between the header and the blank line):
 
 ```
-[gate] Re-cycle cap reached (gate_max_recycles=<N>). <K> architectural finding(s) remain:
+[gate] Re-cycle cap reached (cap=3, hardcoded). <K> architectural finding(s) remain:
 [gate]   <ck-id>: <persona> — <title>
 [gate]
 [gate] Next steps (pick one):
 [gate]   1. Address inline:    edit spec.md, re-run /check
-[gate]   2. Bump the cap:      gate_max_recycles: <N+1> in spec.md frontmatter, re-run
-[gate]   3. Force-permissive:  /check <feature> --force-permissive="<reason>" (audited)
+[gate]   2. Force-permissive:  /check <feature> --force-permissive="<reason>" (audited)
 [gate]
 [gate] Recommended: option 1 — architectural findings rarely improve on iteration.
 ```

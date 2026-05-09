@@ -5,7 +5,6 @@ created: 2026-05-06
 status: draft
 session_roster: defaults-only (no constitution)
 gate_mode: permissive
-gate_max_recycles: 2
 tags: [pipeline, integration, scalability, data]
 ---
 

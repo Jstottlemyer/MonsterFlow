@@ -57,57 +57,42 @@ mk_spec_no_frontmatter() {
 }
 
 # ---------------------------------------------------------------------------
-# Test 1: gate_max_recycles_clamp returns 3 for value=3, no warning, no sentinel
+# Test 1: gate_max_recycles_clamp HARDCODED returns 3 (DEPRECATED 2026-05-09 —
+# frontmatter value ignored; was clamp range [1,5] with default 2)
 # ---------------------------------------------------------------------------
-case_ "gate_max_recycles_clamp value in range"
+case_ "gate_max_recycles_clamp absent field -> hardcoded 3, no warning, no sentinel"
 SPEC1_DIR="$TMPROOT/t1"
 SPEC1="$SPEC1_DIR/spec.md"
-mk_spec "$SPEC1" "permissive" "3"
+mk_spec "$SPEC1" "permissive" ""
 
 OUT=$(gate_max_recycles_clamp "$SPEC1" 2>"$TMPROOT/t1.err")
 ERR=$(cat "$TMPROOT/t1.err")
-if [ "$OUT" = "3" ]; then ok "value 3 returned"; else fail "value 3 returned" "got '$OUT'"; fi
-if [ -z "$ERR" ];   then ok "no warning emitted";   else fail "no warning emitted" "stderr='$ERR'"; fi
-if [ ! -f "$SPEC1_DIR/.recycles-clamped" ]; then ok "no sentinel created"; else fail "no sentinel created" "sentinel exists"; fi
+if [ "$OUT" = "3" ]; then ok "hardcoded 3 returned"; else fail "hardcoded 3 returned" "got '$OUT'"; fi
+if [ -z "$ERR" ];   then ok "no warning when field absent"; else fail "no warning when field absent" "stderr='$ERR'"; fi
+if [ ! -f "$SPEC1_DIR/.recycles-deprecated" ]; then ok "no deprecation sentinel"; else fail "no deprecation sentinel" "sentinel exists"; fi
 
 # ---------------------------------------------------------------------------
-# Test 2: clamp value=10 -> returns 5 + warning, then sentinel suppresses
+# Test 2: deprecated frontmatter value -> still returns 3 + emits one-time warning
 # ---------------------------------------------------------------------------
-case_ "gate_max_recycles_clamp value above max -> clamp to 5; sentinel suppresses second warning"
+case_ "gate_max_recycles_clamp deprecated frontmatter value -> 3 + deprecation warning + sentinel suppresses"
 SPEC2_DIR="$TMPROOT/t2"
 SPEC2="$SPEC2_DIR/spec.md"
 mk_spec "$SPEC2" "permissive" "10"
 
 OUT=$(gate_max_recycles_clamp "$SPEC2" 2>"$TMPROOT/t2.err1")
 ERR=$(cat "$TMPROOT/t2.err1")
-if [ "$OUT" = "5" ]; then ok "clamped to 5"; else fail "clamped to 5" "got '$OUT'"; fi
+if [ "$OUT" = "3" ]; then ok "deprecated value still returns 3"; else fail "deprecated value still returns 3" "got '$OUT'"; fi
 case "$ERR" in
-  *WARNING*clamped*) ok "warning emitted on first call" ;;
-  *) fail "warning emitted on first call" "stderr='$ERR'" ;;
+  *DEPRECATED*) ok "deprecation warning emitted on first call" ;;
+  *) fail "deprecation warning emitted on first call" "stderr='$ERR'" ;;
 esac
-if [ -f "$SPEC2_DIR/.recycles-clamped" ]; then ok "sentinel created"; else fail "sentinel created" "no sentinel"; fi
+if [ -f "$SPEC2_DIR/.recycles-deprecated" ]; then ok "deprecation sentinel created"; else fail "deprecation sentinel created" "no sentinel"; fi
 
 # Second call: warning must be silent
 OUT=$(gate_max_recycles_clamp "$SPEC2" 2>"$TMPROOT/t2.err2")
 ERR=$(cat "$TMPROOT/t2.err2")
-if [ "$OUT" = "5" ]; then ok "second call still returns 5"; else fail "second call still returns 5" "got '$OUT'"; fi
+if [ "$OUT" = "3" ]; then ok "second call still returns 3"; else fail "second call still returns 3" "got '$OUT'"; fi
 if [ -z "$ERR" ]; then ok "second call silent"; else fail "second call silent" "stderr='$ERR'"; fi
-
-# Test 2b: clamp below range
-case_ "gate_max_recycles_clamp value below min -> clamp to 1"
-SPEC2B_DIR="$TMPROOT/t2b"
-SPEC2B="$SPEC2B_DIR/spec.md"
-mk_spec "$SPEC2B" "permissive" "0"
-OUT=$(gate_max_recycles_clamp "$SPEC2B" 2>/dev/null)
-if [ "$OUT" = "1" ]; then ok "0 clamped to 1"; else fail "0 clamped to 1" "got '$OUT'"; fi
-
-# Test 2c: missing field defaults to 2
-case_ "gate_max_recycles_clamp absent field -> default 2"
-SPEC2C_DIR="$TMPROOT/t2c"
-SPEC2C="$SPEC2C_DIR/spec.md"
-mk_spec "$SPEC2C" "permissive" ""
-OUT=$(gate_max_recycles_clamp "$SPEC2C" 2>/dev/null)
-if [ "$OUT" = "2" ]; then ok "absent -> 2"; else fail "absent -> 2" "got '$OUT'"; fi
 
 # ---------------------------------------------------------------------------
 # Test 3: is_ci_env truthy values for $CI

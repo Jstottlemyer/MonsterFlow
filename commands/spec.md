@@ -270,7 +270,8 @@ When the gate is met (manual approval or auto-run criteria — see below):
    **Confidence:** [final scores]
    **Session Roster:** [agent list from Phase 0.25, if no constitution. Omit this line if a constitution exists.]
    **gate_mode:** [permissive | strict; default `permissive`. Permissive routes contract / documentation / tests / scope-cuts findings to `followups.jsonl` (warn route); strict halts on any non-architectural / non-security finding (legacy halt-on-anything behavior).]
-   **gate_max_recycles:** [integer; default `2`; clamped to [1, 5]; per-gate, not pipeline-global. After cap, non-blocking findings auto-promote to `followups.jsonl` and `GO_WITH_FIXES` emits.]
+   <!-- gate_max_recycles is DEPRECATED 2026-05-09: pipeline hardcoded to 3 (matches build_max_retries + SECURITY_MAX_FIX_ATTEMPTS). Do not emit this field in new spec frontmatter — runtime ignores it, deprecation warning fires on first gate run. -->
+   **gate_max_recycles:** [DEPRECATED 2026-05-09 — pipeline hardcoded to 3, frontmatter value ignored. Strip from new specs. See `commands/_gate-mode.md`.]
 
    ## Summary
    [2-3 sentence recap]

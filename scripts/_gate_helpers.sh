@@ -97,43 +97,37 @@ is_ci_env() {
 
 # ---------------------------------------------------------------------------
 # gate_max_recycles_clamp <spec.md>
-# stdout: clamped int (1..5). Default 2 if frontmatter absent / non-integer.
-# stderr: warning if a clamp occurred AND the sentinel did not yet exist.
+#
+# Returns the per-gate re-cycle ceiling. As of 2026-05-09 this is HARDCODED to
+# 3 (matching build_max_retries and SECURITY_MAX_FIX_ATTEMPTS — the uniform
+# "3 attempts before halt" pipeline contract).
+#
+# Function name preserved for caller ABI compatibility. Emits a one-time
+# deprecation warning to stderr if the spec still pins gate_max_recycles in
+# frontmatter (silenced via per-spec sentinel). The frontmatter value is
+# IGNORED — author intent is preserved as a comment, but the runtime value
+# is always 3.
+#
+# stdout: 3
+# stderr: deprecation warning iff frontmatter sets the field AND sentinel absent
 # ---------------------------------------------------------------------------
 gate_max_recycles_clamp() {
   _gh_spec="$1"
-  # tilde-expand for any subsequent path operations
   _gh_spec="${_gh_spec/#\~/$HOME}"
   _gh_dir=$(dirname "$_gh_spec")
   _gh_raw=$(_gh_frontmatter_field "$_gh_spec" "gate_max_recycles")
 
-  # Validate integer; default to 2 on absent / malformed
-  case "$_gh_raw" in
-    ''|*[!0-9]*) _gh_n=2 ;;
-    *)           _gh_n="$_gh_raw" ;;
-  esac
-
-  _gh_clamped=0
-  if [ "$_gh_n" -lt 1 ]; then
-    _gh_n=1
-    _gh_clamped=1
-  elif [ "$_gh_n" -gt 5 ]; then
-    _gh_n=5
-    _gh_clamped=1
-  fi
-
-  if [ "$_gh_clamped" -eq 1 ]; then
-    _gh_sentinel="$_gh_dir/.recycles-clamped"
+  if [ -n "$_gh_raw" ]; then
+    _gh_sentinel="$_gh_dir/.recycles-deprecated"
     if [ ! -f "$_gh_sentinel" ]; then
-      printf '[gate] WARNING: gate_max_recycles=%s clamped to %s (allowed range 1..5). Frontmatter unchanged. (silenced after first run)\n' \
-        "$_gh_raw" "$_gh_n" >&2
-      # Best-effort sentinel; any failure is non-fatal (warning was emitted).
+      printf '[gate] DEPRECATED: gate_max_recycles=%s in frontmatter is ignored — pipeline hardcoded to 3 since 2026-05-09. Strip the field from frontmatter to silence this. (silenced after first run)\n' \
+        "$_gh_raw" >&2
       mkdir -p "$_gh_dir" 2>/dev/null || true
       : > "$_gh_sentinel" 2>/dev/null || true
     fi
   fi
 
-  printf '%s\n' "$_gh_n"
+  printf '3\n'
 }
 
 # ---------------------------------------------------------------------------

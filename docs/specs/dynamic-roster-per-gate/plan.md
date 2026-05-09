@@ -4,7 +4,6 @@ stage: plan
 created: 2026-05-06
 revised: 2026-05-06
 gate_mode: permissive
-gate_max_recycles: 2
 ---
 
 # Plan — dynamic-roster-per-gate

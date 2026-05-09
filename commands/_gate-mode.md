@@ -22,13 +22,12 @@ This precedence string is the single source of truth and matches `personas/judge
 
 ## 1. Frontmatter fields read at gate entry
 
-Each spec's `docs/specs/<feature>/spec.md` may declare two YAML frontmatter
-fields that govern gate behavior:
+Each spec's `docs/specs/<feature>/spec.md` may declare ONE YAML frontmatter
+field that governs gate behavior:
 
 | field | type | default | purpose |
 |---|---|---|---|
 | `gate_mode` | `permissive \| strict` | `permissive` | classification routing for this spec |
-| `gate_max_recycles` | integer | `2` | per-gate (NOT pipeline-global) re-cycle ceiling; **clamped to `5`** |
 
 `gate_mode: permissive` (or absent → defaults to permissive at v0.9.0+):
 - Only `architectural`, `security`, and `unclassified` findings halt the gate.
@@ -37,12 +36,13 @@ fields that govern gate behavior:
 `gate_mode: strict`:
 - Any reviewer must-fix → NO_GO (v0.8.x halt-on-anything behavior).
 
-`gate_max_recycles`:
-- Per-gate counter. `/spec-review` recycles, `/plan` recycles, `/check` recycles
-  — each tracks its own count.
-- Clamp: if frontmatter sets `gate_max_recycles > 5`, the gate clamps the active
-  value to `5` AND writes `docs/specs/<feature>/.recycles-clamped` (per-spec,
-  per-session sentinel; see Section 5).
+**`gate_max_recycles`** (DEPRECATED 2026-05-09): the per-gate re-cycle ceiling
+is hardcoded to `3`, matching `build_max_retries` and `SECURITY_MAX_FIX_ATTEMPTS`
+(the uniform "3 attempts before halt" pipeline contract). The
+`gate_max_recycles_clamp` helper still resolves to `3` for caller ABI
+compatibility but ignores any frontmatter value (emits a one-time deprecation
+warning per spec). Strip `gate_max_recycles` from new spec frontmatter — the
+field carries no runtime effect.
 
 ---
 
@@ -137,7 +137,7 @@ suffix, re-firing the banner once.
 |---|---|---|---|
 | `~/.claude/.gate-mode-default-flip-warned-v0.9.0` | per-user, per-version | first gate run with absent frontmatter on this machine since v0.9.0 | verbose ~5-line explanation |
 | `docs/specs/<feature>/.gate-mode-warned` | per-spec, per-session | absent frontmatter, AFTER per-user has fired | one-line nudge |
-| `docs/specs/<feature>/.recycles-clamped` | per-spec, per-session | `gate_max_recycles > 5` triggers clamp | one-line nudge |
+| `docs/specs/<feature>/.recycles-deprecated` | per-spec, per-session | spec frontmatter still pins `gate_max_recycles` (DEPRECATED 2026-05-09; ignored) | one-line nudge |
 | `~/.claude/.gate-permissiveness-migration-shown` | per-user, one-shot | fired once by `install.sh` upgrade path | install-time migration notice |
 
 Per-spec sentinels live inside `docs/specs/<feature>/` so a `git clean -fdx` of
@@ -215,19 +215,18 @@ ERROR: ambiguous flags: --strict and --permissive given together.
 The same ambiguity error applies to `--strict --force-permissive` — the message
 text is the same except substitute `--force-permissive` for `--permissive`.
 
-### 6.6 `cap_reached AND verdict: NO_GO` next-steps (3 lines + recommendation)
+### 6.6 `cap_reached AND verdict: NO_GO` next-steps (2 options + recommendation)
 
-(Per ux Option E.) Emitted when the gate hits `gate_max_recycles` AND still has
+(Per ux Option E.) Emitted when the gate hits the hardcoded cap (3) AND still has
 unresolved blocking findings:
 
 ```
-[gate] Re-cycle cap reached (gate_max_recycles=<N>). <K> architectural finding(s) remain:
+[gate] Re-cycle cap reached (cap=3, hardcoded). <K> architectural finding(s) remain:
 [gate]   <ck-id>: <persona> — <title>
 [gate]
 [gate] Next steps (pick one):
 [gate]   1. Address inline:    edit spec.md, re-run /<gate>
-[gate]   2. Bump the cap:      gate_max_recycles: <N+1> in spec.md frontmatter, re-run
-[gate]   3. Force-permissive:  /<gate> <feature> --force-permissive="<reason>" (audited)
+[gate]   2. Force-permissive:  /<gate> <feature> --force-permissive="<reason>" (audited)
 [gate]
 [gate] Recommended: option 1 — architectural findings rarely improve on iteration.
 ```
@@ -273,7 +272,7 @@ post-mortem readers can reconstruct gate behavior:
 - `mode` — `permissive` or `strict` (the **active** mode)
 - `mode_source` — one of `frontmatter`, `cli`, `cli-force`, `default` (per `schemas/check-verdict.schema.json` v2)
 - `iteration` — 1-indexed counter (sourced from `.iteration-state.json`)
-- `iteration_max` — integer (post-clamp `gate_max_recycles`; clamp range [1, 5])
+- `iteration_max` — integer (hardcoded `3` since 2026-05-09; was clamp range [1, 5])
 - `cap_reached` — boolean (true iff iteration > iteration_max — auto-promotion fired)
 - `class_breakdown` — object with all 7 class keys (architectural / security / contract / documentation / tests / scope-cuts / unclassified) → integer counts
 - `class_inferred_count` — integer (findings coerced to unclassified at Judge step due to missing/invalid class field)

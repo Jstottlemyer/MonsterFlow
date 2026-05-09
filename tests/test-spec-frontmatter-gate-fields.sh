@@ -3,7 +3,8 @@
 # tests/test-spec-frontmatter-gate-fields.sh
 #
 # Validates that commands/spec.md's Phase 3 frontmatter schema includes the
-# new pipeline-gate-permissiveness knobs: gate_mode and gate_max_recycles.
+# pipeline-gate-permissiveness knob `gate_mode` AND that `gate_max_recycles`
+# is documented as DEPRECATED (hardcoded to 3 since 2026-05-09).
 #
 # Bash 3.2 compatible. Pure grep assertions on the file contents.
 ##############################################################################
@@ -52,8 +53,10 @@ echo "  target: $SPEC_CMD"
 # 1. gate_mode field present
 assert_grep "gate_mode" "Phase 3 frontmatter declares gate_mode"
 
-# 2. gate_max_recycles field present
-assert_grep "gate_max_recycles" "Phase 3 frontmatter declares gate_max_recycles"
+# 2. gate_max_recycles documented as DEPRECATED (the field name still appears
+#    so authors searching for it find the deprecation note rather than nothing)
+assert_grep "gate_max_recycles" "gate_max_recycles deprecation note present"
+assert_grep "DEPRECATED" "gate_max_recycles flagged as DEPRECATED"
 
 # 3. References commands/_gate-mode.md (CLI flag truth table)
 assert_grep "commands/_gate-mode.md" "Phase 3 references commands/_gate-mode.md"
@@ -62,8 +65,8 @@ assert_grep "commands/_gate-mode.md" "Phase 3 references commands/_gate-mode.md"
 assert_grep "permissive" "gate_mode enum value 'permissive' documented"
 assert_grep "strict" "gate_mode enum value 'strict' documented"
 
-# 5. Clamp range for gate_max_recycles — accept [1, 5] or 1-5
-assert_grep_ext "\[1, 5\]|1-5" "gate_max_recycles clamp range [1, 5] or 1-5 documented"
+# 5. Hardcoded value 3 documented
+assert_grep "hardcoded to 3" "gate_max_recycles hardcoded value 3 documented"
 
 echo ""
 echo "  passed: $PASS"

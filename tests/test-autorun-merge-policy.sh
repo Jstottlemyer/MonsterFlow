@@ -622,7 +622,15 @@ echo ""
 echo "=== Wave-3 fixtures: docs surface + version stamps ==="
 
 VERSION_VAL="$(tr -d '[:space:]' < "$ENGINE_DIR/VERSION")"
-assert_eq "VERSION bumped to 0.11.0" "0.11.0" "$VERSION_VAL"
+# Assert VERSION is at-or-above 0.11.0 (the merge-policy ship version). Patch
+# bumps move VERSION forward; the 0.11.x series is what this test validates.
+case "$VERSION_VAL" in
+  0.11.*|0.12.*|0.1[3-9].*|0.[2-9][0-9]*.*|[1-9].*)
+    echo "  ok — VERSION at-or-above 0.11.0 ($VERSION_VAL)" ;;
+  *)
+    echo "  FAIL — VERSION at-or-above 0.11.0 (got $VERSION_VAL)"
+    FAIL=$((FAIL+1)) ;;
+esac
 
 CHANGELOG="$ENGINE_DIR/CHANGELOG.md"
 assert_contains "CHANGELOG: ## [0.11.0] entry exists" "## [0.11.0]" "$(cat "$CHANGELOG")"

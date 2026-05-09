@@ -60,8 +60,8 @@ assert_grep \
   "docs/specs/<feature>/.gate-mode-warned" \
   "$REF_FILE"
 assert_grep \
-  "sentinel: per-spec recycles-clamped" \
-  "docs/specs/<feature>/.recycles-clamped" \
+  "sentinel: per-spec recycles-deprecated" \
+  "docs/specs/<feature>/.recycles-deprecated" \
   "$REF_FILE"
 assert_grep \
   "sentinel: per-user migration shown" \
