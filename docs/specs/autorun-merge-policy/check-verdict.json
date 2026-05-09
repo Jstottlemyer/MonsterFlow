@@ -1,0 +1,34 @@
+{
+  "schema_version": 2,
+  "prompt_version": "check-verdict@2.0",
+  "verdict": "GO_WITH_FIXES",
+  "blocking_findings": [
+    {"persona": "sequencing", "finding_id": "ck-6f3e2d1c0a", "summary": "Wave 3 W3.1-W3.5 parallel agents all edit scripts/autorun/run.sh — file-level race; sequence or single-owner."},
+    {"persona": "sequencing", "finding_id": "ck-8a7b6c5d4e", "summary": "W3.4 calls is_clean_for_merge with 3 args; W3.4b wires 4th later — predicate evaluates wrong in gap. Reorder or merge."},
+    {"persona": "sequencing", "finding_id": "ck-3c2b1a0f9e", "summary": "W3.4b baseline-capture site unowned; must be captured at run start (W3.1) or R1 guard is defeated."},
+    {"persona": "completeness", "finding_id": "ck-a3f1d29b4c", "summary": "AC#13 ↔ D6 contradiction: AC says drift detector never halts; D6 halts on privilege elevation. Reconcile."},
+    {"persona": "completeness", "finding_id": "ck-7e2b8f9d05", "summary": "Banner stream contradiction: D10 says stderr [-t 2], R7 says stdout [-t 1]. Pick stdout, strike D10 line."},
+    {"persona": "risk", "finding_id": "ck-4f5e6d7c8b", "summary": "followups_added counter must be slug-scoped (grep slug filter), not wc -l; pin path, diff method, missing-file behavior."},
+    {"persona": "risk", "finding_id": "ck-b2a1c9d8e7", "summary": "Partial order pr/clean/validated undefined — D6 asymmetric halt non-deterministic. Pin pr ≡ validated_today < clean."},
+    {"persona": "testability", "finding_id": "ck-5e4d3c2b1a", "summary": "Two-event audit lacks join key — promote ts_run_start or run_id to required on both events; fixture pairing two same-slug runs."},
+    {"persona": "testability", "finding_id": "ck-0f9e8d7c6b", "summary": "pr_create_failed fixture trio lacks classification contract — collapse to one or add details.pr_create_stderr_class enum."},
+    {"persona": "completeness", "finding_id": "ck-1c4a5e6b7f", "summary": "AC-R2 (split start/end events) has no crash-between fixture — split-event value unverified."},
+    {"persona": "completeness", "finding_id": "ck-9d8c2b3a1e", "summary": "AC#3 constitution-only precedence layer has no fixture in W2.8 — add it or amend AC."},
+    {"persona": "testability", "finding_id": "ck-2b3c4d5e6f", "summary": "is_clean_for_merge truth table missing — 4 axes / 24 cells; named-AC fixtures don't cover combinatorics. Add truth-table fixture."}
+  ],
+  "security_findings": [
+    {"persona": "security-architect", "finding_id": "ck-fa1b2c3d4e", "summary": "SA-1: Codex-absent treated as CODEX_HIGH_COUNT==0 vacuously passes clean-policy auto-merge — bypass of entire reviewer axis on Codex outage. Add CODEX_RAN guard.", "tag": "sev:security"},
+    {"persona": "security-architect", "finding_id": "ck-c5b6a7980d", "summary": "SA-2: MERGE_POLICY_DISPATCH_OVERRIDE unguarded — stale env var in CI/dev shell silently redirects dispatch while audit row says auto_merged. Gate on MONSTERFLOW_TEST_MODE=1.", "tag": "sev:security"},
+    {"persona": "security-architect", "finding_id": "ck-d4e5f6a7b8", "summary": "SA-3: PR body embeds reviewer-summary content (attacker-influenceable) — downstream LLM consumers prompt-injectable via embedded check-verdict fence. Wrap in 4-backtick fences, NFKC-normalize, hard-fail on check-verdict substring.", "tag": "sev:security"}
+  ],
+  "generated_at": "2026-05-08T00:00:00Z",
+  "iteration": 1,
+  "iteration_max": 2,
+  "mode": "permissive",
+  "mode_source": "default",
+  "class_breakdown": {"architectural": 1, "security": 3, "contract": 8, "documentation": 0, "tests": 3, "scope-cuts": 0, "unclassified": 0},
+  "class_inferred_count": 0,
+  "followups_file": null,
+  "cap_reached": false,
+  "stage": "check"
+}

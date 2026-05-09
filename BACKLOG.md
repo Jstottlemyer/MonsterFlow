@@ -8,6 +8,21 @@ Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready
 
 ---
 
+## Pipeline knob harmonization (from 2026-05-09 cleanup pass)
+
+- **`pipeline-gate-max-recycles-harmonize-default-3` (NEW spec candidate, S)** — bump `gate_max_recycles` default from `2` to `3` to match the rest of the pipeline's "3 attempts before halt" pattern. Today three counters disagree:
+  - `build_max_retries: 3` (autorun config — build-wave retries)
+  - `SECURITY_MAX_FIX_ATTEMPTS: 3` (per `pipeline-security-n-attempts` shipped inline)
+  - `gate_max_recycles: 2` (per `pipeline-gate-permissiveness` v0.9.0)
+  - **Why:** spec authors writing new specs see `gate_max_recycles: 2` and don't realize the rest of the system uses 3. Footgun for /check-NO_GO refinement loops where 1 cycle of refinement isn't always enough (see runtime-validation-gate Revision 2 — needed 1 cycle and only had 2 budget total).
+  - **Scope:** edit `commands/_gate-mode.md` `gate_max_recycles_clamp` default; update `_gate_helpers.sh`'s default; update all spec frontmatter that explicitly sets `gate_max_recycles: 2` to either remove the line (inherit new default) OR explicitly pin to 2 if author intended that.
+  - **Out of scope:** changing `build_max_retries` or `SECURITY_MAX_FIX_ATTEMPTS` (already 3); adding a new pipeline-global default knob (per-spec override stays).
+  - **Sequencing:** unblocked. Cheap. Could ship in same PR as a small documentation pass on the "3-attempt pattern" as a uniform pipeline contract.
+  - **Size:** S (~30-50 LoC + grep-test in `tests/run-tests.sh` asserting all references show 3 not 2; ~5 spec frontmatter touch-ups).
+  - **Codex review optional** — small surface; standard /check sufficient.
+
+---
+
 ## Cross-model adversarial review (from 2026-05-08 docs-rewrite session)
 
 - **`openrouter-qwen-roster-integration` via claude-code-router (NEW spec candidate, 2026-05-08; integration architecture confirmed)** — wire Qwen 3.6 27B (`qwen/qwen3.6-27b` on OpenRouter — 262K context / 80K output, $0.32/$3.20 per M tokens, Apache 2.0, agentic-coding marketed) into MonsterFlow's persona dispatch as the "remainder slot" model in the per-axis tier-mix rule (≥1 Opus + ≥1 Sonnet + 50/50 remainder, per `dynamic-roster-per-gate`).

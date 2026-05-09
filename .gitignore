@@ -59,3 +59,12 @@ docs/specs/*/check/selection.json
 # autorun runtime queue artifacts (regenerated each run)
 queue/index.md
 queue/run-summary.md
+
+# Autorun runtime state (per-slug counters + audit logs); not durable docs
+docs/specs/*/.security-attempts
+docs/specs/*/.security-attempts.log
+docs/specs/*/.verdict-attempts
+docs/specs/*/.verdict-attempts.log
+docs/specs/*/.gate-mode-warned
+docs/specs/*/.persona-metrics-warned
+docs/specs/*/.force-permissive-log
