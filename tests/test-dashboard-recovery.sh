@@ -91,7 +91,11 @@ printf 'window.__PERSONA_INSIGHTS = "SENTINEL";\n' > "$IBUNDLE"
 STDERR_LOG=$(mktemp)
 trap 'restore_artifacts; rm -rf "$SANDBOX" "$STDERR_LOG"' EXIT
 
+# MF-3: corruption regen now requires explicit --accept-salt-reset (was a
+# silent default that quietly nuked rankings). This test specifically
+# exercises the recovery path, so it opts in.
 XDG_CONFIG_HOME="$SANDBOX" python3 "$SCRIPT" --dry-run --best-effort \
+  --accept-salt-reset \
   > /dev/null 2> "$STDERR_LOG" || true
 
 # 1. Salt was regenerated to exactly 32 bytes.

@@ -160,7 +160,8 @@ spec = importlib.util.spec_from_file_location(
 )
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
-salt = m.get_or_create_salt()
+# MF-3 — destructive regen requires explicit consent in the corruption test.
+salt = m.get_or_create_salt(accept_salt_reset=True)
 assert len(salt) == 32, "salt length wrong: {}".format(len(salt))
 PY
   )"
@@ -246,6 +247,54 @@ os.chmod(p, 0o644)
 PROJ_C3="$TMP_ROOT/proj-c3"
 mkdir -p "$PROJ_C3/dashboard/data"
 regen_check "$XDG_C3" "$PROJ_C3/dashboard/data/persona-rankings.jsonl" "world-readable"
+
+# --------------------------------------------------------------------------
+# 5. MF-3 — destructive regen REFUSES without --accept-salt-reset.
+# Set up a corrupt salt; call get_or_create_salt() (no flag); expect
+# SystemExit(2) and rankings file UNTOUCHED.
+# --------------------------------------------------------------------------
+XDG_MF3="$TMP_ROOT/xdg-mf3"
+mkdir -p "$XDG_MF3/monsterflow"
+: > "$XDG_MF3/monsterflow/finding-id-salt"   # zero-byte (corrupt)
+chmod 600 "$XDG_MF3/monsterflow/finding-id-salt"
+PROJ_MF3="$TMP_ROOT/proj-mf3"
+mkdir -p "$PROJ_MF3/dashboard/data"
+RANKINGS_MF3="$PROJ_MF3/dashboard/data/persona-rankings.jsonl"
+printf 'must-not-clear\n' > "$RANKINGS_MF3"
+
+set +e
+MF3_OUT="$(
+  XDG_CONFIG_HOME="$XDG_MF3" python3 - <<PY 2>&1
+import os
+os.chdir("$PROJ_MF3")
+import sys
+sys.path.insert(0, "$REPO_ROOT/scripts")
+import importlib.util
+spec = importlib.util.spec_from_file_location(
+    "cpv", "$REPO_ROOT/scripts/compute-persona-value.py"
+)
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+try:
+    m.get_or_create_salt()  # no --accept-salt-reset → expect SystemExit(2)
+    print("UNEXPECTED_RETURN")
+except SystemExit as e:
+    print("EXIT:{}".format(e.code))
+PY
+)"
+MF3_RC=$?
+set -e
+
+if printf '%s\n' "$MF3_OUT" | grep -qE '^EXIT:2$'; then
+  note_pass "MF-3 refuses destructive regen without --accept-salt-reset (SystemExit 2)"
+else
+  note_fail "MF-3 did NOT refuse — output: $MF3_OUT (rc=$MF3_RC)"
+fi
+if [ -s "$RANKINGS_MF3" ]; then
+  note_pass "MF-3 left persona-rankings.jsonl untouched on refusal"
+else
+  note_fail "MF-3 cleared rankings file even though regen was refused"
+fi
 
 echo ""
 echo "test-finding-id-salt: $PASS passed, $FAIL failed"

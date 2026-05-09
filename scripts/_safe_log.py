@@ -34,6 +34,9 @@ SAFE_EVENTS = frozenset({
     "non_interactive_scan_refused",
     "confirmed_scan_root",
     "subagent_mismatch_best_effort",
+    "config_perms_tightened",
+    "attribution_match_rate_best_effort",
+    "tmux_pipe_pane_refused",
 })
 
 # Compiled value patterns. Order matters only for clarity; any-match wins.

@@ -181,11 +181,26 @@ def _read_config_projects():
 
     One absolute path per line; `#` comments and blank lines ignored.
     Missing-path entries are logged via safe_log and skipped.
+
+    SEC-3 — re-chmod the file to 0o600 if found with looser perms (e.g.
+    user accidentally `chmod 644` it). The config can list private
+    project paths; world-readable parity with finding-id-salt and
+    scan-roots.confirmed.
     """
     cfg = _projects_config_path()
     out = []
     if cfg is None or not cfg.exists():
         return out
+    try:
+        st = os.stat(cfg)
+        if (st.st_mode & 0o777) != 0o600:
+            try:
+                os.chmod(str(cfg), 0o600)
+                safe_log("config_perms_tightened", reason_code=11)
+            except OSError:
+                pass
+    except OSError:
+        pass
     try:
         text = cfg.read_text(encoding="utf-8")
     except OSError:
@@ -206,11 +221,25 @@ def _read_config_projects():
 def _read_confirmed_scan_roots():
     """Return the set of `<dir>` strings (resolved) the adopter has
     pre-confirmed via either an interactive y/N prompt or
-    --confirm-scan-roots."""
+    --confirm-scan-roots.
+
+    SEC-3 — re-chmod the file to 0o600 if found with looser perms
+    (parity with finding-id-salt and the projects config).
+    """
     p = _scan_roots_confirmed_path()
     out = set()
     if p is None or not p.exists():
         return out
+    try:
+        st = os.stat(p)
+        if (st.st_mode & 0o777) != 0o600:
+            try:
+                os.chmod(str(p), 0o600)
+                safe_log("config_perms_tightened", reason_code=12)
+            except OSError:
+                pass
+    except OSError:
+        pass
     try:
         text = p.read_text(encoding="utf-8")
     except OSError:
@@ -425,8 +454,9 @@ _GATE_PREFIX = {"spec-review": "sr", "plan": "pl", "check": "ck"}
 # Task 1.6 — Salt management (M7)
 # --------------------------------------------------------------------------
 
-def get_or_create_salt() -> bytes:
-    """M7 — validate-on-read 32-byte salt with regenerate-on-failure.
+def get_or_create_salt(accept_salt_reset: bool = False) -> bytes:
+    """M7 + MF-3 — validate-on-read 32-byte salt with destructive-regen
+    gated behind an explicit opt-in flag.
 
     Read path validates:
       - file exists
@@ -434,10 +464,17 @@ def get_or_create_salt() -> bytes:
       - not all-zero
       - chmod 0o600 (mode bits == 600)
 
-    On any failure (or missing): generate fresh 32 bytes via os.urandom(),
-    write atomically with O_CREAT|O_EXCL|O_WRONLY (race-safe), chmod 0o600,
-    and CLEAR dashboard/data/persona-rankings.jsonl (drill-down continuity
-    reset is the only honest behavior — old salted IDs no longer link).
+    First-run path (file missing) generates fresh salt automatically — no
+    flag required, nothing to preserve.
+
+    Corruption path (file exists but fails validation) requires
+    `accept_salt_reset=True` (CLI: --accept-salt-reset). Without the flag we
+    refuse and exit non-zero with a stderr explanation; with the flag we
+    regenerate atomically and CLEAR dashboard/data/persona-rankings.jsonl
+    + persona-rankings-bundle.js + persona-insights-bundle.js (drill-down
+    continuity reset is the only honest behavior — old salted IDs no longer
+    link). MF-3 closes the silent-data-loss default the /check verdict
+    flagged as a blocker.
 
     Returns the 32-byte salt.
     """
@@ -451,26 +488,43 @@ def get_or_create_salt() -> bytes:
     target.parent.mkdir(parents=True, exist_ok=True)
 
     needs_regen = False
+    is_corruption = False  # MF-3: distinguish first-run vs destructive regen
     if target.exists():
         try:
             st = os.stat(target)
             if st.st_size != 32 or (st.st_mode & 0o777) != 0o600:
                 needs_regen = True
+                is_corruption = True
             else:
                 with open(target, "rb") as fh:
                     data = fh.read()
                 if len(data) != 32 or data == b"\x00" * 32:
                     needs_regen = True
+                    is_corruption = True
                 else:
                     return data
         except OSError:
             needs_regen = True
+            is_corruption = True
     else:
         needs_regen = True
+        # is_corruption stays False — first-run, no rankings to lose.
 
     if not needs_regen:
         # Defensive: shouldn't reach here.
         return os.urandom(32)
+
+    # MF-3 — destructive regen requires explicit opt-in.
+    if is_corruption and not accept_salt_reset:
+        sys.stderr.write(
+            "[persona-value] finding-id-salt at {p} failed validation "
+            "(size != 32 / perms != 0o600 / all-zero / unreadable). "
+            "Regenerating would clear dashboard/data/persona-rankings.jsonl "
+            "and break drill-down continuity. Refusing to regenerate "
+            "without explicit consent. Re-run with --accept-salt-reset to "
+            "proceed.\n".format(p=target)
+        )
+        raise SystemExit(2)
 
     # Regenerate.
     new_salt = os.urandom(32)
@@ -684,11 +738,17 @@ def cost_walk(
                 inp = block.get("input") or {}
                 prompt = inp.get("prompt") or ""
                 persona, gate = _maybe_extract_persona_gate(prompt)
+                # MF-2: track whether the prompt mentions personas/ at all so
+                # a16_attribution_match_rate can split (a) description-invoked
+                # subagents (no personas/, expected unknown) from (b) regex
+                # drift (personas/ present but no extraction).
+                prompt_has_personas = "personas/" in prompt
                 agent_dispatches[tool_use_id] = {
                     "persona": persona or "<unknown>",
                     "gate": gate or "<unknown>",
                     "agentId": None,
                     "tokens": 0,
+                    "prompt_has_personas": prompt_has_personas,
                 }
 
         if not agent_dispatches:
@@ -733,10 +793,9 @@ def cost_walk(
                         pass
 
         for tu_id, d in agent_dispatches.items():
-            # Keep dispatch even if agentId/tokens missing (cost_only-able);
-            # gate "<unknown>" rows are dropped at aggregation time.
-            if d["gate"] == "<unknown>":
-                continue
+            # MF-2: keep dispatches with `gate == "<unknown>"` so a16 can
+            # compute the attribution match-rate. aggregate_rankings drops
+            # them downstream. Comment-vs-code mismatch in v0.6.0 fixed.
             out.append({
                 "parent_session_uuid": parent_uuid,
                 "parent_proj_dir": parent_proj,
@@ -744,9 +803,63 @@ def cost_walk(
                 "persona": d["persona"],
                 "gate": d["gate"],
                 "tokens": d["tokens"],
+                "prompt_has_personas": d.get(
+                    "prompt_has_personas", False
+                ),
             })
 
     return out
+
+
+# --------------------------------------------------------------------------
+# Task 1.4b — A1.6 attribution match-rate threshold (MF-2)
+# --------------------------------------------------------------------------
+
+def a16_attribution_match_rate(
+    cost_dispatches: list[dict],
+    threshold: float = 0.95,
+    best_effort: bool = False,
+) -> float:
+    """MF-2 — quantified persona-regex match-rate AC.
+
+    Denominator: dispatches whose parent prompt contained `personas/`.
+    Numerator: those that resolved to a non-`<unknown>` (persona, gate).
+    Description-invoked subagents (e.g. persona-metrics-validator) whose
+    prompts never mention `personas/` are excluded from the denominator —
+    expected misses, not regex drift.
+
+    Returns the computed match rate (0.0 - 1.0).
+    Below threshold: exit non-zero unless `best_effort=True`.
+    """
+    candidate = 0
+    matched = 0
+    for d in cost_dispatches:
+        if not d.get("prompt_has_personas"):
+            continue
+        candidate += 1
+        if d.get("persona") and d["persona"] != "<unknown>":
+            matched += 1
+    if candidate == 0:
+        return 1.0  # vacuously true — no candidate dispatches yet
+    rate = matched / candidate
+    if rate < threshold:
+        if best_effort:
+            safe_log(
+                "attribution_match_rate_best_effort",
+                rate_basis_points=int(rate * 10000),
+            )
+            return rate
+        sys.stderr.write(
+            "[persona-value] A1.6 attribution match rate {:.3f} below "
+            "threshold {:.3f} ({}/{} dispatches with personas/ in prompt "
+            "resolved to a (persona, gate)). Re-run with --best-effort "
+            "to downgrade to a warning, or fix the persona-prompt regex "
+            "/ CC subagent format drift.\n".format(
+                rate, threshold, matched, candidate
+            )
+        )
+        raise SystemExit(1)
+    return rate
 
 
 # --------------------------------------------------------------------------
@@ -1526,6 +1639,17 @@ def _build_parser():
             "gate) to stderr. Stage 1B+ implementation."
         ),
     )
+    p.add_argument(
+        "--accept-salt-reset",
+        action="store_true",
+        help=(
+            "Opt-in: when the finding-id-salt fails validation "
+            "(corruption, perm change, truncation), regenerate it and "
+            "clear dashboard/data/persona-rankings.jsonl. Without this "
+            "flag the script refuses to destroy drill-down history. "
+            "MF-3 from /check verdict."
+        ),
+    )
     return p
 
 
@@ -1556,9 +1680,20 @@ def main(argv=None):
             scan_roots.append(v)
 
     # Tier 3 confirmation flow: interactive vs non-interactive.
+    # SEC-2 — tmux pipe-pane defeats the Δ4 paths-only-in-prompt contract.
+    # Detect via TMUX_PANE / TMUX env vars combined with a session log
+    # likely to be capturing this pane. Conservative: if TMUX is set AND
+    # stdout/stderr is not a terminal, treat as captured and refuse the
+    # path-bearing interactive prompt path.
     confirmed = _read_confirmed_scan_roots()
     is_tty = sys.stdin.isatty() if hasattr(sys.stdin, "isatty") else False
+    in_tmux_pipe = bool(os.environ.get("TMUX")) and not (
+        sys.stderr.isatty() if hasattr(sys.stderr, "isatty") else False
+    )
     unconfirmed = [r for r in scan_roots if str(r) not in confirmed]
+    if unconfirmed and in_tmux_pipe:
+        safe_log("tmux_pipe_pane_refused", count=len(unconfirmed))
+        is_tty = False  # force the non-interactive branch below
     if unconfirmed and not is_tty:
         # Non-tty: emit the self-diagnostic and treat all unconfirmed as
         # refused inside discover_projects().
@@ -1611,10 +1746,15 @@ def main(argv=None):
     # A1.5 cross-check (forcing function for spike Q1).
     a15_crosscheck(cost_dispatches, best_effort=args.best_effort)
 
+    # A1.6 (MF-2) — persona-regex match-rate threshold.
+    a16_attribution_match_rate(
+        cost_dispatches, threshold=0.95, best_effort=args.best_effort
+    )
+
     # Salt — required even on dry-run so any regen-induced reset happens
     # deterministically (otherwise a dry-run could mask a salt-corruption
-    # signal).
-    salt = get_or_create_salt()
+    # signal). MF-3: destructive regen gated on --accept-salt-reset.
+    salt = get_or_create_salt(accept_salt_reset=args.accept_salt_reset)
 
     rows = aggregate_rankings(value_records, cost_dispatches, salt)
 

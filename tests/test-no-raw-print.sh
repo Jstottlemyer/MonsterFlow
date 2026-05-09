@@ -70,6 +70,15 @@ GRANDFATHERED_KEYWORDS = (
     "unconfirmed scan-root(s) provided",
     "A1.5 cross-check failed",
     "cannot resolve XDG_CONFIG_HOME or $HOME",
+    # MF-3 (--accept-salt-reset) refusal: explanatory diagnostic on the
+    # destructive-regen path. User-actionable error message; falls under
+    # the same "operator-facing diagnostic, not data leakage" exemption
+    # as the other grandfathered sites.
+    "finding-id-salt at",
+    # MF-2 (A1.6) match-rate threshold: explanatory diagnostic when the
+    # persona-attribution regex misses too often (CC subagent format
+    # drift). Counts only — no paths or finding contents.
+    "A1.6 attribution match rate",
 )
 
 src_lines = src.splitlines()
