@@ -93,7 +93,17 @@
     "codex_high_count": {
       "type": "integer",
       "minimum": 0,
-      "description": "Count of HIGH-severity findings emitted by codex-adversary. Auto-merge gate trips when > 0 (alongside RUN_DEGRADED gate)."
+      "description": "Count of HIGH-severity findings emitted by codex-adversary (axis-agnostic total). As of 2026-05-09, the auto-merge gate uses codex_high_blocking (NOT this total) — see post-PR per-axis warn-route."
+    },
+    "codex_high_blocking": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Subset of codex_high_count that BLOCKS merge — architectural | security | unclassified Highs. Computed as TOTAL - WARN. Auto-merge gate trips when > 0 (alongside RUN_DEGRADED gate)."
+    },
+    "codex_high_warn": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Subset of codex_high_count that does NOT block merge — contract | tests | documentation | scope-cuts Highs. Logged to followups.jsonl and surfaced in PR body but not gate-blocking."
     }
   },
   "additionalProperties": false,
