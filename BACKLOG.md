@@ -10,17 +10,30 @@ Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready
 
 ## Cross-model adversarial review (from 2026-05-08 docs-rewrite session)
 
-- **`openrouter-qwen-roster-integration` (NEW spec candidate, 2026-05-08; user has SDK found)** — wire OpenRouter (Qwen 27B and other Qwen models on OpenRouter's catalog) into autorun's adversarial-review path alongside the existing Codex integration. Mirrors Codex plumbing (`scripts/_codex_probe.sh` → `scripts/_openrouter_probe.sh`); silent-skip if `~/.claude/Openrouter.apikey` missing or empty. New persona at `personas/review/openrouter-adversary.md`. OpenRouter exposes an OpenAI-compatible API; SDK route preferred over raw curl (per user note).
-  - **Constraint: must not increase agent max count** — Codex is additive today. Three policy options carved at /spec time:
-    - (a) Replace Codex when both keys present (rotate or prefer cheaper)
-    - (b) Aggregate-as-one-slot — both run, Judge clusters their findings into one "external adversarial" position. **Lean: (b)** because cross-model perspective is conceptually one concern, not N.
-    - (c) Configurable: `external_adversary: codex | qwen | both | none` constitution knob.
-  - **Confirmation needed at /spec time:** the exact OpenRouter model ID for "Qwen 3.6 27B" — this combo doesn't appear in OpenRouter's current public catalog; need user to confirm the slug they intended (likely `qwen/qwen-2.5-72b-instruct`, `qwen/qwen3-6b-instruct`, or a model recently added to OpenRouter not yet documented).
-  - **Wiring surfaces:** `scripts/autorun/spec-review.sh` + `check.sh` (currently dispatch Codex via `_codex_probe.sh`); `findings.schema.json` (allow `openrouter-adversary` as persona name); Judge synthesis (cluster external-adversary findings). `/plan` and `/build` extension paths covered by separate `pipeline-codex-coverage-extension` spec already in backlog.
-  - **Out of scope for v1:** extending to /plan and /build (covered separately); MCP server wrapper (heavier path, not preferred); per-finding cost attribution (covered by `holistic-token-cost-instrumentation`).
-  - **Sequencing:** unblocked. Independent of autorun-merge-policy and autorun-runtime-validation-gate. Could ship before, alongside, or after.
-  - **Size:** S-M (mostly plumbing; ~150-300 LoC + 5-6 test fixtures + persona authoring).
-  - **Codex review optional** — extends an existing pattern; standard /check sufficient.
+- **`openrouter-qwen-roster-integration` via claude-code-router (NEW spec candidate, 2026-05-08; integration architecture confirmed)** — wire Qwen 3.6 27B (`qwen/qwen3.6-27b` on OpenRouter — 262K context / 80K output, $0.32/$3.20 per M tokens, Apache 2.0, agentic-coding marketed) into MonsterFlow's persona dispatch as the "remainder slot" model in the per-axis tier-mix rule (≥1 Opus + ≥1 Sonnet + 50/50 remainder, per `dynamic-roster-per-gate`).
+  - **Integration path: claude-code-router (CCR), not adversarial-sidecar** — `@musistudio/claude-code-router` is a local HTTP proxy daemon (port 3456) that translates Anthropic API calls to OpenAI-compatible backends including OpenRouter. Setup: `npm i -g @musistudio/claude-code-router` + `~/.ccr/config.json` mapping default/reasoning/background tiers + `ANTHROPIC_BASE_URL=http://127.0.0.1:3456` in `~/.claude/settings.json`. Reuses existing `claude` CLI invocations rather than building a parallel curl pipeline; replaces the earlier-considered `_openrouter_probe.sh` sidecar approach.
+  - **Roster scope (recommended):** Qwen fills the "remainder" slot at `/spec-review` and `/check` as an independent perspective. **NOT a primary reviewer. NOT used for /check synthesis.** Pilot on one spec; gate promotion on observed tool-use behavior.
+  - **Trade-offs / footguns (validated, not speculative):**
+    - **Prompt caching disabled end-to-end** — CCR's translation layer breaks Anthropic's prompt cache. Real cost + latency hit; persona-metrics dashboard should track per-model cost-per-finding to surface the gap.
+    - **Tool-use parity vs Claude is UNDOCUMENTED** — Qwen's "agentic coding" claims unverified against Claude's tool schema. Fragile for bash/file ops. Test before trusting at any gate where tool calls matter (especially /check where reviewer agents may inspect the codebase).
+    - **Thinking-mode mismatch** — Opus extended-thinking budget doesn't map to Qwen. Personas that depend on thinking degrade silently. Either restrict Qwen-eligible personas to non-thinking ones, or accept the degradation and measure.
+    - **Caching loss compounds at /check synthesis** — even if Qwen sits at /spec-review remainder slot, any pipeline call routed through CCR loses caching. Constitution-level: keep `ANTHROPIC_BASE_URL` env unset for default Claude calls; set ONLY for Qwen-tagged subagent dispatches via per-call env override.
+  - **Unaffected surfaces** (CCR is HTTP-only): MCP, sub-agents, slash commands, hooks all keep working.
+  - **Resolver integration:** `dynamic-roster-per-gate`'s tier resolver (`scripts/resolve-personas.sh` + tier_policy frontmatter) gains a `qwen` tier value mapped to Qwen3.6-27b. Per-persona dispatch decides whether to route through CCR (set `ANTHROPIC_BASE_URL=http://127.0.0.1:3456` for that single subagent invocation) or talk to Anthropic directly (default for Opus/Sonnet personas).
+  - **Constraint preserved: must not increase agent max count.** Qwen replaces a Sonnet slot in the remainder, not adds to it. With per-axis tier-mix, a /spec-review with 6 personas might be: 1 Opus + 1 Sonnet + 2 Sonnet + 1 Qwen + 1 Codex = 6 total + Codex additive (existing pattern).
+  - **Wiring surfaces:** `scripts/resolve-personas.sh` (add `qwen` to tier enum); `scripts/autorun/_dispatch_persona.sh` or equivalent (per-persona env override for `ANTHROPIC_BASE_URL`); `commands/_prompts/findings-emit.md` (record `model_dispatched` per persona for cost-attribution); `dashboard/data/persona-rankings.jsonl` (extend with model column). CCR install/config gets a small `scripts/install-ccr.sh` helper.
+  - **Schema additions:**
+    - `participation.jsonl`: add `model_dispatched: opus | sonnet | qwen | codex` (additive).
+    - `findings.jsonl`: same (additive).
+    - `~/.config/monsterflow/config.json`: optional `ccr_endpoint: http://127.0.0.1:3456` override (default to standard CCR port).
+  - **Out of scope for v1:** Qwen as primary reviewer; Qwen at /check synthesis; tool-use shimming if Qwen breaks Claude's tool schema (separate spec if needed); MCP-based alternative integration (CCR path is preferred); auto-installation of CCR (v1 documents the npm install; v2 could automate).
+  - **Sequencing:** depends on `dynamic-roster-per-gate` shipping (the tier_policy + resolver are the integration seams). Can be drafted in parallel; cannot ship before that lands.
+  - **Size:** M (CCR config + resolver tier extension + per-persona env override + persona-metrics schema additive + 6-8 test fixtures including Qwen-routed dispatch + tool-use parity smoke test). ~300-500 LoC.
+  - **Codex review recommended** — touches dispatch path + new external dependency (CCR); class:integrity risk if env override leaks across personas.
+  - **References:**
+    - `~/.claude/Openrouter.apikey` (chmod 600, 74 bytes; OPENROUTER_API_KEY env loaded from this file at CCR start)
+    - `@musistudio/claude-code-router` on npm; issues active May 5-8, 2026
+    - Memory: `project_multi_model_roster.md` (original exploration framing)
 
 ---
 
