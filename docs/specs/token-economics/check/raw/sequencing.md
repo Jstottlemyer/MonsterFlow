@@ -1,29 +1,44 @@
-# Sequencing — Check Review
-
-**Verdict:** PASS WITH NOTES — DAG is clean and acyclic, critical path correctly front-loads the spike + A1.5 forcing function, but two task dependency declarations are dishonest in opposite directions (one over-declared, one under-declared) and should be corrected before /build.
+# Findings — Sequencing and Dependencies
 
 ## Must Fix
 
-None. No circular dependencies. No task starts before a hard prerequisite exists. Δ6 (don't modify `session-cost.py`) is handled correctly: the contract lives in spec v4.1 + plan decision #14, and the first import-site (task 1.3) notes the constraint inline, with no Wave 0 task touching `session-cost.py`. The chain that matters most — spike (0.1) → fixtures (0.5) → cost walk (1.3) → A1.5 forcing function (1.4) → bundle emit (1.8) — is correctly serialized so A1.5 fires *before* anything commits to a canonical token source.
+**S1. Circular dependency between T-CORE-10 (bundle emit) and T-CORE-15 (roster walk).**
+T-CORE-10 says it emits `persona-insights-bundle.js` containing "rankings + roster + generated_at". T-CORE-15 says it walks `personas/{review,plan,check}/*.md` and emits the roster *into the combined bundle's `PERSONA_ROSTER`* — but lists T-CORE-10 as its dependency. This is inverted: T-CORE-10 cannot emit a bundle that includes the roster until T-CORE-15 has produced it. Either:
+- T-CORE-10 must depend on T-CORE-15 (correct fix — flip the arrow), or
+- T-CORE-15 mutates the already-written bundle (violates D1's "atomic by construction" rationale)
+
+This breaks Wave 1's atomic-bundle promise that resolves R2. Fix the dependency arrow before /build dispatches.
+
+**S2. T-TEST-9 leaks Wave 2 into Wave 3.**
+T-TEST-9 (dashboard recovery test) depends on T-UI-2, which is Wave 3. The plan declares Waves 2 → 3 → 4, but T-TEST-9 cannot start until Wave 3 is partially built. Either re-bucket T-TEST-9 to Wave 3 explicitly, or split it into "compute side recovery" (Wave 2) + "dashboard render assertion" (Wave 3). As written, the wave model is dishonest and the orchestrator may dispatch T-TEST-9 too early and fail.
 
 ## Should Fix
 
-1. **Task 1.5 (value walk) under-declares its fixture dependency.** Plan lists 1.5 deps as "1.1, 1.2" — but 1.5 walks `findings.jsonl` / `survival.jsonl` / `run.json` / `raw/<persona>.md` per artifact directory and is genuinely undevelopable/untestable without the cross-project fixtures from 0.4. Compare with 1.3, which correctly declares 0.5 as a dep for the same reason. Add **0.4** to 1.5's "Depends On" column. Without this, a parallel agent could pick up 1.5 the moment Wave 0 task 0.1+0.2 close, before 0.4 ships, and discover mid-task that there's nothing to walk.
+**S3. A1.5 forcing function fires after T-CORE-5 already commits to a canonical-source path.**
+T-CORE-5 implements the canonical-token-source choice in Wave 1. A1.5 (the disagreement detector) runs in T-TEST-2 in Wave 2. If A1.5 detects disagreement, the spec halts the build and `/plan` re-opens Q1 — but by then T-CORE-5/8/10 are already written against the wrong assumption. Recommend a one-shot A1.5 micro-probe at the end of Wave 0 (or as a sub-task of T-CORE-1) that runs the equality check against the redacted fixtures BEFORE T-CORE-5 commits a code path. Reduces blast radius from ~6 Wave-1 tasks down to one probe.
 
-2. **Task 3.7 (`docs/persona-ranking.md`) over-declares its dependency on 3.1.** Plan lists 3.7 deps as "3.1, 3.6". 3.7 documents the Project Discovery cascade (implemented in 1.1), the pre-commit hook (3.6), and retention-vs-survival semantics. None of those documentation surfaces depend on test *results* — they depend on implementations *existing*. The honest dep is **1.1 + 1.6 + 3.6** (or just "all Wave 1 + 3.6"), not 3.1. As written, 3.7 idles waiting for the largest test task to pass when it could ship in parallel with 3.1–3.5.
+**S4. `run.json` historical-absence is not an enumerated `run_state`.**
+T-CORE-7 reads `run.json.created_at` for window ordering. The 7-state machine doesn't enumerate "run.json missing." Old artifact directories pre-dating the persona-metrics directive will silently drop out of the window — no warning, no state. Either add `missing_run` to the state enum (preferred) or document that pre-directive directories are intentionally invisible (pin in T-DOC-1).
 
-## Observations
+**S5. T-CORE-6 (CC layout drift probe) only checks parse rate, not persona-name regex extractability.**
+The Phase 0 spike validated `personas/<gate>/<name>.md` regex extraction across 73 RedRabbit fixtures — single project. T-CORE-6 samples 10 dispatches and checks ≥80% parseable, but parseable ≠ persona-name extractable. Add an explicit assertion: of those 10, ≥80% have a recoverable `(persona, gate)` pair via the regex. Otherwise cross-project drift could silently dump rows into `<unknown>`.
 
-- **Wave 0 spike-vs-schema parallelism works as advertised.** 0.1 (spike) + 0.2 (schema) + 0.4 (cross-project fixtures) all start cold. 0.3 (redact helper) waits on 0.2 (it is schema-bound). 0.5 (persona-attribution fixtures) waits on 0.1 + 0.3 — correct, because 0.5 reuses the probe file 0.1 identifies and runs it through the 0.3 redactor. The "in parallel with schema design per wave-sequencer" framing is honored: schema design (0.2) and the spike (0.1) run side by side; 0.5's serialization is the natural fan-in, not a violation.
+## Notes
 
-- **1.3 (cost walk) lists 1.1 (Discovery) as a dep, but the cost root is `~/.claude/projects/*/` — a fixed path, not a discovered MonsterFlow project root.** The dep is a soft over-declaration (Discovery's `validate_project_root` is reused for safety, plausibly), not blocking. Could parallelize 1.3 with 1.1 if pressed for wall-clock; not worth restructuring.
+**N1. Critical-path depth ~12 tasks.** Longest chain: T-PRE-1 → T-CORE-1 → T-CORE-2 → T-CORE-7 → T-CORE-8 → T-CORE-9 → T-CORE-10 → T-CORE-15 → T-TEST-2 → T-WIRE-1 → T-VERIFY-1 → T-VERIFY-2. With L-sized T-CORE-5/7 and T-TEST-2, this is the realistic floor. Acceptable for a v1.
 
-- **2.3 (renderer) sequential after 2.2 is conservative but defensible.** Plan decision #18 locks the function-name contract (`window.__renderPersonaInsightsView`) and the `data-mode="personas"` key, so 2.2 (HTML wiring) and 2.3 (JS renderer) could parallelize. The plan's serialization avoids a class of integration bugs (rename drift, mode-handler key drift) at the cost of a small parallelism opportunity. Reasonable tradeoff for a 2-subagent wave.
+**N2. Wave-3 UI chain is fully serial (T-UI-1 → T-UI-2 → T-UI-3).** Could parallelize header/tab scaffolding (T-UI-1) with module skeleton (T-UI-2) if that becomes a bottleneck — currently sized OK because T-UI-1/3 are S.
 
-- **Wave 1 → Wave 2 hand-off is implicit but workable.** Wave 2 tasks 2.1 (wrap.md) and 2.3 (renderer JS) consume `persona-rankings.jsonl`. 2.1 correctly deps 1.8. 2.3 only deps 2.2, but Wave 0 task 0.4 already provides the fixture trees, and running 1.8 once produces the JSONL the renderer reads. No explicit "checked-in sample JSONL for renderer dev" task — adopters will rely on running the engine end-to-end against fixtures. Acceptable; not worth a new task.
+**N3. High-risk de-risking is correctly front-loaded.** T-PRE-1 (import cleanliness, R1) is first; T-CORE-6 (CC drift, R6) is in Wave 1. Good ordering for the two highest-uncertainty items. (S3 above tightens this further for A1.5.)
 
-- **Critical path estimate:** 0.1 → 0.5 → 1.3 → 1.4 → 1.8 → 2.1 → 3.3. Phase 0 spike is correctly front-loaded as the highest-risk early task. A1.5 (1.4) is the single point where the spike Open Q1 closes; if it fails, the engine has no canonical token source and `/plan` re-opens — risk is appropriately positioned to surface in Wave 1, not Wave 3.
+**N4. T-WIRE-1 is correctly single-owner sequential** per project memory `feedback_test_orchestrator_wiring_gap.md` and `feedback_parallel_agents_shared_file_race.md`. Wave 4 dependency on T-TEST-1..10 is correct.
 
-- **No hidden circular dependencies.** Walked every "Depends On" forward and back; the DAG is acyclic.
+**N5. T-DOC-* tasks have no dependencies and run in Wave 3 in parallel.** This is fine, but T-DOC-1 (build-time clarifications) pins design decisions D5–D13 that influence T-CORE-* implementations. Consider promoting T-DOC-1 to Wave 0 so build agents have it as reference. Currently the design decisions live in the plan body and are passed to agents that way — workable but T-DOC-1 in Wave 0 would be cleaner.
 
-- **Risk-front-loading: good.** Wave 0 spike close, Wave 1 A1.5 forcing function, Wave 1 path-validation test, Wave 1 allowlist test all run before any rendering surface. Privacy + correctness gates fire before any user-visible artifact, matching the "privacy ships *with* the engine, not deferred" decision (#5).
+**N6. e8 covers legacy `findings.jsonl` missing `personas[]`, but does NOT cover legacy missing `unique_to_persona`.** T-CORE-7 computes `unique_count` by reading `findings.jsonl.unique_to_persona`. If that field is absent on legacy rows, the count is silently zero. Either add an explicit `missing_uniqueness_field` warning + treat as `malformed`, or pin in T-DOC-1.
+
+**N7. D7 fall-through (missing `participation.jsonl`) has no dedicated test.** T-TEST-2 A14 covers silent state's retention semantics, but the fall-through case (silent persona without participation.jsonl falls through to complete_value with total_emitted=0) deserves a sub-assertion — easy add to T-TEST-2.
+
+## Verdict: PASS WITH NOTES
+
+The plan is executable. The sequencing is mostly sound, risk de-risking is correctly front-loaded, and the wave structure honors parallel-agent constraints from project memory. **Two real fixes required** (S1 circular dep, S2 wave-leak) before /build dispatches; the rest are tightening recommendations that improve robustness without blocking the build.

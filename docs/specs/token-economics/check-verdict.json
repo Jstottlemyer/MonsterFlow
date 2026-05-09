@@ -1,0 +1,32 @@
+{
+  "schema_version": 2,
+  "prompt_version": "check-verdict@2.0",
+  "verdict": "GO_WITH_FIXES",
+  "blocking_findings": [
+    {"persona": "sequencing", "finding_id": "ck-3a7f9b1c4d", "summary": "Circular dep T-CORE-10 ↔ T-CORE-15 — flip arrow"},
+    {"persona": "sequencing", "finding_id": "ck-8e2d5a0f6b", "summary": "T-TEST-9 leaks Wave 2 into Wave 3 — re-bucket or split"},
+    {"persona": "risk", "finding_id": "ck-1b9c7e4a82", "summary": "Promote A1.5 to Phase 0.5 probe (T-PRE-4) before T-CORE-5"},
+    {"persona": "risk", "finding_id": "ck-d4f60a8e23", "summary": "Quantified persona-regex match-rate AC (A1.6, ≥95%) in T-CORE-6"},
+    {"persona": "risk", "finding_id": "ck-5c2a91d7e0", "summary": "Salt corruption default to warn-and-refuse; require --accept-salt-reset"},
+    {"persona": "testability", "finding_id": "ck-7f3b8c0e1a", "summary": "A1.5 disagreement fixture for failure-path coverage"},
+    {"persona": "testability", "finding_id": "ck-2e9a4b6f08", "summary": "Bullet-regex edge-case fixtures (D11 exclusion categories)"},
+    {"persona": "testability", "finding_id": "ck-9b0d3a5c7e", "summary": "T-TEST-10 perf hard-fail at 15s, warn at 5s"}
+  ],
+  "security_findings": [
+    {"persona": "security-architect", "finding_id": "ck-6c1e8a3f29", "summary": "--explain must gate on isatty(stdout) not stdin (redirect leak)", "tag": "sev:security"},
+    {"persona": "security-architect", "finding_id": "ck-a4b7d20f81", "summary": "tmux pipe-pane defeats Δ4 path-privacy contract; detect and refuse/redact", "tag": "sev:security"},
+    {"persona": "security-architect", "finding_id": "ck-0f8e5b1c34", "summary": "scan-roots.confirmed and projects config files need chmod 600 parity", "tag": "sev:security"},
+    {"persona": "security-architect", "finding_id": "ck-c3d29a76e5", "summary": "Allowlist validation must run pre-write before tmp materialization", "tag": "sev:security"},
+    {"persona": "security-architect", "finding_id": "ck-bd47f0a2e1", "summary": "Salt regen must wipe persona-insights-bundle.js alongside JSONL", "tag": "sev:security"}
+  ],
+  "generated_at": "2026-05-09T00:00:00Z",
+  "iteration": 1,
+  "iteration_max": 2,
+  "mode": "permissive",
+  "mode_source": "default",
+  "class_breakdown": {"architectural": 3, "security": 5, "contract": 0, "documentation": 0, "tests": 5, "scope-cuts": 0, "unclassified": 0},
+  "class_inferred_count": 0,
+  "followups_file": null,
+  "cap_reached": false,
+  "stage": "check"
+}

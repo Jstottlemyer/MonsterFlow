@@ -499,18 +499,26 @@ def get_or_create_salt() -> bytes:
     except OSError:
         pass
 
-    # Continuity reset — clear the rankings file so downstream readers do not
-    # try to link old salted IDs against the new salt namespace.
-    rankings_default = Path.cwd() / "dashboard" / "data" / "persona-rankings.jsonl"
-    try:
-        if rankings_default.exists():
-            # Truncate (don't delete — keeps file presence stable for the
-            # dashboard's existence check; an empty file is treated as
-            # "no rows yet" by readers).
-            with open(rankings_default, "w", encoding="utf-8") as fh:
-                fh.write("")
-    except OSError:
-        pass
+    # Continuity reset — clear the rankings file AND any derived render-side
+    # artifacts so downstream readers do not try to link old salted IDs
+    # against the new salt namespace. SEC-5 (check verdict): the bundle is a
+    # derived render-side mirror that outlives the JSONL — wipe it in lockstep.
+    data_dir = Path.cwd() / "dashboard" / "data"
+    for derived in (
+        data_dir / "persona-rankings.jsonl",
+        data_dir / "persona-rankings-bundle.js",
+        data_dir / "persona-insights-bundle.js",  # forward-compat for D1
+    ):
+        try:
+            if derived.exists():
+                # Truncate (don't delete — keeps file presence stable for the
+                # dashboard's existence check; an empty file is treated as
+                # "no rows yet" by readers; an empty bundle .js no-ops on
+                # eval since the file is empty).
+                with open(derived, "w", encoding="utf-8") as fh:
+                    fh.write("")
+        except OSError:
+            pass
 
     safe_log("regenerated_salt_cleared_rankings")
     return new_salt

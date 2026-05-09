@@ -1,188 +1,252 @@
-# Plan: Token Economics
+---
+name: token-economics
+plan_for: spec v4.2 (revision 4.2, status: ready-for-build)
+created: 2026-05-09
+status: ready-for-check
+session_roster: defaults-only (autonomous synthesis — full 7 designer roster not dispatched in headless mode)
+---
 
-**Date:** 2026-05-04
-**Spec:** `docs/specs/token-economics/spec.md` revision 4.2 (v4.1 + 8 must-fixes from `/check`)
-**Review:** `docs/specs/token-economics/review.md` (round 3)
-**Check:** `docs/specs/token-economics/check.md` (5 primary PASS WITH NOTES; Codex NO-GO with 5 implementation blockers — all 8 applied as M1–M8)
-**Survival:** `docs/specs/token-economics/spec-review/survival.jsonl` — 29/32 round-3 findings addressed by v3→v4 revision (90.6%); 2 not_addressed (TTL, Pro-friend A12 enforcement); 1 rejected_intentionally (persona-author docs). `docs/specs/token-economics/plan/survival.jsonl` — 31/33 plan-stage design recommendations addressed by plan.md (94%).
-**Designers:** 7 in parallel — api / data-model / ux / scalability / security / integration / wave-sequencer
-**Plan revision:** 1.2 (v1.0 = original; v1.1 = Q1–Q3 + minute-truncation; v1.2 = check M1–M8 applied)
+# Implementation Plan — token-economics v4.2
 
-## Architecture Summary
+## Source Artifacts
 
-`compute-persona-value.py` is a single Python script that walks two trees, computes `persona-rankings.jsonl`, and emits `persona-roster.js` + `persona-rankings-bundle.js` sidecars so the dashboard can render under `file://` without `fetch()`. All output flows through one allowlist schema (`schemas/persona-rankings.allowlist.json`) with `additionalProperties: false` as the privacy gate. All stderr/stdout flows through one `safe_log()` helper restricted to a fixed `SAFE_EVENTS` enum. `commands/wrap.md` Phase 1c invokes the script unconditionally (not piggybacked on `dashboard-append.sh`); the dashboard adds a third top-level "Persona Insights" mode tab. Phase 0 spike Q1 is forced by A1.5 in tests; everything else is best-effort by design.
+- Spec: `docs/specs/token-economics/spec.md` (v4.2)
+- Review: 7 spec-review personas (ambiguity, docs-clarity, feasibility, gaps, requirements, scope, stakeholders) + risk analysis
+- Round-3 verdict: 6/6 primary PASS WITH NOTES; risk analysis: GO with risks 1–2 promoted to Phase 0.5
 
-**Mental model:** the spec is one engine + one schema + one logger + one bundle pattern, with the dashboard as a passive renderer.
+This plan synthesizes those reviews + the 14 inline M/Δ must-fixes already applied in the spec, and folds round-3 review notes into ordered build tasks. No autonomous re-litigation of scope; carve-outs from review become inline tasks (T-prefixed) where they tighten ACs without re-opening MVP.
 
-## Key Design Decisions
+---
 
-### Decisions where designers converged (no debate)
+## Design Decisions
 
-1. **Single allowlist file as both row schema and privacy gate** (data-model + security + integration). One file `schemas/persona-rankings.allowlist.json` with `additionalProperties: false`. A10 enforced by **stdlib allowlist validator (M2 from /check, ~30 lines)** that checks `additionalProperties: false`, `required[]`, enum/pattern for the actual fields used. **NOT `jsonschema.validate`** — `jsonschema` is undeclared on this repo (verified missing). No separate "schema" vs "allowlist" split.
-2. **Sidecar bundle pattern under `file://`** (ux + integration + data-model). `persona-roster.js` and `persona-rankings-bundle.js` both loaded via `<script src>` setting `window.PERSONA_ROSTER` and `window.__PERSONA_RANKINGS`. No `fetch()`. **`compute-persona-value.py` emits both.** Spec only mentioned the roster sidecar; we extend the same pattern to the rankings JSONL.
-3. **`safe_log()` enforces output-side privacy** (api + security). All stderr/stdout flows through one helper restricted to a fixed `SAFE_EVENTS` enum + value-pattern allowlist. Raw `print()` and `sys.stderr.write()` banned by grep test.
-4. **mtime-pruned single-pass with substring pre-filter** (scalability solo). Stdlib only. Substring screen for `"Agent"` + `"tool_use"` before `json.loads`. mtime-prune horizon = `MIN(window.created_at) - 24h` slack. Light adopter <2s; heavy adopter 3-5s; cold first-run 30-60s with stderr warning.
-5. **Wave 0 / 1 / 2 / 3** (wave-sequencer). Spike close + schemas (Wave 0) → engine + privacy gates (Wave 1) → dashboard + wrap text (Wave 2, parallel) → end-to-end acceptance (Wave 3). Privacy ships **with** the engine, not deferred.
-6. **Use `null`, never omit** for missing rates (data-model). Schema types rates as `["number", "null"]` with `[0,1]` constraint when number. Idempotent diffs stay clean; dashboard branches on `=== null` only.
-7. **Reserve forward-compat via `schema_version: 1`** (data-model). v1.1 (per-dispatch hash + `agent_tool_use_id`) bumps to 2; v1 readers skip rows with `schema_version > KNOWN_MAX`. **Do NOT pre-reserve future field names** (invites confusion).
-8. **`run_state` enum + `run_state_counts` aggregate** (data-model + spec + M4 from /check). **7-key** required object on every row (M4 added `silent` state for `participation.status: ok` AND `findings_emitted: 0`). Value-window states sum to `runs_in_window`; cost-window states (incl. `cost_only`) sum to `cost_runs_in_window` (M3: separate denominators). Dashboard renders dominant state as `.badge` with hover-tooltip showing full breakdown; silent personas render with distinct silent badge (NOT "never run").
+### D1 — Single-bundle dashboard load (resolves risk #2)
 
-### Decisions resolving designer disagreements / spec deltas
+The spec calls for two separate generated JS sidecars (`persona-rankings-bundle.js` + `persona-roster.js`) loaded as two `<script src>` tags. Risk #2 in the spec's risk analysis flags the cross-file refresh race. **Decision: emit a single `dashboard/data/persona-insights-bundle.js` containing both `window.__PERSONA_RANKINGS = [...]` and `window.PERSONA_ROSTER = [...]` plus a top-level `window.__PERSONA_INSIGHTS_GENERATED_AT = "<ISO>"`.** Atomic by construction. The JSONL file (`persona-rankings.jsonl`) remains the canonical source of truth; the bundle is a derived render-side mirror.
 
-9. **DROP `window_start_artifact_dir`** (security override on spec). The field leaks adopter's project + feature + gate names. Drop entirely (its only use was idempotency debug; `(persona, gate)` already identifies the row). Removes a column from the dashboard. **Spec delta required.**
-10. **TRUNCATE `last_seen` to date-minute granularity** (security override on spec; revised from hour per Justin 2026-05-04). Full ISO with seconds is over-precise; minute is the chosen tradeoff — gives dashboard "refreshed today" UX without weakening A8 idempotency in practice (minute-precision races are rare). Round to `YYYY-MM-DDTHH:MM:00Z` in both rankings JSONL and committed fixtures. **Spec delta required.**
-11. **Per-machine salt for `contributing_finding_ids[]`** (security override on spec). Generate `~/.config/monsterflow/finding-id-salt` (256-bit random, chmod 600) on first run. ID = `<gate-prefix>-sha256(salt || normalized_signature)[:10]`. Cross-machine ID stability lost — explicitly NOT a v1 feature (drill-down is machine-local). **Spec delta required.**
-12. **Telemetry line is counts-only, paths are interactive-only** (security override on spec). Spec's `(sources: cwd, config, scan): <path>, <path>, ...` becomes `discovered N projects (sources: cwd:1, config:M, scan:K)` with no paths. Paths only emitted in interactive `--scan-projects-root` first-use confirmation prompt and behind `MONSTERFLOW_DEBUG_PATHS=1` env (logs to local-only `~/.cache/monsterflow/debug.log`, never gitignored). **Spec delta required.**
-13. **`--scan-projects-root` requires interactive confirmation on first use** (security new). Adopter's first `--scan-projects-root <dir>` prompts: "Confirm scan of these N roots? Append to `scan-roots.confirmed`? [y/N]". Subsequent runs skip. Non-tty: refuse to scan, log `[persona-value] scan-roots not confirmed; skipping K roots`. Per-project opt-out via `.monsterflow-no-scan` sentinel file. **Spec delta required.**
-14. **DO NOT modify `scripts/session-cost.py`** (integration override on spec). New `compute-persona-value.py` imports `PRICING` and `entry_cost` from `session_cost` via **`importlib.util.spec_from_file_location("session_cost", "scripts/session-cost.py")` (M1 fix from `/check`)** — bare `sys.path` insert was a planning hallucination because hyphens are illegal in Python module names. Rationale: lower blast radius; cleaner test boundary; round-3 narrowing to artifact-directory aggregation removed the per-row attribution need.
-15. **Path-traversal + symlink-escape hardening** (security new). Shared `validate_project_root(path) -> Path | None` rejects: non-absolute, `..` after normalize, resolved path not under `$HOME` (configurable via `MONSTERFLOW_ALLOWED_ROOTS`), symlinks that escape `$HOME`. Applied to config tier 2 reader AND `--scan-projects-root` arg.
-16. **6-flag CLI surface** (api + M5 + M6 from /check). `compute-persona-value.py` exposes: `--scan-projects-root <dir>` (**repeatable; argparse `action="append"`**, locked per Q2), **`--confirm-scan-roots <dir>` (M6, repeatable)** — non-interactive companion for tmux/log-piped sessions; appends to `scan-roots.confirmed` without prompting, `--best-effort` (downgrade A1.5 disagreement to warning), `--out PATH`, `--dry-run` (compute discovery + write nothing; subsumes the cut `--list-projects` per M5), `--explain PERSONA[:GATE]`. **`--list-projects` REMOVED (M5)** — counts-only telemetry contradiction. Help text carries the cascade verbatim. **Verify each flag with `<tool> --help` smoke test before declaring shipped** (per global CLAUDE.md).
-17. **API rename `last_seen` → `last_artifact_created_at`** (api). Pre-empts a future "fix to file-mtime" regression that the spec explicitly forbids. Self-documenting field name.
-18. **Dashboard "Persona Insights" as a third top-level mode** (integration + ux). Matches existing `data-mode` pattern at `dashboard/index.html:70-71`. NOT a sub-tab under Judge (rankings are cross-project; Judge is per-project).
-19. **Validator (`persona-metrics-validator`) fires on first JSONL creation only** (integration). Pre/post `[ -f ]` check in `commands/wrap.md` Phase 1c — 3 lines of bash. Reruns on demand only.
-20. **Dashboard "Coverage" column derived from `run_state_counts`** (api + ux). Display `14/18 complete` with full breakdown in tooltip. Avoids surfacing `run_state` as a sortable peer column (meaningless rank).
-21. **`/wrap-insights` text shows top + bottom 3 per dimension per gate** (ux), with "(only N qualifying)" annotation when fewer than 3 personas have `runs_in_window ≥ 3`. Always-on retention-vs-survival semantics note at end ("retention is a compression ratio, not a survival rate").
+Spec sections affected: §Approach Phase 1 ("Roster sidecar emit"), §Integration "Files created", A5. None of these are gated on the two-file shape; the change is a strict simplification.
 
-### M-series decisions (locked in v1.2 from /check)
+### D2 — Phase 0.5 import-cleanliness gate (resolves risk #1)
 
-22. **Cost vs value: two honestly separated signals** (M3, Codex). Value windows over 45 (persona, gate) **artifact directories**; cost windows over 45 observed **Agent dispatches** per (persona, gate). Different denominators. New `cost_runs_in_window` field. Dashboard tooltip on `runs_in_window` and cost columns explicitly states the two windows. Per-dispatch capture (the join key) is v1.1+ scope.
+Before any code that depends on M1 (`importlib.util` import of `session_cost`) is written, run a one-line probe asserting `scripts/session-cost.py` has zero side effects on import (no stdout/stderr, no `sys.exit`, no file writes). If it fails, refactor `session-cost.py` to put CLI logic under `if __name__ == "__main__":` first. This is a build pre-flight, not a runtime test; lives in `tests/test-session-cost-import-clean.sh`.
 
-23. **Silent personas (M4, Codex)** — `participation.jsonl` rows with `status: ok` AND `findings_emitted: 0`. Add `silent` to run_state enum (now 7 states); add `silent_runs_count` to row schema; dashboard renders distinct silent badge (NOT "never run"). Without this, low-noise personas are invisible or mislabeled.
+### D3 — `--explain PERSONA[:GATE]` semantics defined (resolves gaps #1)
 
-24. **Salt file robustness (M7, risk).** Validate on read: `len == 32 bytes` AND non-zero AND `os.stat().st_mode & 0o777 == 0o600`. On any failure: regenerate salt atomically (`O_CREAT | O_EXCL` for first-run race; `tmp + os.replace` for regeneration); ALSO clear `dashboard/data/persona-rankings.jsonl` (drill-down continuity reset is the only honest behavior). Emit `safe_log("regenerated_salt_cleared_rankings")` event.
+Spec lists this flag in the post-M5 CLI surface but does not specify behavior. **Decision: `--explain PERSONA[:GATE]` writes a human-readable plaintext block to stdout (NOT JSONL) showing — for the named persona (and optional gate filter) — the row's `run_state_counts`, the `contributing_finding_ids[]` resolved against the most-recent matching `findings.jsonl` (titles INCLUDED, since `--explain` is interactive-debug surface invoked by the data owner on their own machine), and the source artifact directory paths.** Gated by the same TTY check as `--scan-projects-root` first-use prompt: refuses on non-tty stdin with a `[persona-value] --explain requires a TTY (resolves finding titles to plaintext); use --dry-run for counts-only` stderr line. Privacy posture: this is local-only output; it never feeds the JSONL, the bundle, or `/wrap-insights` text.
 
-25. **`--confirm-scan-roots` non-interactive flag (M6, risk).** tmux pipe-pane and `dev-session.sh` defeat `isatty(stdin)`; without an alternative, Justin hits silent refusal day-one. Flag accepts repeatable `<dir>`, validates via `validate_project_root()`, appends to `scan-roots.confirmed` without prompting, idempotent (re-add is no-op). Self-diagnostic stderr message when the regular interactive flow refuses on non-tty.
+### D4 — `<unknown>` persona bucket contract (resolves gaps #3)
 
-26. **`tests/test-allowlist-inverted.sh` separation (M8, testability).** A test that fails when run alone is brittle — a crash falsely "passes" the inverted assertion. Split: regular `test-allowlist.sh` runs normal fixtures (expected exit 0); `test-allowlist-inverted.sh` invokes validator with `leakage-fail.jsonl` and asserts BOTH non-zero exit AND specific stderr violation message containing literal `additionalProperties` and the offending field name. `tests/run-tests.sh` invokes via `! ./tests/test-allowlist-inverted.sh` shape.
+Description-invoked subagents (e.g., `persona-metrics-validator`, `autorun-shell-reviewer`) hit `persona = "<unknown>"`. **Decision: `<unknown>` rows are emitted to JSONL with `gate: "<unknown>"` and `run_state: "cost_only"` (always — they have no value-side artifact to land in `findings.jsonl`).** Dashboard hides them by default behind a "show orchestrator overhead" toggle. `/wrap-insights` text section excludes them from top/bottom 3 rankings. Cost-window aggregates still account for them so adopters can see total orchestrator overhead via the toggle.
 
-27. **`importlib.util` for `session_cost` import (M1, Codex).** `from session_cost import …` was a planning-stage hallucination — hyphenated filenames can't be bound to module names via `sys.path` alone. Use `importlib.util.spec_from_file_location("session_cost", str(Path(__file__).parent / "session-cost.py"))` (3 lines, one-time at top of `compute-persona-value.py`).
+### D5 — Window rollover = full rebuild (resolves gaps #4)
 
-28. **Stdlib allowlist validator (M2, Codex).** No PyPI `jsonschema` dependency on public-release week. ~30 lines of stdlib python: load schema → walk row keys + assert in `properties` (`additionalProperties: false`) → assert `required[]` keys present → for each property, check type + (if `enum`) value-in-enum + (if `pattern`) regex match. Allowlist schema is small (~22 fields); validator is testable in isolation. New file `scripts/_allowlist_validator.py` (single-purpose helper module).
+The JSONL is fully rebuilt every `compute-persona-value.py` run by walking the most-recent-45-per-(persona,gate) source window. **No append path exists.** Atomic write via tmp + `os.replace`. This is the only contract consistent with A8 idempotency. Documented in §Window section as a build deliverable (T-DOC-1).
 
-## Implementation Tasks (Wave-Ordered)
+### D6 — Schema migration contract for v1 → v1.1 (resolves gaps #2)
 
-### Wave 0 — Spike close + data contracts (parallel; 2-3 subagents)
+v1 ships with `schema_version: 1`. **Decision: v1.1 release notes will instruct `rm dashboard/data/persona-rankings.jsonl` before upgrade; readers in v1 only consume `schema_version: 1` rows; readers in v1.1+ regenerate from source on first run regardless of preexisting JSONL.** This avoids cross-version migration code in v1. A12 asserts that `compute-persona-value.py` refuses to read a JSONL row whose `schema_version != 1` (logs warning, treats as cache miss, regenerates).
 
-| # | Task | Depends On | Size | Parallel? |
-|---|------|------------|------|-----------|
-| 0.1 | Close Phase 0 spike Q1 — probe one MonsterFlow session, verify `total_tokens` annotation == `sum(usage)` from `subagents/agent-<id>.jsonl`. Write result to `plan/raw/spike-q1-result.md`. Update spec §Phase 0 Spike Result. | — | S | yes |
-| 0.2 | Write `schemas/persona-rankings.allowlist.json` per data-model sketch + security overrides (drop `window_start_artifact_dir`, **minute-truncated** `last_artifact_created_at` (renamed from `last_seen`)). | — | S | yes (with 0.1, 0.3, 0.4) |
-| 0.3 | Write `scripts/redact-persona-attribution-fixture.py` (single-purpose, bound to allowlist schema). | 0.2 | S | yes (with 0.1, 0.4) |
-| 0.4 | Build `tests/fixtures/cross-project/` — two synthetic project trees, each with `docs/specs/<f>/{spec-review,plan,check}/{findings,survival,run.json,raw/<persona>.md}`. Designed so ≥1 (persona, gate) pair has ≥3 qualifying rows AND ≥1 has only 1 (so A6 "(only N qualifying)" branch is exercisable). | — | M | yes |
-| 0.5 | Build `tests/fixtures/persona-attribution/` — redacted real session excerpts via 0.3, plus deliberate-failure fixture (`leakage-fail.jsonl`) with one forbidden field. | 0.1, 0.3 | S | sequential after 0.1+0.3 |
+### D7 — `participation.jsonl` precondition for `silent` state (resolves ambiguity #4)
 
-**DoD Wave 0:** Q1 result documented. Both schemas validate. Cross-project fixtures cover both A6 branches. Deliberate-failure fixture has one forbidden field that `additionalProperties: false` would catch.
+Spec M4 introduces `silent` state requiring `participation.jsonl` row with `status: ok` AND `findings_emitted: 0`. **Decision: when `participation.jsonl` is missing or malformed for an artifact directory, fall through to the existing state machine (treat as `complete_value` if the other artifacts validate, else `missing_*`).** A persona that ran successfully but produced zero findings without a `participation.jsonl` row gets bucketed as `complete_value` with `total_emitted: 0` (already covered by e10). Documented in §Run state machine table (T-DOC-1).
 
-### Wave 1 — Engine + privacy gates (sequential after Wave 0; ~2 subagents internally)
+### D8 — `silent` state retention semantics (resolves ambiguity #9, feasibility note)
 
-| # | Task | Depends On | Size | Parallel? |
-|---|------|------------|------|-----------|
-| 1.1 | Project Discovery cascade — implement `validate_project_root()` (path-traversal + symlink containment); cwd auto-discovery; `${XDG_CONFIG_HOME:-$HOME/.config}/monsterflow/projects` reader; `--scan-projects-root` with interactive `scan-roots.confirmed` flow + `.monsterflow-no-scan` opt-out sentinel; **non-tty refusal path with self-diagnostic stderr message (M6)**; **`--confirm-scan-roots <dir>` non-interactive companion flag (M6)**. | 0.2 | M | — |
-| 1.2 | `safe_log()` helper — fixed `SAFE_EVENTS` enum (`discovered_projects`, `malformed_artifact`, `missing_artifact`, `window_rolled`, `wrote_rankings`, `truncated_finding_ids`, `rejected_config_entry`, `rejected_symlink_escape`, **`regenerated_salt_cleared_rankings` (M7)**, **`silent_persona_observed` (M4)**, **`non_interactive_scan_refused` (M6)**); value-pattern allowlist (persona/gate/state/sha256/int/ISO-date); raw `print()` banned by `tests/test-no-raw-print.sh` grep gate. **Plus stdlib allowlist validator helper module `scripts/_allowlist_validator.py` (M2, ~30 lines: additionalProperties + required + enum/pattern; no PyPI dep).** | — | S+ | yes (with 1.1) |
-| 1.3 | Cost walk — `~/.claude/projects/*/*.jsonl` mtime-pruned single-pass with substring pre-filter (`"Agent"` + `"tool_use"`); per-(persona, gate, parent_session_uuid) attribution; persona-name regex from Agent dispatch prompt; `agentId` from tool_result trailing text. Imports `PRICING` + `entry_cost` from `session_cost` **via `importlib.util.spec_from_file_location` (M1) — bare `sys.path` does not work because filename has a hyphen**. **M3: emits to cost-window per (persona, gate); independent of value-window denominator.** | 1.1, 1.2, 0.5 | M | — |
-| 1.4 | A1.5 cross-check — for every Agent dispatch in fixture: `total_tokens` from parent's tool_result == `sum(usage.input_tokens + usage.output_tokens)` from `subagents/agent-<id>.jsonl`. On agreement: parent annotation is canonical. **On disagreement: `compute-persona-value.py` exits non-zero** unless `--best-effort`. Resolves spike Open Q1. | 1.3 | S | — |
-| 1.5 | Value walk + `run_state` classification — walks `findings.jsonl`, **`participation.jsonl` (M4)**, `survival.jsonl`, `run.json`, `raw/<persona>.md` per artifact directory; classifies into **7-state enum (M4 added `silent` for participation status:ok + findings_emitted:0)**; computes `total_emitted` from top-level bullets under `## Critical Gaps` / `## Important Considerations` / `## Observations` (excludes `## Verdict`, nested, numbered); emits `silent_runs_count` per row (M4). | 1.1, 1.2, **0.4** | L | yes (with 1.3) |
-| 1.6 | 45-window cap (separate value + cost windows per M3) + `contributing_finding_ids[]` soft-cap (most-recent-50 + `truncated_count`); IDs sorted lex before emit; per-machine salt at `${XDG_CONFIG_HOME:-$HOME/.config}/monsterflow/finding-id-salt` (256-bit random, chmod 600); ID = `<gate-prefix>-sha256(salt \|\| normalized_signature)[:10]`. **M7: validate salt on read (32 bytes, non-zero, perms 0o600); on failure regenerate atomically via `O_CREAT \| O_EXCL` (first-run race) + `tmp + os.replace` (regen) AND clear `dashboard/data/persona-rankings.jsonl` for drill-down continuity reset.** | 1.5 | M | — |
-| 1.7 | Roster sidecar emit — walks `personas/{review,plan,check}/*.md`; emits `dashboard/data/persona-roster.js` (`window.PERSONA_ROSTER = […]` with persona, gate, file_path, persona_content_hash, last_modified, deprecated). | — | S | yes (with 1.3, 1.5) |
-| 1.8 | Rankings bundle emit — computes JSONL row per (persona, gate); **validates each via stdlib `_allowlist_validator.validate(row, allowlist_schema)` (M2 — NOT `jsonschema`)**; atomic write to `dashboard/data/persona-rankings.jsonl`; sibling `dashboard/data/persona-rankings-bundle.js` (`window.__PERSONA_RANKINGS = […]`); `sort_keys=True` + `round(x, 6)` for floats. | 1.4, 1.6, 1.7 | M | — |
-| 1.9 | `tests/test-allowlist.sh` — A10 normal-fixture path. Asserts: every row in `persona-rankings.jsonl` has zero non-allowlist fields; every row in `tests/fixtures/persona-attribution/*.jsonl` (except `leakage-fail.jsonl`) passes; expected exit 0. Plus stderr canary check (`LEAKAGE_CANARY_xyz123`). | 1.2, 1.8, 0.5 | M | — |
-| 1.9-inv | **`tests/test-allowlist-inverted.sh` (M8)** — A10 inverted-assertion path. Invokes validator with `tests/fixtures/persona-attribution/leakage-fail.jsonl`; asserts BOTH non-zero exit AND specific stderr violation message containing literal `additionalProperties` and the offending field name (e.g., `finding_title`). `tests/run-tests.sh` invokes via `! ./tests/test-allowlist-inverted.sh`. Standalone `make test` shape doesn't crash-into-passing. | 1.9, 0.5 | S | yes (with 1.9) |
-| 1.10 | `tests/test-phase-0-artifact.sh` — A0. Asserts spec contains `## Phase 0 Spike Result` heading; section names `agentId`; `tests/fixtures/persona-attribution/` exists with ≥1 valid `.jsonl`. | 0.1, 0.5 | S | yes (with 1.9) |
-| 1.11 | `tests/test-path-validation.sh` — symlink escape, `..` segments, non-absolute config entries; per-project `.monsterflow-no-scan` opt-out. | 1.1 | S | yes (with 1.9, 1.10) |
+Spec table says silent contributes (numerator=0, denominator includes emitted bullets). But a silent persona by definition emitted zero bullets (`findings_emitted: 0`). **Decision: silent state contributes (0, 0) to the retention ratio — null per e10 rule.** Cross-reference e10 explicitly. The `silent_runs_count` field surfaces the volume separately so adopters see "this persona ran 5 times silently" without it polluting retention rates.
 
-**DoD Wave 1:** A0, A1, A1.5, A8, A9, A10 all green against Wave 0 fixtures. Engine produces a real `persona-rankings.jsonl` + `persona-rankings-bundle.js` + `persona-roster.js` from the cross-project fixture.
+### D9 — Cost-window cap = 45 (resolves ambiguity #3)
 
-### Wave 2 — Surfaces (parallel; 2 subagents)
+Add explicit field `cost_window_size: 45` to the schema, parallel to `window_size: 45`. Both default to 45; both clamp identically. T-DOC-1 makes this explicit in §Approach.
 
-| # | Task | Depends On | Size | Parallel? |
-|---|------|------------|------|-----------|
-| 2.1 | `commands/wrap.md` Phase 1c integration — insert unconditional `compute-persona-value.py` invoke after line 160; pre/post `[ -f persona-rankings.jsonl ]` check gates `persona-metrics-validator` invocation (V3 trigger); render text section per ux's locked format (top + bottom 3 per dim × per gate, "(only N qualifying)" handling, "never run this window" line, retention-vs-survival semantics note). | 1.8 | M | yes |
-| 2.2 | `dashboard/index.html` — third top-level mode button `<button data-mode="personas">Persona Insights</button>` near line 70; three `<script src>` tags in strict order (roster.js → rankings-bundle.js → persona-insights.js); extend mode handler. | — | S | yes (with 2.1) |
-| 2.3 | `dashboard/persona-insights.js` (NEW) — registers `window.__renderPersonaInsightsView`; merges `PERSONA_ROSTER` + `__PERSONA_RANKINGS`; renders sortable table (per ux spec) with `.badge` for dominant `run_state` (**M4: silent badge distinct from "never run" badge**); **two count tooltips per M3 — "value-window: N directories; cost-window: M dispatches" on `runs_in_window` and on cost columns**; `.row-low-sample` (opacity 0.55) for insufficient_sample; strikethrough + red badge for deleted; "(never run)" rows from roster-only entries; null-rate cells `—` (sort to bottom always); color bands; banners (privacy + stale-cache + empty-state per ux's locked copy); **content-hash mixed-window tooltip "Hash recently changed (mixed-window)" when current hash != oldest row's hash in window** (Risk S3). | 2.2 | M | sequential after 2.2 |
-| 2.4 | `.gitignore` — add `dashboard/data/persona-rankings-bundle.js`, `dashboard/data/persona-roster.js` (existing `dashboard/data/*.jsonl` covers JSONL). | — | S | yes |
+### D10 — Multi-persona finding survival counts +1 each (resolves ambiguity #11)
 
-**DoD Wave 2:** Both rendering surfaces work against Wave-1 JSONL under `file://`. Banner copy matches ux spec verbatim. State badge silent for `complete_value`, otherwise dominant-state badge with hover-tooltip breakdown.
+A finding with `personas: [scope-discipline, edge-cases]` and `outcome: addressed` increments downstream-survival for BOTH personas. Documented in §Approach denominator definition (T-DOC-1). No fractional credit; multi-persona findings reward all contributors.
 
-### Wave 3 — End-to-end acceptance (parallel; 2-3 subagents)
+### D11 — Bullet-counting regex pinned (resolves ambiguity #18)
 
-| # | Task | Depends On | Size | Parallel? |
-|---|------|------------|------|-----------|
-| 3.1 | `tests/test-compute-persona-value.sh` — **A1 (cost-sum equality on subagent rows)**, A2 (3 rates + 7-state `run_state_counts`; value-states sum to `runs_in_window`; cost-window states sum to `cost_runs_in_window` per M3); A3 (cross-project cascade tested via cwd, fixture-config, `--scan-projects-root`, `--confirm-scan-roots`); A4 (content-hash window reset, asserts post-edit `contributing_finding_ids[]` cleared per **product-decision wording per Codex**); A7 (e1–e12 + soft-cap behavior + `--scan-projects-root` opt-in default-off + **silent-persona rendering per M4**); **A8 (idempotent re-run: byte-equality excluding `last_artifact_created_at`)**; A11 (≥1 row per distinct (persona, gate) pair present in source `findings.jsonl[s]` + e12 fresh-install case explicitly tested). | 1.8, 0.4 | L | yes |
-| 3.2 | Dashboard A5 — DOM-level assertions that "Persona Insights" tab present, sortable, insufficient-sample rows dim with "—" rate cells, deleted personas strikethrough + "deleted" badge, "(never run)" rows from roster-only entries, **silent badge distinct from "never run" badge per M4**, all three banners (privacy / stale-cache / empty-state) render correctly under each precondition (**explicit e12 fresh-install sub-case: no JSONL + roster.js present → empty-state banner + "(never run)" rows for full roster**). **Banner assertions use CSS class (`.banner-privacy`, `.banner-empty-state`, `.banner-stale`) + load-bearing word, NOT full copy equality** per testability. **Color band assertions use `.band-low/.band-mid/.band-high` class boundaries, not RGB pixel diff.** Loaded under `file://`. | 2.3 | M | yes (with 3.1, 3.3) |
-| 3.3 | `/wrap-insights` A6 — text-format assertions; cost ranking uses `avg_tokens_per_invocation` not totals; "(only N qualifying)" annotation; retention-vs-survival semantics note present. | 2.1 | S | yes (with 3.1, 3.2) |
-| 3.4 | Privacy regression: `tests/test-finding-id-salt.sh` (same input + different salts → different IDs; salt file perms 600 verified via **`python3 os.stat`** for portability per testability; **M7: zero-byte salt + truncated salt + world-readable perms each trigger regen + rankings clear**); `tests/test-scan-confirmation.sh` (non-tty refusal with self-diagnostic message; **`--confirm-scan-roots` non-interactive flow per M6**; pre-confirmed roots; `.monsterflow-no-scan` sentinel respected). | 1.6, 1.1 | S | yes (with 3.1) |
-| 3.5 | Telemetry + final lint — verify no raw `print()` in `compute-persona-value.py` (test 1.2's grep gate passes; **regex pinned per testability — catches `print(`, `sys.stdout.write`, `sys.stderr.write`; excludes comments and string literals; scope `compute-persona-value.py` only**); verify `--help` output for all 6 flags lists the Project Discovery cascade verbatim; verify the `persona-metrics-validator` subagent runs cleanly against Wave-1 output; **A1.5 disagreement-path test (testability #5) — exercise tampered fixture, assert non-zero exit + `--best-effort` downgrade behavior**; **A0 spike-result content checks (testability #4) — assert `wc -l > 10` + literal token grep for `total_tokens` + `subagents/agent-` + verdict line**. | All Wave 1+2 | S | sequential after others |
+Top-level emitted-bullet regex: `^[-*] ` (zero leading whitespace, dash or star, single space, anything after). Excludes `^  - `, `^ - `, `^\d+\. `, and any line under `## Verdict` heading. Extraction is line-oriented with a state machine that tracks current `## Heading`. T-DOC-1 codifies; A2 fixture exercises both passing and rejected cases.
 
-**DoD Wave 3:** A0–A11 all green. Privacy regression suite green. `--help` output matches CLI spec. `persona-metrics-validator` reports zero schema violations.
+### D12 — `last_artifact_created_at` minute-truncation A8 policy (resolves feasibility note)
 
-### Wave 3 — additions per Q1 (locked 2026-05-04)
+Field is excluded from A8 idempotency byte-equality. **Decision: A8 freezes time inside the test (passes a synthetic `_NOW` injection or runs both invocations within the same calendar minute) and asserts byte-equal including this field; production reads are not subject to that constraint.** Production may show within-minute drift; that is not a defect.
 
-| # | Task | Depends On | Size | Parallel? |
-|---|------|------------|------|-----------|
-| 3.6 | `scripts/install-precommit-hooks.sh` (NEW) — adopter-installable opt-in script. Wires a pre-commit hook that runs `tests/test-allowlist.sh` whenever any file under `tests/fixtures/persona-attribution/**` or `dashboard/data/**` is staged. Idempotent (rerunnable, doesn't duplicate hooks); detects existing hooks and prepends safely. Not auto-enabled by `install.sh` rewrite. | 1.9 | S | yes (with 3.1–3.5) |
-| 3.7 | `docs/persona-ranking.md` (NEW, in-scope per Q1) — single page covering: **two-window cost-vs-value distinction per M3** (with worked example so adopters don't misread aligned numbers), retention-vs-survival semantics callout, **silent-vs-never-run badge distinction per M4**, persona contributors' data lifecycle, Project Discovery cascade with concrete examples (`scan-roots.confirmed` flow, **`--confirm-scan-roots` for tmux/log-piped sessions per M6**, `.monsterflow-no-scan` opt-out, `MONSTERFLOW_DEBUG_PATHS=1` env), pre-commit hook installation snippet pointing at 3.6. **Deps simplified per sequencing #2: 1.1 + 1.6 + 3.6 (NOT 3.1) — runs parallel with Wave 3 tests.** | **1.1, 1.6, 3.6** | S | yes (parallel with 3.1–3.5) |
+### D13 — Persona-content-hash normalization pinned (resolves feasibility observation)
 
-### Out-of-band tasks (post-merge, not blocking v1)
+`persona_content_hash = "sha256:" + sha256(unicodedata.normalize('NFC', text).encode('utf-8').rstrip(b'\n') + b'\n').hexdigest()`. Trailing whitespace within lines is significant; trailing newlines normalize to exactly one; BOM stripped before normalization. T-DOC-1 codifies.
 
-- `~/.config/monsterflow/README.md` — written by future `install.sh` rewrite (BACKLOG #2 — Onboarding spec).
+### D14 — Wave sequencer ordering: data → tests → UI
 
-## Open Questions — all resolved 2026-05-04
+Default three-gate precedence per `commands/plan.md` instructions. **Wave 1: schemas + data layer + privacy primitives. Wave 2: tests against fixtures. Wave 3: dashboard UI + `/wrap-insights` text wiring.** Rationale: data contract and privacy gates have the highest blast radius; tests against the contract validate before UI consumes; UI is the cheapest to iterate.
 
-| # | Question | Resolution |
-|---|----------|------------|
-| 1 | Adopt 6 spec deltas in v4.1 or in `/check`? | **Adopt in v4.1.** Spec amended in same session; `/check` reviews coherent spec/plan pair. |
-| 2 | `session-cost.py` non-modification (Δ6) — pre-commit or surface for `/check` re-litigation? | **Pre-commit.** Δ6 in spec; `/check` flags only if import path is genuinely broken. |
-| 3 | Pre-commit hook — opt-in script or docs only? | **Both** — `scripts/install-precommit-hooks.sh` (Wave 3 task 3.6) + `docs/persona-ranking.md` paragraph (Wave 3 task 3.7). |
-| 4 | `--scan-projects-root` repeatable or comma-separated? | **Repeatable**, argparse `action="append"`. Matches one-path-per-line convention in `scan-roots.confirmed`. |
+### D15 — Test orchestrator wiring is a single-owner sequential post-step
 
-## Risk Register
+Per project memory `feedback_test_orchestrator_wiring_gap.md` and risk #4: parallel `/build` agents must NOT touch `tests/run-tests.sh`. Wiring is a dedicated final task (T-WIRE-1) with explicit verification: `bash tests/run-tests.sh` must list all 10 new tests in its output. The inverted-assertion test (`test-allowlist-inverted.sh`) is invoked via `! ./tests/test-allowlist-inverted.sh` and that exact shell shape is part of the task spec.
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| A1.5 disagreement (parent annotation ≠ subagent sum) → engine has no canonical token source | Low (Q2 closed; Q1 remains) | High (spec re-opens) | A1.5 fails build hard; `--best-effort` downgrade exists; subagent transcript path is canonical fallback |
-| Adopter's `--scan-projects-root ~/Projects` includes client-confidential repos | Medium | High (privacy leak) | Interactive scan-confirmation flow (decision #13); `.monsterflow-no-scan` per-project opt-out; counts-only telemetry (decision #12); allowlist-enforced output (A10) |
-| `additionalProperties: false` rejects a legitimate field added in v1.1 | Medium | Low | `schema_version: 1` bump path documented; v1.1 spec must update allowlist explicitly |
-| Heavy adopter (5 projects, 167 features) > 5s refresh | Medium | Low | mtime-prune brings 3-5s; cold first-run 30-60s with stderr warning. Document, don't optimize beyond Wave 1. |
-| Persona-name regex breaks under `/autorun` headless flow scaffolding | Low | Medium | Regex tested across 73 RedRabbit fixtures during round-2; unknown personas map to `<unknown>` (don't silently drop). Add autorun fixture in /check if /autorun ships first. |
-| `findings.jsonl` schema evolves under our feet (e.g., persona-metrics adds a field) | Low | Low | We read only `personas[]` + `unique_to_persona`; both schema-stable. Forward-compat by reading-permissively. |
-| Dashboard `<script src>` load order fails silently if one bundle is missing | Low | Medium | Each bundle file emits `window.__BUNDLE_FOO_LOADED = true`; persona-insights.js asserts presence + renders empty-state on absence. |
-| Salt file leaks → finding IDs become guessable | Very low | Low | Single-machine impact; regenerate to invalidate; documented in `docs/persona-ranking.md`. |
-| Adopter `git add -f dashboard/data/persona-rankings.jsonl` to share a snapshot | Medium | Low (allowlist-enforced output already privacy-safe) | A10 catches at PR review time; allowlist removes most leak vectors. |
-| **tmux pipe-pane / `dev-session.sh` defeats interactive scan-confirmation flow** (M6 / Risk S1) | **High (will hit Justin day-one without M6)** | Medium | `--confirm-scan-roots` non-interactive flag (M6); self-diagnostic stderr message on non-tty refusal. |
-| **Salt file mid-run corruption / partial-write** (M7 / Risk S2) | Low | Medium (drill-down breaks; rankings invalidated) | Validate on read (32 bytes, non-zero, perms 0o600); regenerate atomically + clear rankings JSONL on failure. |
-| **Content-hash 90%-pre-edit-data window** (Risk S3) | Medium | Low (informational; doesn't affect correctness, just interpretation) | "Hash recently changed (mixed-window)" tooltip when current hash != oldest row's hash in window. |
-| **Plan-text hallucinations surviving to /build** (M1 — `from session_cost import` bug) | **Demonstrated** (caught by Codex at /check, fixed before code) | Low (caught by adversarial gate) | Adversarial reviewer (Codex) verifies plan against actual codebase, not just spec text; established pattern at every gate. |
+### D16 — Document but don't ship: support runbook + persona-author posture
 
-## Spec Deltas to Apply Before /check
+Stakeholder review flagged missing support runbook + persona-author-as-data-subject posture. **Decision: ship a one-page `docs/specs/token-economics/notes.md` covering: (a) interpreting low scores, (b) salt-rotation procedure, (c) persona-author guidance ("scores are machine-local, sample-noisy, and not a contributor evaluation"), (d) `--scan-projects-root` first-time-adopter walkthrough, (e) Linux-untested disclaimer, (f) v1.1-unblock criterion.** Surfaces same-PR; closes review gaps without scope creep.
 
-These five deltas are required by the plan but currently misalign with spec v4. Apply as v4.1 before `/check`:
+---
 
-| # | Spec section | Change |
-|---|--------------|--------|
-| Δ1 | Data section / row schema | DROP `window_start_artifact_dir` field |
-| Δ2 | Data section / `last_seen` | Truncate to **date-minute** (revised from hour per Justin 2026-05-04); rename to `last_artifact_created_at` |
-| Δ3 | Data section / `contributing_finding_ids` | Per-machine salt: `sha256(salt \|\| normalized_signature)[:10]`; salt at `~/.config/monsterflow/finding-id-salt` (256-bit, chmod 600); cross-machine ID stability explicitly NOT a feature |
-| Δ4 | Project Discovery / Telemetry | Counts-only stderr telemetry; paths only in interactive `--scan-projects-root` confirmation + behind `MONSTERFLOW_DEBUG_PATHS=1` env (logs to `~/.cache/monsterflow/debug.log`) |
-| Δ5 | Project Discovery / Tier 3 | First-use interactive confirmation via `~/.config/monsterflow/scan-roots.confirmed`; non-tty refuses; per-project `.monsterflow-no-scan` opt-out sentinel |
-| Δ6 | Integration / Files modified | DO NOT modify `scripts/session-cost.py`; `compute-persona-value.py` imports `PRICING` + `entry_cost` instead |
+## Implementation Tasks
 
-## Agent Disagreements Resolved
+| # | Task | File(s) | Depends On | Size | Parallel? | Wave |
+|---|------|---------|------------|------|-----------|------|
+| **T-PRE-1** | Phase 0.5: assert `scripts/session-cost.py` is import-clean | `tests/test-session-cost-import-clean.sh` (new) + possible refactor of `scripts/session-cost.py` (CLI under `if __name__`) | — | S | — | 0 |
+| **T-PRE-2** | Author redaction helper for A0 fixtures | `scripts/redact-persona-attribution-fixture.py` | T-PRE-1 | M | — | 0 |
+| **T-PRE-3** | Populate redacted A0 fixtures from RedRabbit session probe | `tests/fixtures/persona-attribution/*.jsonl` (real-data redacted) + `leakage-fail.jsonl` (deliberate-failure) | T-PRE-2 | S | — | 0 |
+| **T-SCHEMA-1** | Author allowlist schema | `schemas/persona-rankings.allowlist.json` (`additionalProperties: false`, all v1 fields enumerated incl. `schema_version`, `cost_runs_in_window`, `cost_window_size`, `silent_runs_count`, `run_state_counts`, `truncated_count`, `insufficient_sample`) | — | S | Yes (with T-PRE-*) | 0 |
+| **T-CORE-1** | Stub `compute-persona-value.py` skeleton: argparse with all 6 flags (`--scan-projects-root`, `--confirm-scan-roots`, `--best-effort`, `--out`, `--dry-run`, `--explain`), import-via-importlib of `session_cost`, `safe_log()` stderr wrapper | `scripts/compute-persona-value.py` | T-PRE-1, T-SCHEMA-1 | M | — | 1 |
+| **T-CORE-2** | Project Discovery cascade (cwd + config + scan-confirmed), realpath dedup, `.monsterflow-no-scan` sentinel, tilde expansion, `validate_project_root()`, `scan-roots.confirmed` parsing robustness mirroring salt-file pattern (R7) | `scripts/compute-persona-value.py` | T-CORE-1 | M | — | 1 |
+| **T-CORE-3** | Salt management (`finding-id-salt`): atomic create-or-fail (`O_CREAT \| O_EXCL`), validate-on-read (32 bytes, perms 0o600, non-zero), regenerate-and-clear-rankings on failure | `scripts/compute-persona-value.py` | T-CORE-1 | M | Yes (with T-CORE-2) | 1 |
+| **T-CORE-4** | Stdlib allowlist validator (~30 LoC; replaces `jsonschema.validate`); enforces `additionalProperties: false`, `required[]`, basic type/enum/pattern | `scripts/compute-persona-value.py` (or sibling `scripts/_allowlist.py`) | T-SCHEMA-1 | S | Yes | 1 |
+| **T-CORE-5** | Cost-side walker: walk `~/.claude/projects/*/`, parse Agent dispatches, recover persona via regex `personas/<gate>/<name>.md` from `Agent.input.prompt`, link `agentId` to `subagents/agent-<id>.jsonl`, sum `usage`, fall back to parent annotation when canonical (per A1.5 outcome) | `scripts/compute-persona-value.py` | T-CORE-1, T-CORE-2 | L | — | 1 |
+| **T-CORE-6** | CC subagent layout drift probe (R6): sample 10 most-recent dispatches at startup, assert ≥80% parseable, emit `[persona-value] CC subagent layout v? detected` line; A1.6 unattributed-rate ≤5% threshold (see Open Q below) | `scripts/compute-persona-value.py` | T-CORE-5 | S | Yes | 1 |
+| **T-CORE-7** | Value-side walker: walk discovered project roots, build per-(persona, gate, artifact-directory) records with `run_state` enum, read `participation.jsonl` for silent state (D7 fall-through on missing), count emitted bullets per D11 regex, count judge-retention from `findings.jsonl.personas[]`, count downstream-survival from `survival.jsonl.outcome == addressed`, count uniqueness from `findings.jsonl.unique_to_persona` | `scripts/compute-persona-value.py` | T-CORE-1, T-CORE-2 | L | — | 1 |
+| **T-CORE-8** | Window aggregation: most-recent-45 per (persona, gate) by `run.json.created_at`; cost-window 45 dispatches independently per D9; `<unknown>` bucket per D4; missing-subagent-transcript fallback per gaps #11 (trust parent annotation, log warning) | `scripts/compute-persona-value.py` | T-CORE-5, T-CORE-7 | M | — | 1 |
+| **T-CORE-9** | Salted finding-ID generator: `sha256(salt || normalized_signature)[:10]`, soft-cap most-recent-50 + `truncated_count`, sorted output for A8 stability (R8 concurrent-race fix) | `scripts/compute-persona-value.py` | T-CORE-3, T-CORE-7 | S | — | 1 |
+| **T-CORE-10** | Output emit: `dashboard/data/persona-rankings.jsonl` (atomic, sort_keys=True, round 6dp, sorted by (gate, persona)) + single combined `dashboard/data/persona-insights-bundle.js` per D1 (rankings + roster + `generated_at`) | `scripts/compute-persona-value.py` | T-CORE-4, T-CORE-8, T-CORE-9 | M | — | 1 |
+| **T-CORE-11** | Schema-version reader guard per D6: refuse non-v1 rows on read, treat as cache miss | `scripts/compute-persona-value.py` | T-CORE-10 | XS | Yes | 1 |
+| **T-CORE-12** | Counts-only stderr telemetry (Δ4); `--quiet` flag (resolves gaps #6); raw `print()` / `sys.stderr.write()` ban enforced via `safe_log()` discipline | `scripts/compute-persona-value.py` | T-CORE-1 | S | Yes | 1 |
+| **T-CORE-13** | `--explain PERSONA[:GATE]` per D3 (TTY-gated, plaintext finding titles, local-only) | `scripts/compute-persona-value.py` | T-CORE-7 | S | Yes (after T-CORE-7) | 1 |
+| **T-CORE-14** | `--dry-run` per M5: full discovery telemetry, write nothing | `scripts/compute-persona-value.py` | T-CORE-10 | XS | Yes | 1 |
+| **T-CORE-15** | Roster walk: enumerate `personas/{review,plan,check}/*.md` in cwd, emit names + current content-hash (D13 normalization) into the combined bundle's `PERSONA_ROSTER`; empty roster on missing `personas/` per gaps #10 | `scripts/compute-persona-value.py` | T-CORE-10 | S | Yes | 1 |
+| **T-TEST-1** | `tests/test-phase-0-artifact.sh` — A0 (spec section + linkage field + ≥1 fixture validates) | `tests/test-phase-0-artifact.sh` | T-PRE-3, T-SCHEMA-1 | S | Yes | 2 |
+| **T-TEST-2** | `tests/test-compute-persona-value.sh` — A1, A1.5, A2, A3 (cross-project), A4 (best-effort hash reset), A6, A7 (e1–e12), A8 (idempotency incl. concurrent re-run per R8), A11, A12 (re-cycled artifact dir per R3), A13 (multi-persona +1 per D10), A14 (silent state retention per D8) | `tests/test-compute-persona-value.sh` + `tests/fixtures/cross-project/{proj-a,proj-b}/...` | T-CORE-* (all) | L | — | 2 |
+| **T-TEST-3** | `tests/test-allowlist.sh` — A10 normal: every JSONL row + every committed fixture validates against allowlist; canary scrub check on captured stderr | `tests/test-allowlist.sh` | T-SCHEMA-1, T-CORE-10, T-PRE-3 | S | Yes | 2 |
+| **T-TEST-4** | `tests/test-allowlist-inverted.sh` — M8: invokes validator against `leakage-fail.jsonl`, asserts non-zero exit AND stderr contains `additionalProperties` + offending field name; orchestrator invokes via `! ./tests/test-allowlist-inverted.sh` | `tests/test-allowlist-inverted.sh` | T-TEST-3 | S | Yes | 2 |
+| **T-TEST-5** | `tests/test-path-validation.sh` — Δ5: symlink escape, `..` segments, non-absolute config entries, per-project `.monsterflow-no-scan` opt-out, tilde-literal handling per project memory (R7) | `tests/test-path-validation.sh` | T-CORE-2 | M | Yes | 2 |
+| **T-TEST-6** | `tests/test-finding-id-salt.sh` — Δ3 + M7: same input + different salts → different IDs; salt file perms = 600; corruption recovery clears rankings; `O_CREAT \| O_EXCL` race | `tests/test-finding-id-salt.sh` | T-CORE-3 | M | Yes | 2 |
+| **T-TEST-7** | `tests/test-scan-confirmation.sh` — M6: non-tty refusal with self-diagnostic stderr message; pre-confirmed roots skip prompt; sentinel files exclude; `--confirm-scan-roots` non-interactive append idempotent | `tests/test-scan-confirmation.sh` | T-CORE-2 | M | Yes | 2 |
+| **T-TEST-8** | `tests/test-no-raw-print.sh` — Δ4 grep gate: ban literal `print(` and `sys.stderr.write(` in `scripts/compute-persona-value.py` (allow only `safe_log()`) | `tests/test-no-raw-print.sh` | T-CORE-12 | XS | Yes | 2 |
+| **T-TEST-9** | A12 dashboard recovery test: simulate salt corruption + regen; assert dashboard renders e12 fresh-install banner (NOT blank table or JS error) | `tests/test-dashboard-recovery.sh` | T-CORE-3, T-UI-2 | S | — | 2 |
+| **T-TEST-10** | Non-functional: `compute-persona-value.py` wall-time ≤5s on this machine's `~/.claude/projects/` (R5); soft-fail with warning, not hard-fail | `tests/test-compute-perf.sh` | T-CORE-* (all) | S | Yes | 2 |
+| **T-UI-1** | Update `dashboard/index.html` — add "Persona Insights" third top-level mode tab, wire `<script src="data/persona-insights-bundle.js">` | `dashboard/index.html` | T-CORE-10 | S | — | 3 |
+| **T-UI-2** | New `dashboard/persona-insights.js` — render hybrid (rankings + roster) merge; sortable columns (persona, gate, runs_in_window, run_state, judge_retention_ratio, downstream_survival_rate, uniqueness_rate, total_tokens, avg_tokens_per_invocation, last_seen, persona_content_hash, contributing_finding_ids collapsible); insufficient-sample cells render "—"; nulls always sort to bottom; deleted-persona strikethrough; "(never run)" rows; warning banner; orchestrator-overhead toggle for `<unknown>` rows (D4); cost-vs-value tooltip for the dual-window (review docs-clarity DC-05); column-header `aria-sort` + `role="columnheader"` (resolves gaps #8) | `dashboard/persona-insights.js` (NEW) | T-UI-1 | M | — | 3 |
+| **T-UI-3** | Empty-state + insufficient-sample-only banner: trigger fresh-install banner ("No data yet…") when zero rows; trigger second banner ("All current rows are insufficient sample — keep running gates") when rows exist but every row has `insufficient_sample: true` (resolves stakeholder conflict A11-vs-e12 in-between case) | `dashboard/persona-insights.js` | T-UI-2 | S | Yes (after T-UI-2) | 3 |
+| **T-WRAP-1** | Update `commands/wrap.md` Phase 1c: invoke `compute-persona-value.py` unconditionally; append "Persona insights" sub-section per spec format; surface `--scan-projects-root` hint when output telemetry shows `cwd:1, config:0, scan:0` (resolves stakeholder onboarding gap); cost ranking uses `avg_tokens_per_invocation` not totals; document `--confirm-scan-roots` for non-tty adopters | `commands/wrap.md` | T-CORE-10 | M | — | 3 |
+| **T-DOC-1** | Spec docs delta: codify D5 (full-rebuild contract), D6 (schema migration), D7/D8 (silent-state semantics), D9 (cost_window_size field), D10 (multi-persona +1 each), D11 (bullet regex), D13 (hash normalization) inline in spec.md as a "Build-time clarifications" section appended below §Acceptance Criteria — does NOT re-litigate; only pins ambiguities review surfaced | `docs/specs/token-economics/spec.md` | — | M | Yes | 3 |
+| **T-DOC-2** | New `docs/specs/token-economics/notes.md` per D16: support runbook (interpreting low scores, salt rotation, multi-machine semantics), persona-author posture statement, `--scan-projects-root` onboarding paragraph, Linux-untested disclaimer, v1.1-unblock criterion ("≥10 personas per gate have `runs_in_window ≥ 3` within 30 days"), `persona-metrics-validator` invocation procedure | `docs/specs/token-economics/notes.md` (NEW) | — | M | Yes | 3 |
+| **T-DOC-3** | `.gitignore` updates: add `dashboard/data/persona-rankings.jsonl`, `dashboard/data/persona-insights-bundle.js`; verify `tests/fixtures/persona-attribution/` is NOT ignored (committed) | `.gitignore` | T-CORE-10 | XS | Yes | 3 |
+| **T-DOC-4** | `~/.config/monsterflow/README.md` content: spec it now (resolves gaps #7) — write the literal one-liner here so install.sh can copy it later. Lives at `docs/specs/token-economics/config-readme.md` for now; install.sh wiring tracked in BACKLOG | `docs/specs/token-economics/config-readme.md` (NEW) | — | XS | Yes | 3 |
+| **T-WIRE-1** | Single-owner sequential post-step: wire all 10 new tests into `tests/run-tests.sh`; ensure `test-allowlist-inverted.sh` is invoked via inverted-exit shell shape (`! ./tests/test-allowlist-inverted.sh`); verify `bash tests/run-tests.sh` lists all 10 in output | `tests/run-tests.sh` | T-TEST-1..10 | S | — | 4 |
+| **T-VERIFY-1** | Manual smoke: run `compute-persona-value.py` once on this repo's cwd; verify `persona-rankings.jsonl` produced; load `dashboard/index.html` under `file://`; verify Persona Insights tab renders; run `/wrap-insights` and verify text section appears | n/a (verification) | T-WIRE-1, T-UI-3, T-WRAP-1 | S | — | 4 |
+| **T-VERIFY-2** | Invoke `persona-metrics-validator` subagent on the freshly emitted `persona-rankings.jsonl` (per spec §Integration "Subagents to invoke"); record verdict in PR | n/a (verification) | T-VERIFY-1 | XS | Yes | 4 |
 
-- **Should `compute-persona-value.py` modify `session-cost.py` (per spec) or import from it (per integration)?** Integration's lower-blast-radius argument wins: round-3 narrowing to artifact-directory aggregation removed the per-row attribution need. Recorded as Δ6.
-- **Telemetry line format** — spec says paths; security says counts-only. Security wins: paths leak project structure on a public repo. Counts-only in steady state; paths only in interactive confirmation prompt. Recorded as Δ4.
-- **Window start field** — spec persists `window_start_artifact_dir` (a path); security says drop or hash. Drop: only used for idempotency debug, redundant with `(persona, gate)` key. Recorded as Δ1.
-- **`last_seen` precision** — spec uses full ISO; security said truncate to hour for work-pattern privacy; Justin relaxed to minute (within-hour activity not a privacy concern; minute precision improves dashboard UX). Recorded as Δ2 (also renamed to `last_artifact_created_at` per api).
-- **Contributing finding ID hashing** — spec's "sha256-derived but not assumed unguessable" + security's "rainbow-table threat is real for targeted recon." Per-machine salt closes the threat at the cost of cross-machine ID stability (not a v1 use case). Recorded as Δ3.
-- **`--scan-projects-root` UX** — api wants flag-and-go; security wants confirmation. Security wins on a public release: friction-aligned with privacy risk. Non-tty refusal preserves automation. Recorded as Δ5.
-- **`run_state` surfacing in dashboard** — ux's badge-only-when-non-default approach beats api's first-class `Coverage` column proposal. Resolution: keep both — small `.badge` (dominant state) AND a `Coverage` column rendering `14/18 complete` from `run_state_counts`. ux's "no peer-rank by run_state" concern addressed by removing it from default sort.
-- **Three render surfaces** — spec previously had 3; round-3 cut bare-arg full-table. Wave 2 confirms 2 surfaces only (dashboard tab + `/wrap-insights` text section).
+---
 
-## Consolidated Verdict (post-/check, v1.2)
+## Wave Structure
 
-**Plan is ready for `/build`.** Spec v4.2 (Δ1–Δ6 + M1–M8 applied) and plan v1.2 (this file) are coherent. `/check` returned GO WITH FIXES; all 8 must-fix items applied inline above. 33 design recommendations clustered in `plan/findings.jsonl` (94% addressed by plan.md). 29 check findings clustered in `check/findings.jsonl` (M1–M8 = blockers; ~16 should-fix folded into task descriptions). Wave 0 starts with the Phase 0 spike (A1.5 forcing function) — see Wave 0 task 0.1.
+**Wave 0 — Pre-flight (sequential):** T-PRE-1 → T-PRE-2 → T-PRE-3, with T-SCHEMA-1 in parallel after T-PRE-1.
+- Gate: T-PRE-1 must pass before any Wave 1 task starts. If `session-cost.py` is not import-clean, the M1 strategy collapses and the spec must revise (escalate to user).
 
-**Confirmed plan hallucinations from /check + how they were caught:**
-- M1 `from session_cost import` was a planning hallucination — hyphenated filename can't bind via `sys.path`. Codex verified empirically; fixed via `importlib.util.spec_from_file_location`.
-- M2 `jsonschema.validate` was an undeclared dependency assumption — `python3 -c "import jsonschema"` fails on this machine. Fixed via stdlib allowlist validator.
+**Wave 1 — Core data layer (parallel where marked):** T-CORE-1 sequential first; then T-CORE-2 + T-CORE-3 + T-CORE-4 parallel; then T-CORE-5 + T-CORE-7 parallel (independent walkers); then T-CORE-6, T-CORE-8 dependent on walkers; then T-CORE-9, T-CORE-10, T-CORE-11–15 in dependency order shown.
+- Gate: T-CORE-10 produces a real `persona-rankings.jsonl` against this repo's cwd. Spot-check it is well-formed before Wave 2.
+- Use the `superpowers:dispatching-parallel-agents` discipline: each parallel agent owns its own files; no shared-file appends; no global git ops (per project memory `feedback_parallel_agents_shared_file_race.md`).
 
-The adversarial gate (Codex) catching what 5 primary reviewers missed is the established pattern at every step — `/spec-review` round 2 + 3 + `/check` all showed it. Worth memorializing as the reason Codex stays in the workflow.
+**Wave 2 — Tests (highly parallel):** All T-TEST-* run in parallel; each owns its own `tests/test-*.sh` file. T-TEST-9 waits for T-UI-2.
+- Thorough tests, not strict TDD (per project memory `feedback_testing.md`).
+
+**Wave 3 — UI + docs (parallel):** T-UI-1 → T-UI-2 → T-UI-3 sequential; T-WRAP-1, T-DOC-1, T-DOC-2, T-DOC-3, T-DOC-4 parallel with the UI chain.
+
+**Wave 4 — Wiring + verification (sequential):** T-WIRE-1 then T-VERIFY-1 then T-VERIFY-2.
+
+---
+
+## Dependency Graph (key edges)
+
+```
+T-PRE-1 ──┬─→ T-PRE-2 ─→ T-PRE-3 ──┐
+          │                          ├─→ T-CORE-1 ──┬─→ T-CORE-2 ──┐
+          └─→ T-SCHEMA-1 ────────────┘              ├─→ T-CORE-3 ──┤
+                                                    ├─→ T-CORE-4 ──┤
+                                                    │              ▼
+                                                    └─→ (consumed by T-CORE-5..15)
+
+T-CORE-5,7 ─→ T-CORE-6,8 ─→ T-CORE-9 ─→ T-CORE-10 ─→ T-CORE-11..15
+                                                ▼
+                                T-TEST-2..10  ─→  T-WIRE-1  ─→  T-VERIFY-1 → T-VERIFY-2
+                                T-UI-1 → T-UI-2 → T-UI-3 ────────┘
+                                T-WRAP-1 ────────────────────────┘
+```
+
+---
+
+## Open Questions
+
+1. **Spec Open Q1 — canonical token source.** Carried forward from spec; resolved at T-TEST-2 / A1.5. On A1.5 disagreement, build halts and `/plan` re-opens. (No action this plan.)
+
+2. **`scripts/session-cost.py` current state — is it import-clean today?** Unknown without inspection. T-PRE-1 answers in 5 minutes. If unclean, T-PRE-1's scope expands to include a `session-cost.py` refactor (CLI under `if __name__`); add ~30 min.
+
+3. **Linux support stance for the new scripts.** Spec says macOS-only; review (stakeholders) flagged that nothing in the design is intrinsically macOS-only. **Recommendation: keep macOS-only stance for v1 (the testing surface lives on Justin's machine), but add a one-line "should work on Linux but untested" note to T-DOC-2.**
+
+4. **Audit-trail for `--confirm-scan-roots` (gaps #12).** Recommendation: append `# added <ISO> by --confirm-scan-roots` comment header per line. Trivial; if user agrees, fold into T-CORE-2. Otherwise defer.
+
+5. **Persona-author public-ranking posture (stakeholders Critical Gap 1).** Plan addresses via T-DOC-2 (notes.md persona-author guidance). User may want stronger UI gating (e.g., hide bottom-3 entirely when `runs_in_window < 10`). **Recommendation: ship T-DOC-2 statement now; revisit UI gating after first 30 days of data.**
+
+6. **A1.6 unattributed-dispatch threshold (feasibility).** Recommendation: pin at 5% under default mode, 100% under `--best-effort`. Folded into T-CORE-6.
+
+7. **A1 wording — equality partition (feasibility).** Recommendation: reword A1 in T-DOC-1 as `sum(per_persona_tokens) + sum(unknown_tokens) + sum(orchestrator_tokens) == sum(usage rows from subagents/)`. Strict-equality moves to the partition, not the persona bucket.
+
+---
+
+## Risks (rolled up from spec risk analysis + plan synthesis)
+
+| # | Risk | Severity | Mitigation in plan |
+|---|------|----------|--------------------|
+| R1 | `session-cost.py` import side effects break compute script | High | T-PRE-1 (Phase 0.5 gate) |
+| R2 | Two-bundle dashboard refresh race | High | D1 single-bundle architecture; T-CORE-10 emits combined bundle |
+| R3 | Re-cycle artifact directory semantics undefined | Medium | T-TEST-2 fixture A12 pins behavior; T-DOC-1 documents |
+| R4 | Test orchestrator wiring gap (recurring pattern) | Medium | D15 single-owner sequential T-WIRE-1; explicit verification step |
+| R5 | `/wrap-insights` latency regression on accumulated history | Medium | T-TEST-10 wall-time check; cache short-circuit deferred to v1.1 if not needed at ship |
+| R6 | CC subagent format drift fixture freeze | Medium | T-CORE-6 runtime probe + stderr drift warning |
+| R7 | `scan-roots.confirmed` parsing fragility (tilde, BOM, comments) | Medium | T-CORE-2 mirrors salt-file robustness pattern; T-TEST-5 covers |
+| R8 | Concurrent `/wrap-insights` produces non-deterministic `contributing_finding_ids` | Low | T-CORE-9 sorts after truncation; T-TEST-2 A8 covers concurrent case |
+| R9 | `<unknown>` bucket biases rankings | Medium (added by plan synthesis) | D4 contract; UI hides by default |
+| R10 | v1 → v1.1 schema migration ambiguity | Medium (added by plan synthesis) | D6 + T-CORE-11 reader guard |
+| R11 | First-time `/wrap-insights` adopter sees only cwd, no path to cross-project | Medium (added by stakeholder review) | T-WRAP-1 surfaces `--scan-projects-root` hint when telemetry shows cwd-only |
+| R12 | Stakeholder: low-score persona looks broken to author | Medium | T-DOC-2 author-facing posture statement |
+| R13 | Plan adds Wave-3 doc tasks late; build agent skips them | Low | T-VERIFY-1 manual smoke includes loading dashboard + reading docs |
+
+---
+
+## Verification & Acceptance Mapping
+
+| Spec AC | Plan task(s) | Verification path |
+|---------|--------------|-------------------|
+| A0 | T-PRE-3, T-SCHEMA-1, T-TEST-1 | `bash tests/test-phase-0-artifact.sh` |
+| A1, A1.5 | T-CORE-5, T-TEST-2 | `bash tests/test-compute-persona-value.sh` (A1.5 fails build on disagreement) |
+| A2 | T-CORE-7, T-CORE-8, T-TEST-2 | rate columns ∈ [0,1] ∪ {null}; `run_state_counts` totals match |
+| A3 | T-CORE-2, T-TEST-2 + `tests/fixtures/cross-project/` | output JSONL contains data from both fixture roots |
+| A4 | T-CORE-9, T-TEST-2 | hash bumps; pre-edit IDs cleared from drill-down |
+| A5 | T-UI-1, T-UI-2, T-UI-3 | manual `file://` load |
+| A6 | T-WRAP-1 | `/wrap-insights` text contains "Persona insights..." block |
+| A7 | T-TEST-2 | e1–e12 + cascade + drill-down + soft-cap |
+| A8 | T-CORE-10, T-TEST-2 | byte-equal diff (mod `last_artifact_created_at`) |
+| A9 | T-DOC-3, T-TEST-3 | `git check-ignore` + allowlist |
+| A10 | T-TEST-3, T-TEST-4 | normal + inverted shapes |
+| A11 | T-CORE-7, T-TEST-2 | precondition: ≥1 source row exists |
+| A12 (added) | D6, T-CORE-11, T-TEST-9 | schema-version guard + dashboard recovery banner |
+| A13 (added) | D10, T-TEST-2 | multi-persona +1 each |
+| A14 (added) | D8, T-TEST-2 | silent state contributes (0,0) → null |
+
+---
+
+## Persistent Artifacts (this plan writes / triggers)
+
+- `docs/specs/token-economics/plan.md` (this file)
+- `docs/specs/token-economics/notes.md` (T-DOC-2, in build)
+- `docs/specs/token-economics/config-readme.md` (T-DOC-4, in build)
+- New scripts: `scripts/compute-persona-value.py`, `scripts/redact-persona-attribution-fixture.py`
+- New schema: `schemas/persona-rankings.allowlist.json`
+- New tests (10): see Wave 2 + T-VERIFY-1 invocation
+- Modified: `commands/wrap.md`, `dashboard/index.html`, `tests/run-tests.sh`, `.gitignore`, `docs/specs/token-economics/spec.md` (T-DOC-1 build-time clarifications appendix)
+- New dashboard module: `dashboard/persona-insights.js`
+- Generated (gitignored): `dashboard/data/persona-rankings.jsonl`, `dashboard/data/persona-insights-bundle.js`
+- Committed fixture: `tests/fixtures/persona-attribution/*.jsonl`, `tests/fixtures/cross-project/{proj-a,proj-b}/...`
+
+---
+
+## Approve to proceed to /check?
+
+Autonomous mode — written without approval gate; `/check` will validate this plan before `/build` consumes it.

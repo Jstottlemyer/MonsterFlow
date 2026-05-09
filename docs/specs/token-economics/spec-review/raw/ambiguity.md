@@ -1,88 +1,64 @@
-# Ambiguity Review — Round 3 (token-economics v3)
-
-**Reviewer:** ambiguity
-**Round:** 3
-**Spec:** `docs/specs/token-economics/spec.md` (revision 3, ready-for-plan)
-
-## Round-2 ambiguity items — closure check
-
-| R2 ambiguity | Status in v3 |
-|---|---|
-| Survival "body includes content from" undefined | **Closed.** v3 uses pure `personas[]` membership (`persona ∈ personas[]`); no body-substring matching anywhere. |
-| "Merge target" undefined | **Closed.** Concept dropped entirely; the two survival rates do not appeal to a "merge target". |
-| Within-run multi-dispatch counting | **Closed.** §Window + Counting unit both state explicitly: "Re-prompts within a single gate run share a tool_use_id and count as one." |
-| Jaccard scope | **Closed.** Uniqueness now uses `findings.jsonl.unique_to_persona` directly; no jaccard, no thresholds, no scope to argue about. |
-
-All four round-2 ambiguity blockers are genuinely resolved (not papered over). Round-3 ambiguity surface is **smaller** than round 2.
+# Ambiguity Analysis — token-economics v4.2
 
 ## Critical Gaps
 
-None.
+**1. Flag count contradiction in §Project Discovery / CLI surface (M5).**
+The paragraph header reads "**CLI surface (post-M5 fold): 5 flags total** — `--scan-projects-root`, `--confirm-scan-roots`, `--best-effort`, `--out`, `--dry-run`, `--explain`". That enumerates **6** flags, not 5. M8's table summary says "CLI now 5 flags + the new `--confirm-scan-roots` from M6 = 6 total." Build will hit this on day one (test for flag count, `--help` text, docs). Pick one count and fix prose, or two engineers will disagree on whether `--confirm-scan-roots` is part of the M5 cut or the M6 add.
+
+**2. Persona count: "28 pipeline personas" vs "27 default personas".**
+Frontmatter says `Session Roster: defaults-only (28 pipeline personas)`. Repo-level CLAUDE.md and user CLAUDE.md both say "27 default personas." A11's success criterion ("≥1 row per distinct (persona, gate) pair") and A5's "(never run)" rendering depend on the canonical roster count. Reconcile before build, or the roster sidecar emit will produce a count nobody can verify against expectations.
+
+**3. Cost-window cap is asserted in summary but never restated as a hard rule.**
+Summary says "cost metrics windowed over 45 most-recent observed Agent dispatches per (persona, gate)." The §Data row schema shows `cost_runs_in_window: 22` and `window_size: 45` but `window_size` is documented as the value-window cap. There is no explicit `cost_window_size` field and no explicit "the cost window also caps at 45" sentence in §Data or §Approach. Implementer could plausibly write an unbounded cost window. State explicitly: cost window cap = 45 dispatches per (persona, gate); add `cost_window_size: 45` to the schema OR reuse `window_size` and document that it governs both.
+
+**4. `silent` state requires `participation.jsonl`, but its presence is never made a precondition.**
+M4 silent state trigger reads "persona has `participation.jsonl` row with `status: ok` AND `findings_emitted: 0`." `participation.jsonl` is not listed in §Integration "Existing systems leveraged," and not in any acceptance criterion's preconditions. Behavior when `participation.jsonl` is missing or malformed is undefined — does the row fall through to `complete_value`? `malformed`? Get silently dropped? This decides whether legacy artifact directories (pre-persona-metrics-v0.2.0) get mis-bucketed as `complete_value` and pollute retention denominators with phantom-zero rows.
+
+**5. A1 vs A1.5 token-source contradiction.**
+A1 says "Per-persona cost = sum of subagent rows (exact equality)... `sum(per_persona_tokens across all gates) == sum(usage rows from subagents/agent-*.jsonl)` exactly." A1.5 says on agreement, parent annotation is canonical (cheap, used by `compute-persona-value.py`). If A1.5 passes (annotation == subagent sum), then A1 is satisfied trivially. If A1.5 fails, A1.5 fails the build first and A1 doesn't run. So A1's "exact equality" is either redundant or unreachable — there is no scenario where A1 fails but A1.5 passes. Clarify whether A1 reads the **output** column (`per_persona_tokens`) which uses `canonical_token_source()` (annotation on agreement) — that's the test that matters and the wording undersells it.
 
 ## Important Considerations
 
-### I1 — "All bullets" in raw/<persona>.md is *almost* unambiguous, with one residual edge
+**6. "Best-effort" is used as a load-bearing term without an operational definition.**
+Appears in: scope ("best-effort aggregate, no roster scaling"), e2 ("Best-effort window reset"), A4 ("best-effort"), `--best-effort` CLI flag (spike-failure abort threshold). Each usage has a different meaning: aggregate = artifact-directory granularity instead of dispatch; window reset = transient pre-edit data persists; CLI flag = downgrade A1.5 disagreement to warning. Define each at first use, or reviewers will conflate them.
 
-§Approach Phase 1 defines emitted as "lines starting with `- ` or `* ` under `## Critical Gaps`, `## Important Considerations`, `## Observations` headings". Two implementer questions remain:
+**7. "Transient" / "may persist" in e2 + A4 has no bound.**
+e2: "historical data may persist transiently in the window denominator until rolled out by 45 new invocations." Forty-five invocations on a low-traffic persona could mean months. Stakeholder reading the dashboard at week 2 will not understand why a persona's retention didn't reset after they edited the prompt. Either (a) state explicitly "ratios for edited personas are unreliable until the next 45 invocations replace the window," or (b) document a UI affordance (a `hash_changed_within_window: true` flag + dashboard tooltip).
 
-- **Nested / continuation lines:** a bullet that wraps across lines (continuation indented two spaces, or sub-bullets under a parent) — does the sub-bullet count as a separate emitted item, or as part of the parent? Personas regularly emit nested structure. Pick one (recommend: top-level bullets only — sub-bullets are elaboration of the parent finding).
-- **The `## Verdict` section:** the persona template ends with `### Verdict PASS/FAIL — one sentence rationale`. v3 explicitly excludes it by listing only the three section headings, but does not say *why* (it would inflate the denominator with a non-finding). One sentence in §Survival semantics confirming "Verdict line is not a finding and is excluded" would prevent a future implementer from "fixing" the omission.
+**8. "v1.1" vs "v1.1+" inconsistency for the per-dispatch join key.**
+M3 calls per-dispatch capture "v1.1+ scope." Backlog table calls #3 (account-type-agent-scaling) "committed v1.1 fast-follow." Open Question 3 says "v1.1+." Per-dispatch persona-content-hash is "v1.1+ scope" in §Out of scope but "Required for invocation-level metrics" in the backlog routing table. Reader can't tell whether per-dispatch capture lands in the immediate v1.1 or some later "v1.1+" wave. Pick "v1.1" or "v1.2" and stop using "+".
 
-Neither blocks `/plan`, but both will surface in the test fixture for A7.
+**9. `silent` state retention numerator semantics not test-asserted.**
+Table cell: "✓ (numerator = 0, denominator includes emitted bullets)." A persona that runs silently 10 times with 5 bullets each (50 emitted, 0 retained) gets `judge_retention_ratio = 0.0`. Is that the intended UX signal — "this persona is producing bullets that judge clusters into nothing"? Or should silent runs be excluded from retention entirely (the persona didn't "fail to retain," it ran but had nothing to say)? Plausible split between two engineers. A2 doesn't test the silent-with-bullets case explicitly.
 
-### I2 — Two survival denominators are distinguishable in prose, but the `0.404` example invites confusion
+**10. "Discovered MonsterFlow project" never defined.**
+Used 4×: in §Approach ("Walks `findings.jsonl`... across all discovered projects"), §Data ("most-recent 45 (persona, gate) artifact directories per persona-gate pair"), A11. Project Discovery cascade defines *how* to discover, but not *what counts*. Is a directory a MonsterFlow project iff `docs/specs/` exists? Iff `personas/` exists? Iff at least one `<gate>/findings.jsonl` exists? Cascade tier 3 says "walks `<dir>/*/docs/specs/`" — implies presence of `docs/specs/`. State explicitly: "a project root P qualifies iff `P/docs/specs/` exists and is a directory" (with symlink + permission edge cases).
 
-§Survival semantics names them clearly ("denominator = bullets emitted" vs "denominator = the persona's findings that survived Judge"). Good.
+**11. Downstream survival counting when `personas[]` has multiple entries.**
+"`downstream_survived_count = rows in survival.jsonl with outcome == addressed whose finding_id joins to findings.jsonl rows where persona ∈ personas[]`." A finding with `personas: [scope-discipline, edge-cases]` and `outcome: addressed` — does each persona get +1, or do they share +0.5, or only the `unique_to_persona` value gets credit? Likely +1 each (multi-persona findings reward all contributors), but two engineers could implement it differently. Single-sentence clarification needed.
 
-The schema example then shows `judge_survival_rate: 0.659` and `downstream_survival_rate: 0.404` side-by-side without a one-line annotation reminding the reader that the two rates have different denominators. An adopter eyeballing the dashboard will reasonably assume `downstream < judge` is "more was lost downstream" — but `downstream` could exceed `judge` mathematically (downstream is gated on judge-survivors, not on emitted bullets). Recommend adding a single inline comment in the JSONC block:
+**12. Deleted-persona strikethrough rows have no GC.**
+e7: "Rows for that persona remain in JSONL until window rolls out." But for a deleted persona, no new dispatches accumulate, so the window never rolls. Strikethrough rows live forever. Either document this explicitly (a TODO for v1.1 GC) or add a "drop rows where `persona_content_hash: null` AND `last_artifact_created_at` > 90 days" rule to compute-persona-value.py.
 
-```jsonc
-"judge_survival_rate": 0.659,           // total_judge_survived / total_emitted
-"downstream_survival_rate": 0.404,      // total_downstream_survived / total_judge_survived (NOT / total_emitted)
-```
-
-The formulas are already there; just bold the difference in denominator.
-
-### I3 — `outcome ∈ {addressed, kept}` is referenced but the schema citation is implicit
-
-§Approach and §Survival semantics both reference `outcome ∈ {addressed, kept}` from `survival.jsonl`. The spec says (§Integration → "Existing systems leveraged") that it depends on the persona-metrics `survival.jsonl` schema, but never inlines the canonical outcome enum. If `survival-classifier` emits `accepted` instead of `addressed`, or adds a third valid value (`partially_addressed`?), the rate silently misclassifies.
-
-Two acceptable fixes:
-- (a) Inline the full outcome enum here ("`addressed | kept | dropped | superseded`" or whatever the source defines).
-- (b) Cite the exact source file + heading: "per `docs/specs/persona-metrics/spec.md` §Survival outcomes, `outcome ∈ {addressed, kept}` are the survival-positive values".
-
-Currently the spec asserts a closed set without anchoring it. Important because a new outcome value could ship in persona-metrics and silently break this rate without any test catching it (A2 only asserts the rate is in `[0.0, 1.0] ∪ {null}`, not that the enum membership check is current).
-
-### I4 — null-rate composition with sorting is *named* but not fully specified for the mixed case
-
-e10/e11 say rate cells render as "—". A5 says "insufficient-sample rate cells render as '—' (not dimmed numbers)". Good.
-
-But: when a user clicks the column header to sort by `downstream_survival_rate` ascending, where do `null` rows land? Top? Bottom? Stable-sorted by persona name within the null group? Not specified. JS default behavior depends on the comparator and is famously inconsistent across browsers/libraries.
-
-Pick one (recommend: nulls always sort to bottom regardless of asc/desc, so they never claim the "best" or "worst" slot). Add to A5 or as a one-line addition to e10/e11.
+**13. M6 non-tty refusal: which `/wrap-insights` invocations have a TTY?**
+M6 lists tmux pipe-pane and `dev-session.sh` as non-tty examples. Justin's standard tmux session pipes the claude window to `~/.claude/session-logs/` (per CLAUDE.md). So `/wrap-insights` invoked from inside that pane likely has stdin redirected away from a TTY. Result: tier-3 scan silently skips on every `/wrap-insights` call until Justin learns to run `--confirm-scan-roots` from a fresh non-piped shell. This is documented as the failure mode but the spec says "without this Justin hits silent refusal day-one" — the spec acknowledges the problem but doesn't establish whether `--confirm-scan-roots` is documented in `commands/wrap.md` so adopters discover it before silent-refusal fatigue sets in. Worth a sentence in §Integration.
 
 ## Observations
 
-### O1 — "Jolly survival" → "judge survival" naming is consistent
+**14. "Date-minute" truncation phrasing (Δ2).** Standard term is "minute precision" or "second-truncated." "Date-minute" is unique to this spec. Cosmetic; rename for grep-ability.
 
-I checked for the kind of cross-section drift that bit round 2 (e.g., "post-Judge survival" in one place, "judge survival" in another). v3 uses `judge_survival_rate` and "judge survival" everywhere I looked. Good hygiene.
+**15. "Nulls always sort to bottom (always — locked)."** Doubled "always" is intentional emphasis but reads odd. Consider "Sort places null cells at the bottom regardless of sort direction (locked behavior, not user-toggleable)."
 
-### O2 — "Diff-stable allowlist" terminology
+**16. "Window: 45 (persona, gate) artifact directories" vs "global most-recent-by-`run.json.created_at` cap" in same section.** The "global" wording in §Approach reads as if 45 is a global cap, then "Window applies independently per (persona, gate)" clarifies. The two sentences should be merged or the word "global" struck — it's misleading.
 
-§Idempotency contract calls out "Diff-stable fields" with an explicit list. The phrase "allowlist" appears in the section title in spec line 199 (`### Idempotency contract (A8 spec)`) and in A8's "Diff-stable allowlist documented in §Idempotency contract." The list is the allowlist. Two engineers will not implement this differently. Closed.
+**17. A0 verification `tests/fixtures/persona-attribution/ exists with ≥1 .jsonl validating against schemas/persona-rankings.allowlist.json`.** The persona-attribution fixture is a *raw subagent transcript excerpt*; the allowlist schema is for `persona-rankings.jsonl` *output*. These are different shapes. Either A0's check is wrong (should validate against a separate `persona-attribution.allowlist.json`), or the same allowlist covers both — needs explicit statement. Easy fix; high risk of being implemented inconsistently.
 
-### O3 — "v1 stays static — no week-over-week deltas"
+**18. "First-column indent" bullet definition.** Markdown allows `- bullet` and `  - bullet` (continuation/nested) and ` - bullet` (one-space lead, still considered top-level by some renderers). Define the regex precisely: `^[-*] ` (zero leading whitespace, dash or star, single space). Otherwise persona authors who happen to put one space before `-` get their bullets silently dropped from `total_emitted`.
 
-Appears in §Approach Phase 2 and A6. Unambiguous (deltas are out of scope for v1). Just flagging that I checked.
+**19. M3 example row has `cost_runs_in_window: 22` and `runs_in_window: 18` — the example is internally consistent (cost > value) but doesn't show the case where value > cost.** Could happen if the cost window expired (≥ 45 dispatches dropped pre-Anthropic-format-change) but value window still has older directories. Worth a second example or one sentence: "Either window may exceed the other depending on retention of source data."
 
-### O4 — "Hybrid layer" terminology in §Scope
-
-§Scope says "hybrid layer; see UX". §UX defers to §Approach Phase 2 + §Data & State. The hybrid concept is fully specified by the time you finish §Approach Phase 2 (data-driven JSONL + render-time enrichment with current `personas/` files; e9 covers it). An implementer who reads top-to-bottom will not be confused. PASS.
-
-### O5 — "Most recent contributing run" for `last_seen`
-
-§Idempotency contract: `last_seen` is "sourced from `run.json.created_at` of most recent contributing run, NOT file mtime". Clear. The implementation question of *which* contributing run wins when two have the same timestamp is microscopic and not worth specifying.
+**20. "Refresh hook in `/wrap-insights` Phase 1c — **unconditional**".** "Unconditional" is ambiguous — does it mean "runs every invocation regardless of cost-budget gates" or "runs even on errors"? Both readings are coherent. Suspect the first; clarify.
 
 ## Verdict
 
-**PASS WITH NOTES.** Round-2 ambiguity blockers (4 of them) are all genuinely closed by structural changes, not by hand-waving. Round-3 ambiguity surface is materially smaller — I1–I4 are all "important considerations," none rise to critical-gap. The two highest-leverage fixes are I3 (inline or cite the `outcome` enum) and I4 (specify null sort position), both one-liners that should land in `/plan` not block it.
+**PASS WITH NOTES** — spec is unusually precise on data semantics (run-state machine, denominator transparency, idempotency contract) but has two genuine contradictions (CLI flag count, persona count) and one schema/fixture-shape ambiguity (A0 allowlist target) that two engineers will implement differently. Resolve gaps 1–5 before `/build`; gaps 6–13 are answerable in `/plan` design synthesis.

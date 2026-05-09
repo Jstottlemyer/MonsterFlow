@@ -1,109 +1,106 @@
-# Risk Check — Token Economics (v4.1 + plan.md)
-
-**Persona:** risk (check stage)
-**Verdict:** **PASS WITH NOTES** — Risk Register is solid for the engineering surface, but three public-release-week failure modes (interactive-confirm UX on first-try, salt-file mid-run corruption, content-hash best-effort wrong-attribution scope) deserve named entries before code lands.
+# Risk Assessment — token-economics v4.2 Plan
 
 ## Must Fix
 
-None. No blocker-class unknown that would invalidate the plan or the spec's correctness invariants.
+### MF-1 — A1.5 forcing function fires too late in build sequence
+- **persona:** risk
+- **severity:** major
+- **class:** architectural
+- **title:** A1.5 disagreement triggers mid-build rewrite, not a Phase 0.5 gate
 
-## Should Fix
+A1.5 (parent-annotation vs subagent-transcript token agreement) lives in `tests/test-compute-persona-value.sh` (Wave 2, T-TEST-2). On disagreement, the spec says the build fails and `/plan` re-opens Q1, switching `compute-persona-value.py` to subagent-canonical reads. By that point T-CORE-5 (Wave 1, sized "L") has already been written assuming parent-annotation canonical. This isn't a clean re-plan — it's a partial rewrite of the cost-side walker after ~15 Wave 1 tasks complete.
 
-### S1 — Interactive scan-confirmation flow has no Risk Register entry, and it's the most-likely-to-fail-on-first-try Δ
+**Fix:** Promote A1.5 to a Phase 0.5 probe (`tests/test-token-source-canonical.sh`) that runs against the existing redacted RedRabbit fixture *before* T-CORE-5 starts. Walls off the Q1 decision behind a 5-minute test; rest of Wave 1 builds against a known-canonical source. Add T-PRE-4 to plan.
 
-The plan's mitigation for "adopter `--scan-projects-root` includes client repos" cites decision #13 (interactive flow) + `.monsterflow-no-scan` + counts-only telemetry + A10 allowlist. But the **interactive flow itself** is novel code with several first-try failure modes:
+### MF-2 — Persona-regex extraction has no quantified match-rate AC
+- **persona:** risk
+- **severity:** major
+- **class:** tests
 
-- **TTY detection on macOS Terminal vs iTerm vs tmux vs cmux vs `script(1)` wrapper:** `sys.stdin.isatty()` returns False under tmux pipe-pane (which `dev-session.sh` uses for session logging — see user CLAUDE.md). If the adopter is running `compute-persona-value.py --scan-projects-root ~/Projects` inside a tmux window that pipes stdout to a logfile, `isatty()` may return False and the script will refuse — silently skipping with "scan-roots not confirmed." Adopter sees no data, can't tell why.
-- **`/wrap-insights` Phase 1c calls the script unconditionally and non-interactively** — the ONLY way an adopter ever gets cross-project data is if they run `compute-persona-value.py --scan-projects-root <dir>` manually first to populate `scan-roots.confirmed`. If the docs in `docs/persona-ranking.md` (Wave 3 task 3.7) don't make this OOBE crystal-clear, the feature ships dead-on-arrival for the Pro-friend's actual use case.
-- **`scan-roots.confirmed` append race** — two concurrent `--scan-projects-root` invocations (rare but possible if adopter scripts it) can interleave appends. File is single-line-per-root so corruption is unlikely, but worth a flock or `os.O_APPEND` note.
+T-CORE-5 hinges on regex-extracting `personas/<gate>/<name>.md` from `Agent.input.prompt`. T-CORE-6 (R6 mitigation) probes for ≥80% parseability of the *subagent layout*, but the persona-name regex inside the prompt is a *separate* failure mode. If Anthropic ever adjusts the dispatch prompt template (or a future MonsterFlow change introduces a new prompt shape), persona attribution silently degrades to `<unknown>` for all rows — the dashboard renders, the JSONL validates, but every value rate becomes meaningless.
 
-**Add to Risk Register:**
+**Fix:** Add A1.6 (already mentioned as Open Q #6 with 5%/100% threshold proposal) as a hard AC, not an open question. Bake into T-CORE-6: assert ≥95% of Agent dispatches whose prompts contain the literal substring `personas/` resolve to a non-`<unknown>` (persona, gate). Below threshold → `compute-persona-value.py` exits non-zero unless `--best-effort`.
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Interactive scan-confirmation refuses under tmux/cmux/log-piped stdin → adopter sees empty cross-project data with no signal | **Medium-High** for tmux users (Justin, default-roster adopters) | Medium (silent feature dead-on-arrival) | Document tmux gotcha in `docs/persona-ranking.md` 3.7 explicitly; add `--confirm-scan-roots` non-interactive flag for scripted bootstrapping; emit explicit `[persona-value] non-tty stdin; run \`compute-persona-value.py --confirm-scan-roots <dir>\` once interactively from a real terminal` message instead of the current counts-only line so the adopter can self-diagnose |
+### MF-3 — Salt corruption clears all drill-down history with no warn-and-pause path
+- **persona:** risk
+- **severity:** major
+- **class:** architectural
 
-### S2 — Salt file mid-run corruption / partial-write is unspecified
+T-CORE-3 says salt validation failure "regenerates the salt atomically AND clears `dashboard/data/persona-rankings.jsonl`." A user with 30 days of accumulated rankings loses every `contributing_finding_ids[]` continuity in a silent recovery (only stderr line). The motivation is honest (old IDs can't be reproduced from new salt), but a `cp ~/.config/monsterflow/finding-id-salt /tmp/oops` mishap is a one-keystroke data-loss event for the rankings JSONL.
 
-Δ3 says: "salt at `~/.config/monsterflow/finding-id-salt` (chmod 600, generated on first run)." Plan task 1.6 implements it. **What happens if the file exists but is zero bytes, truncated mid-write, or contains non-hex garbage** — e.g., the adopter ran `>` against it from a typo, or a previous interrupted run wrote 16 bytes of a 32-byte salt?
-
-Three concrete failure modes:
-- **Zero-byte salt:** if read as empty bytes, `sha256(b"" || normalized_signature)` becomes equivalent to a public hash → drill-down IDs are guessable (defeats Δ3's threat model).
-- **Truncated salt:** entropy drops silently from 256 to 64 bits without anyone noticing.
-- **Race between two concurrent first-runs** (e.g., `/wrap-insights` triggered twice while the adopter is also manually running `--list-projects`): both check "file missing," both write, last-writer wins → the first run's already-emitted IDs in `persona-rankings.jsonl` are now invalid against the surviving salt → next run produces a completely disjoint ID set, breaking drill-down continuity silently.
-
-The **worst-case wrong-attribution scenario:** the JSONL contains 45 windows of `contributing_finding_ids` salted with salt-A; salt rotates to salt-B; dashboard "Drill into finding sr-9a4b1c2d8e" returns nothing because no source finding now hashes to that ID. Adopter can't tell drill-down is broken — empty result looks indistinguishable from "no matching finding."
-
-**Add to Risk Register:**
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Salt file zero-byte / truncated / replaced mid-window → drill-down IDs become guessable (entropy collapse) or orphaned (wrong-attribution where IDs in JSONL no longer match anything regenerable) | Low (filesystem stability) but **non-zero on first-run race / adopter typo / disk-full** | Medium | Validate salt on read: assert `len(salt) == 32 and all bytes non-zero` else regenerate AND emit `safe_log("salt_regenerated")` AND clear all `contributing_finding_ids[]` from existing rows on next compute (rather than emitting a JSONL with stale-salt IDs alongside fresh-salt IDs); write salt via `tmp + os.replace` (atomic, same pattern as the JSONL itself); document in `docs/persona-ranking.md` 3.7 that drill-down continuity resets if salt regenerates |
-
-### S3 — "Best-effort" content-hash window reset (e2 + A4) — name the wrong-attribution scope
-
-Spec is honest that historical attribution is approximate, but the **worst-case wrong-attribution scenario** isn't quantified anywhere. Concretely: adopter rewrites `personas/check/risk.md` from "be skeptical" to "be lenient." For up to **44 invocations** (until the new content rolls the window), the dashboard shows `risk` with retention/survival/uniqueness numbers that are the **mixed average of the old skeptical persona and the new lenient persona**. A persona-author looking at "my new lenient prompt produces 0.73 retention" is reading a number that's 90% old-prompt data.
-
-This is what the spec calls "approximate." It's also what stakeholder-author personas would call "actively misleading for the first 6 weeks of usage." The risk isn't that the math is wrong — the risk is that the dashboard banner ("Persona scores reflect this machine's MonsterFlow runs only. Screenshots and copy-pastes share persona names + numbers — review before sharing publicly") **doesn't warn about temporal mixing across persona-content edits**.
-
-**Add to Risk Register OR amend dashboard banner copy:**
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Persona author edits prompt, then reads dashboard rates that are 90% pre-edit data for up to 44 invocations, draws wrong conclusion about their edit | Medium (any adopter who tunes a persona) | Medium (decisions made on stale-mixed data) | Extend dashboard tooltip on `persona_content_hash` cell: "Hash recently changed — current rates may include data from prior persona content. Window stabilizes after N more invocations." Compute N as `45 - count(post-edit rows in window)` once per-dispatch hash lands in v1.1; until then, surface a generic "Hash recently changed" badge whenever current `persona_content_hash` doesn't match the hash on the oldest row in window |
-
-### S4 — A1.5 disagreement calibration
-
-Plan rates "Low likelihood / High impact." Q1's preliminary evidence is one probe (RedRabbit fixture, 73 dispatches). **Calibration check:**
-
-- "Low likelihood" assumes the parent annotation format is stable across Anthropic SDK / model versions. The spec acknowledges this in A1.5 ("Permanent test catches future Anthropic format drift") — so the team already concedes drift is expected, not exceptional. That tension between "Low likelihood" in the register and "permanent test catches future drift" in A1.5 deserves resolution.
-- "High impact" is right: spec re-opens, `compute-persona-value.py` switches to subagent-canonical reads (more expensive walk), but `--best-effort` exists as escape hatch.
-- **What the Q1 probe might have missed:** the RedRabbit fixture is one user, one machine, one Claude Code version. If `total_tokens` annotation includes/excludes cache-read tokens differently from `usage` rows in `subagents/agent-<id>.jsonl`, agreement on the probe doesn't generalize. The **calibration is right for "format stability"** but **under-calibrated for "field semantics consistency across cache states / model versions / SDK versions."**
-
-**Recommend:** keep "Low/High" but re-run A1.5 against fixtures from at least one additional project + one additional Claude Code version before the public-release week ships. Cheap; reduces the unknown materially.
-
-### S5 — Two unaddressed survival classifier items: are these real gaps?
-
-Survival shows 31/33 design recommendations addressed; 2 unaddressed (memory ceiling note + `install.sh` deferral).
-
-- **Memory ceiling note:** Wave 1 task 1.3 says "mtime-pruned single-pass with substring pre-filter." Plan's risk register has "Heavy adopter (5 projects, 167 features) > 5s refresh — Medium/Low — mtime-prune brings 3-5s." That's runtime, not memory. **No row about memory** for adopters with, say, 5,000 session JSONLs (Q1 probe was 6427 lines; multiply by Justin's roughly 20 projects + a year of accumulation). Single-pass JSON parse with substring pre-filter is fine; what about the cumulative `parent_session_id → agentId → tokens` dict size? **Not bench-tested.** Likely fine (each entry is small) but unmeasured.
-- **`install.sh` deferral:** explicit "out of band" entry in plan §Out-of-band. This is a genuine deferral — the spec writes its own `~/.config/monsterflow/README.md` lazily-or-not (§Project Discovery says "Discoverable via stderr telemetry plus a one-line README at `~/.config/monsterflow/README.md` written by `install.sh` if absent (out of scope here; opens an issue in onboarding)"). Genuine deferral, but it leaves Δ4's debug env var (`MONSTERFLOW_DEBUG_PATHS=1`) discoverable only via the spec — adopters won't find it.
-
-**Recommend:** memory ceiling — accept as deferred (likely a non-issue; document if first heavy-adopter hits it). `install.sh` deferral — file the README issue NOW so the public-release-week adopter has the discoverability path even if the rewrite hasn't shipped.
-
-## Observations
-
-### O1 — Adopter-scale unknowns the plan hasn't bench-tested
-
-- **5,000 session JSONLs** — substring pre-filter performance unmeasured at this scale; mtime prune helps but assumes consistent mtime hygiene (some adopters touch-restore files during git ops, which would invalidate the prune). Acceptable risk; document.
-- **Broken parent-subagent linkage** — what if a subagent JSONL is missing entirely (Claude Code crash, user `rm`, partial sync from another machine via `~/.claude/projects/` rsync)? Pseudocode in §Cost attribution dereferences `subagent_jsonl` path but doesn't show the `FileNotFoundError` branch. Plan assumes "Q1 evidence says clean linkage." Worst case: A1.5 trips on a single missing subagent file in a 73-dispatch session and the whole compute aborts. Need explicit per-dispatch try/except with `safe_log("missing_subagent")` and skip that dispatch from cost only.
-- **Windows / NTFS path quirks** — spec says "Linux support out of scope" but Windows isn't explicitly excluded. Plan task 1.1 uses `Path.resolve()` which behaves differently on case-insensitive filesystems. If any adopter is on Windows (unlikely for the Pro-friend, possible for an open-source contributor), `validate_project_root()`'s "resolved path not under `$HOME`" check breaks because `$HOME` doesn't exist as an env var on Windows. Recommend: explicit "macOS only" assertion in `compute-persona-value.py` startup with friendly bail (`sys.exit("MonsterFlow currently supports macOS only; Linux/Windows tracked in BACKLOG")`). Spec already says macOS-only out of scope; make it enforced.
-
-### O2 — Public-release week: most likely "first 24 hours" failure modes
-
-In likelihood order:
-1. Adopter runs `--scan-projects-root` under tmux → silent skip, no data. (S1.)
-2. Adopter shares dashboard screenshot → persona names leak (warning banner present but easy to miss). Persona-author-exposure carryover — covered by warning banner; still the most-likely social-leakage vector.
-3. Adopter doesn't run `/wrap-insights` for 14+ days → stale-cache banner fires (e6) — graceful, not a defect.
-4. Adopter on cold first-run sees 30-60s wait with no progress indicator → assumes hang, kills it. **Not in Risk Register.** Recommend stderr progress line every N projects walked.
-
-### O3 — A1.5 escape hatch and `--best-effort` semantics interact
-
-A1.5 disagreement aborts; `--best-effort` downgrades to warning. Plan task 1.4 says "exits non-zero unless `--best-effort`." Then `commands/wrap.md` Phase 1c invokes `compute-persona-value.py` unconditionally — **does it pass `--best-effort` or not?** If yes, `/wrap-insights` silently absorbs A1.5 disagreements and the forcing function never fires for end-users. If no, A1.5 disagreement on any production session crashes `/wrap-insights`. Plan doesn't say. **Pick one and document.** (Recommend: `/wrap-insights` does NOT pass `--best-effort`; failure is loud; adopter must explicitly run with `--best-effort` to suppress.)
-
-### O4 — Pre-commit hook (Wave 3 task 3.6) is the right shape but adopter-installable opt-in
-
-The pre-commit hook catches `git add -f dashboard/data/persona-rankings.jsonl` snapshot-sharing (the "Medium-likelihood / Low-impact" Risk Register entry). Right shape. But it's **opt-in and post-merge** — public-release-week adopters won't have it installed when they first try to share a snapshot. Allowlist enforcement on the file content is the actual safety net (which is correct). Minor observation: surface the install command in the dashboard's privacy banner copy ("To prevent accidental commit, run `bash scripts/install-precommit-hooks.sh`").
-
-### O5 — Genuine strengths of the Risk Register
-
-- A1.5 escape hatch is real and named.
-- `.monsterflow-no-scan` sentinel + interactive confirmation + counts-only telemetry stack three independent privacy gates — defense in depth.
-- "Salt file leaks → IDs guessable" is acknowledged; impact rated correctly (single-machine, regenerable).
-- "Persona-name regex breaks under `/autorun`" is exactly the kind of integration risk that often gets missed.
-
-The 9 entries cover the engineering surface well. The 3 additions (S1, S2, S3) close public-release-week-specific gaps; S4 + S5 + O3 are calibration / documentation tightenings, not new risks.
+**Fix:** Default to **warn-and-refuse**: print stderr `[persona-value] salt file invalid; refusing to clear rankings. Pass --accept-salt-reset to regenerate (drill-down IDs will be discontinuous).` and exit non-zero. Require explicit `--accept-salt-reset` flag for the destructive path. Add to T-TEST-6.
 
 ---
 
-**Bet against the plan:** First production use-case will be Justin running `compute-persona-value.py --scan-projects-root ~/Projects` from his existing tmux session. `isatty()` returns False, script silently refuses, "Persona Insights" tab renders only cwd data. He'll spend 20 minutes debugging before finding the non-tty refusal log line. Fix S1 before ship.
+## Should Fix
+
+### SF-1 — T-PRE-1 refactor estimate ignores potential callers of `session-cost.py`
+- **persona:** risk
+- **severity:** minor
+- **class:** documentation
+
+If `session-cost.py` is not import-clean (Open Q #2), T-PRE-1 expands to "put CLI under `if __name__ == '__main__':`" with a +30 min estimate. But that script may have other consumers (other tests, hooks, manual `python3 scripts/session-cost.py …` invocations in `commands/wrap.md`). A naïve refactor could break them.
+
+**Fix:** Pre-task: `grep -rn 'session-cost\.py\|session_cost\b' commands/ scripts/ tests/ .claude/` to enumerate callers before refactoring; document required signature stability in T-DOC-1.
+
+### SF-2 — T-TEST-10 wall-time gate soft-fails forever
+- **persona:** risk
+- **severity:** minor
+- **class:** tests
+
+R5 mitigation: ≤5s on this machine, "soft-fail with warning, not hard-fail." After 6 months of accumulated history `compute-persona-value.py` could take 30s and the gate keeps logging warnings nobody reads, making `/wrap-insights` user-hostile.
+
+**Fix:** Hard-fail at 10s ceiling; warn at 5s. Cache short-circuit (currently "deferred to v1.1") becomes a forced v1 task if hard-fail trips on this machine's current `~/.claude/projects/` size.
+
+### SF-3 — `--explain` TTY gate has no test
+- **persona:** risk
+- **severity:** minor
+- **class:** tests
+
+D3 specifies non-TTY refusal (so finding titles never land in piped logs). No T-TEST-* covers the gate. A regression that drops the TTY check exfiltrates plaintext finding titles via tmux pipe-pane logs (project memory: that pipe is on by default).
+
+**Fix:** Add T-TEST-11 `tests/test-explain-tty-gate.sh`: assert non-zero exit + zero stdout + specific stderr message when stdin is non-TTY.
+
+### SF-4 — `validate_project_root()` contract not specified
+- **persona:** risk
+- **severity:** minor
+- **class:** contract
+
+T-CORE-2 references the function; T-TEST-5 lists the cases (symlink escape, `..` segments, non-absolute, sentinel) but no AC pins inputs/outputs. Implementor will guess; reviewer can't tell whether "rejected" means exit-1 vs warn-and-skip vs raise.
+
+**Fix:** Codify in T-DOC-1: function signature, exception type, log shape on each rejection class.
+
+### SF-5 — No v1.0.x in-version corrective-regen path
+- **persona:** risk
+- **severity:** minor
+- **class:** documentation
+
+D6 covers v1 → v1.1 ("`rm` before upgrade") but not v1.0.0 → v1.0.1 if a v1 bug requires a corrective regeneration. T-CORE-11 schema-version guard treats only `schema_version != 1` as cache miss. A v1.0.1 hot-fix that needs to invalidate v1.0.0 outputs has no clean lever.
+
+**Fix:** Add a `regeneration_token` field at top of bundle; bumping it forces full rebuild. Document in T-DOC-1.
+
+### SF-6 — Open Q #5 (persona-author public-ranking posture) deferred to "30 days from now"
+- **persona:** risk
+- **severity:** minor
+- **class:** scope-cuts
+
+The plan's recommendation is to ship T-DOC-2 statement and revisit UI gating after 30 days of data. But this is a *public-release repo*; persona-author exposure is highest-risk on day 1 (everybody who clones runs the dashboard immediately). A bottom-3 list calling out a contributor's persona by name on first run is the highest blast-radius UX outcome of this whole spec.
+
+**Fix:** Add a defensive default: hide bottom-3 unless `runs_in_window ≥ 10` — easy to relax later, hard to retract a screenshot. Bake into T-UI-2 + T-WRAP-1 now.
+
+---
+
+## Notes
+
+- The plan acknowledges 13 risks (R1–R13) and threads each into a specific task — unusually thorough. The 3 Must Fix items above are tightening specific behaviors, not flagging architectural problems.
+- D1 (single-bundle dashboard) is the correct call; the two-file refresh race in the original spec was a real footgun.
+- D5 (full-rebuild contract) is correct but should be wall-time-benchmarked on a multi-month dataset before ship — T-TEST-10 is the right hook, but 5s on *today's* `~/.claude/projects/` is not the same as 5s on month 6.
+- The spec's repeated reference to "best-effort artifact-directory aggregation" + the plan's matching D-list shows good plan↔spec alignment. Codex round-3 review of the plan against the live codebase (per project memory `feedback_codex_catches_plan_vs_reality_drift.md`) is recommended before `/build` consumes this.
+- Multi-machine sync ("machine-local v1") is honestly documented, but adopters running tmux session logs across SSH or syncing dotfiles via `chezmoi`/`stow` may not realize the JSONL is gitignored. T-DOC-2 should call this out explicitly.
+- Open Q #2 (is `session-cost.py` import-clean today?) is answerable in 2 minutes; running T-PRE-1 *before* `/check` finalizes would convert one open question to a known fact.
+
+---
+
+## Verdict: **PASS WITH NOTES**
+
+Plan is structurally sound, well-decomposed, and honestly enumerates its own risks. Must Fix items tighten three risk-handling behaviors (A1.5 timing, persona-regex match-rate AC, salt-corruption recovery default) without re-opening MVP scope. None blocks `/build`; all are inline edits to the plan + ~3 small task additions.

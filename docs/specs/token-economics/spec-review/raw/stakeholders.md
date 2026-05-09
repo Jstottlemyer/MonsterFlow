@@ -1,73 +1,39 @@
-# Stakeholder Analysis — token-economics spec v3 (round 3)
-
-**Reviewer:** stakeholders
-**Round:** 3
-**Lens:** who's affected, who's missing, where needs conflict
+# Stakeholder Analysis Review — token-economics v4.2
 
 ## Critical Gaps
 
-(none)
+- **Persona authors as data subjects are unrepresented.** The spec treats personas as roster entries but a persona has a human author (in MonsterFlow defaults: Justin; in adopter forks: anyone who edits/adds a persona). The dashboard renders "highest/lowest" rankings per persona by name, and the warning banner only addresses *adopters who screenshot*. Nothing addresses *the persona author whose work shows up bottom-3 in someone else's screenshot*. For a public-release repo accepting persona PRs, this is a contributor-ranking surface and the spec doesn't say so. Add: who owns persona-quality narratives, and what's the contributor-facing message when "your persona ranks low on judge-retention."
 
-No stakeholder is unrepresented at a blocker level. The four round-2 important findings are all addressed at the spec-text level, and the new public-release stakeholder cohort is at least named in the Privacy section. Nothing here would block `/plan`.
+- **The motivating stakeholder (Pro-tier friend) gets nothing in v1.** Spec opens with "Pro-tier relief comes in v1.1 (BACKLOG #3) immediately after this lands." The person whose pain motivated the work ships measurement only — no cost reduction. There's no commitment in the spec on what "immediately after" means (1 week? 1 month? after ≥10 validated runs — which could be slow on a single user). The "≥10 validated runs" gate could leave the friend on Pro indefinitely if they're not the one accumulating runs. Add an explicit timeline or a fallback (e.g., if 10 runs not reached in 30 days, revisit BACKLOG #3 unblocked).
+
+- **Customer-support / triage path missing.** First adopter question after this ships: "my persona is bottom-3 on every gate — is it broken, or is the metric noise?" There's no documented path from a low score to a diagnosis. The dashboard shows numbers, the wrap-insights text shows top/bottom 3, but no runbook ("low judge-retention with high uniqueness usually means…", "if downstream-survival is null and runs ≥3, check survival.jsonl freshness"). Spec assumes adopters self-interpret; given the ratios are statistically tricky (compression vs survival, machine-local windows, content-hash transients), this is optimistic.
 
 ## Important Considerations
 
-### 1. Persona-author exposure via the rendered dashboard (round-2 carryover, only partially fixed)
+- **Non-tty adopters beyond Justin.** M6 added `--confirm-scan-roots` because Justin's tmux pipe-pane defeats the prompt. Other adopters running under CI, cron, `nohup`, or the `/autorun` scheduled-agent path hit the same wall. The stderr message is good, but installing adopters won't see it on first `/wrap-insights` until they trip it. Consider surfacing this in `install.sh` post-install banner or in `commands/wrap.md` itself ("if you run /wrap-insights from a non-interactive context, see…").
 
-Round 2 flagged that personas with low judge_survival/downstream-survival become identifiable as "weak contributors." v3's response is correct as far as it goes — `persona-rankings.jsonl` is gitignored (A9), and the leakage canary (A10) prevents finding text from leaking. But the rendered surface is not just the JSONL — it's `dashboard/index.html` reading that JSONL into a sortable, sharable table, and the `/wrap-insights` text section that prints "highest" / "lowest" / "never run" lists.
+- **Linux adopters silently excluded.** Out-of-scope says "Linux support for new scripts (macOS-only)." MonsterFlow's audience isn't documented as macOS-only elsewhere — `os.replace` is cross-platform, the cascade is POSIX, the dashboard is `file://`-loadable everywhere. What specifically is macOS-only? If nothing is, drop the exclusion. If something is (e.g., `~/.claude/projects/` path discovery on Linux Claude Code), name it so Linux adopters know what to fork.
 
-Concrete leak vectors v3 does NOT close:
-- Adopter screenshots the Persona Insights tab and posts it (Discord, Twitter, blog post on "what I learned running MonsterFlow"). Persona names + survival rates + cost ranks are now public, attached to whoever wrote those personas.
-- Adopter pastes the `/wrap-insights` output into a GitHub issue ("hey, why is my `cost-and-quotas` persona at 12%?"). Same leak, with an audit trail.
-- A persona contributor whose persona shows "never run" or "12% downstream-survival" in someone else's public screenshot has no recourse — they didn't consent to the comparison being public.
+- **Dashboard mental-model shift unaddressed.** Adding a third top-level mode tab ("Persona Insights") changes the dashboard from a single-pane view to a multi-mode tool. Existing dashboard users (who's the population?) get a UI re-org without notice. If the dashboard has any active users beyond Justin, they need a one-line changelog entry. If the population is "Justin only," say so and we can drop this concern.
 
-The Privacy section lists three gates but all three are about the *files on disk*, not the *rendered output*. Suggest one of:
-- A doc note in `commands/wrap.md` and on the dashboard tab itself: "These numbers are about your local pipeline, not about persona quality — share with care." (cheapest)
-- An opt-in flag in `~/.config/monsterflow/dashboard.json` to anonymize persona names in the rendered tab (`reviewer-A`, `reviewer-B`) — keeps local debugging signal, removes the share-the-screenshot leak. (medium)
-- Strip the named bottom-3 list from `/wrap-insights` text entirely; keep top-3 only. (cheapest behavioral change, biggest signal loss)
+- **Conflict: privacy strictness vs debuggability.** Counts-only telemetry (Δ4) plus salted finding IDs (Δ3) plus stderr scrubbing (privacy gate 3) means when a real adopter hits a bug ("my row counts look wrong"), they can't share logs with you without the `MONSTERFLOW_DEBUG_PATHS=1` ritual. Consider a `--diagnostic-bundle` flag that produces a redacted-but-shareable artifact deliberately, so support tickets have a path that doesn't require adopters to know about a hidden env var.
 
-This is round-2 finding #2 partially-addressed, not fully-addressed.
+- **Persona-metrics-validator subagent owner.** Spec says "invoke `persona-metrics-validator` after first `/wrap-insights` run that produces `persona-rankings.jsonl`." Who is "the invoker"? If this is meant to be automatic, it's not wired. If it's manual, the build instruction needs to say where in the pipeline that invocation lives (post-merge? at /preship? in commands/wrap.md Phase 1c after the compute step?).
 
-### 2. Adopter-with-private-projects consent is buried
-
-The Privacy section says `compute-persona-value.py` will read `findings.jsonl` from any project Project Discovery finds — "including private ones (Luna's, career)." Two adopter-side stakeholder problems:
-
-- Auto-discovery default scans `~/Projects/*/docs/specs/`. An adopter who runs `/spec` in `~/Projects/client-acme-confidential/` has no way to know their findings are now flowing into the cross-project aggregate until after the first `/wrap-insights` run. The consent moment is invisible.
-- The escape hatch (explicit config in `~/.config/monsterflow/projects`) only helps adopters who *already know* about the cascade. The default behavior is opt-out, not opt-in.
-
-Suggest: on first run of `compute-persona-value.py` (no `~/.config/monsterflow/projects` file present and >1 project discovered), print a one-time banner listing the discovered projects and the path to the config file for exclusion. Persist a `~/.config/monsterflow/.discovery-acknowledged` sentinel so it doesn't nag. This is the single highest-leverage change for the adopter-trust dimension.
-
-### 3. Pro-tier-friend commitment language is good but unenforceable
-
-The new Summary line — "Pro-tier relief comes in v1.1 (BACKLOG #3) immediately after this lands" — addresses the round-2 "Pro-friend orphaned" finding at the *language* level. As stakeholder representation it works: the friend is named, the commitment is in the spec, the routing table backs it up.
-
-What's missing for enforceability: there's no acceptance criterion or BACKLOG.md cross-link saying "v1.1 spec exists in `docs/specs/account-type-scaling/` within N weeks of v1 merge" or "BACKLOG #3 promoted to a spec on the same calendar week as v1 ships." Without that, "immediately after" has the same enforcement profile as the v2 spec's "future work" — i.e., none. Suggest adding an A12 outcome criterion: "Within 14 days of v1 merge, `docs/specs/account-type-scaling/spec.md` exists with status ∈ {draft, ready-for-plan, ready-for-build}." Self-imposed deadline; verifiable.
-
-### 4. New persona contributor onboarding (new in round 3)
-
-Public release means PRs adding new personas to `personas/{review,plan,check}/`. The spec handles the data side correctly (e9: "(never run)" rows; A4: content-hash window reset). But the *contributor* stakeholder has no doc:
-
-- A contributor who adds `personas/review/api-design.md` will see their persona in the dashboard immediately as "(never run)" — fine for accuracy, possibly confusing for them ("did I install it wrong?").
-- Once their persona starts accumulating runs, `runs_in_window < 3` → rate cells render as "—". They have no signpost telling them "this is normal for the first 3 runs; not a bug."
-- Worst case: a contributor adds a persona, runs it 5 times locally, sees a 20% downstream-survival rate, concludes their persona is "bad" and deletes the PR — when the real signal is "5 runs is too small a sample on one project."
-
-Suggest: a paragraph in `commands/wrap.md` (or a `personas/CONTRIBUTING.md` if one exists) explaining the data lifecycle: insufficient-sample for the first 3 runs → rates appear → window stabilizes after ~45 runs → don't draw conclusions before then. Cheap; one paragraph. Closes the contributor-feedback loop the spec otherwise leaves open.
+- **Conflict: A11 outcome bar vs e12 fresh-install reality.** A11 requires "at least one source row exists" and e12 covers zero-data. But the in-between case — adopter who has run `/spec-review` once, has 1 finding, no `/plan` yet, no `/check` yet — produces a row with `runs_in_window: 1`, `insufficient_sample: true`, all rates rendered "—". Adopter sees a dashboard that looks broken. Banner copy ("No data yet…") doesn't trigger because data does exist; it's just unrenderable. Add a second banner or merge the e12 banner condition to also fire when all rows are insufficient-sample.
 
 ## Observations
 
-- **Insufficient-sample fix (round-2 finding #4) is fully resolved.** Rendering rate cells as "—" rather than opacity-dimmed numbers does fix the sort-surface bug — a sortable column whose underlying value is the string "—" sorts as either all-low or all-high depending on collation, and either way the 1-run "100%" row no longer appears at the top of a numeric sort. e1 + A5 lock this in. From a stakeholder lens (newcomers / over-eager pruners) this is the right fix. PASS.
-- **Single-consumer dashboard tab (round-2 finding #3) is moot per the public release.** Once dozens of adopters render the tab, "single consumer" disappears as a concern. The spec handles this implicitly by shipping the tab in v1; no further action needed.
-- **Hybrid dashboard (data + roster file merge) helps the adopter-with-empty-data stakeholder.** A fresh-clone adopter sees all 28 personas as "(never run)" rows immediately — they understand the system has a roster even before they've run anything. Good UX choice for the public-release cohort.
-- **The leakage canary (A10) is well-designed.** Asserting `LEAKAGE_CANARY_DO_NOT_PERSIST_xyz123` does NOT appear in the output JSONL is exactly the right shape of test for "does the privacy contract hold under any input." The added scan for `prompt|body|text|content` field-name patterns in the fixtures dir is a nice belt-and-suspenders.
-- **No stakeholder conflict identified between adopters and the original Pro-tier friend.** Public release does not erode the "Pro relief in v1.1" commitment; it slightly strengthens it (more eyes asking "where's that spec?").
+- **Persona-prompt-author churn signal lost.** Best-effort content-hash reset (A4, e2) is honest about transient pre-edit residue, but if a persona author iterates rapidly during a `/spec` cycle, their score is noise for ~45 invocations. Worth a one-liner in the dashboard tooltip: "score may include pre-edit data for ~45 runs after persona changes."
 
-## Round-3 vs round-2 stakeholder concerns: shrank
+- **Onboarding stakeholder underserved.** Cascade tier 2 config file is created lazily — adopter must read `docs/specs/token-economics/spec.md` §Project Discovery to know it exists. `install.sh` writing a one-line README at `~/.config/monsterflow/README.md` is mentioned as "out of scope here; opens an issue in onboarding." File the issue in this spec's wake explicitly so it doesn't drop. Onboarding (BACKLOG #2) is named as separate but this is a concrete onboarding-debt item.
 
-Round 2: 4 important findings (Pro-friend orphaned, persona-author exposure, single-consumer dashboard tab, insufficient-sample sort-surface bug).
-Round 3: 4 important findings, but only one (#1, persona-author exposure) is a genuine carryover and even it is partially addressed. #2–#4 are net-new stakeholder cohorts surfaced by the public-release pivot, not regressions. The other three round-2 findings are resolved (Pro-friend in commitment language; single-consumer moot; insufficient-sample fixed properly).
+- **Multi-machine adopter conflict ack'd but not signposted.** "Cross-machine aggregation is OUT OF SCOPE for v1 — adopters running MonsterFlow on multiple machines see machine-local data on each." Good. Where does this surface to a multi-machine user before they're confused? Suggest: dashboard banner shows the machine hostname and a one-liner ("data is machine-local; other machines maintain separate windows").
 
-Direction of travel is healthy. None of the round-3 findings rise to blocker.
+- **Notification needs at launch:** existing dashboard users (banner change), persona-PR contributors (new ranking surface), `/wrap-insights` users (new sub-section format), Linux adopters (macOS-only call-out). None of these are currently in a "launch comms" list because there isn't one. For a spec that adds adopter-visible UI surfaces, a 3-bullet "what changes for whom" should sit near the spec's status field.
+
+- **The "never run this window" rendering is a silent contributor-shaming surface.** Dashboard renders deleted personas as strikethrough, "(never run)" personas as a separate row, and bottom-3 rankings name personas explicitly. For a public-release dashboard, all three states tell a story about persona authors. Consider whether "(never run)" should be silenced or surfaced only behind a flag — if a persona is in roster but no one's invoking it, that's roster-design feedback for Justin, not necessarily a public ranking.
 
 ## Verdict
 
-**PASS WITH NOTES** — all round-2 stakeholder findings are addressed (#2 partially, #1/#3/#4 fully); the new public-release stakeholder cohort is named in Privacy but adopter-consent and persona-author-exposure-via-rendered-output deserve the cheap mitigations listed above before public announcement, not before `/plan`.
+**PASS WITH NOTES** — stakeholder coverage is strong on adopter privacy and operator (Justin) ergonomics, but persona authors as a stakeholder class are missing, the motivating Pro-tier user gets no v1 value with no concrete v1.1 timeline, and there's no support runbook for the most likely first adopter question. None block build; all should be addressed in launch comms or a docs follow-up before the public-release sticker goes on.

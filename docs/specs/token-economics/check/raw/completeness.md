@@ -1,55 +1,36 @@
-# Completeness Check — Token Economics
+# Plan Completeness Review — token-economics v4.2
 
-**Verdict:** PASS WITH NOTES — the plan covers every spec requirement structurally, but two acceptance criteria (A1, A8) are implemented in Wave 1 without an explicit Wave 3 verification task, leaving their pass/fail signal implicit.
+## Must Fix
 
-## Must Fix (blocks /build)
+None. All 11 spec ACs (A0–A11) plus the 3 plan-added ACs (A12–A14) have explicit task mappings, fixtures are planned, and the wave structure respects the parallel-agent shared-file rules from project memory.
 
-None. Every spec requirement, edge case, delta, and "Files created" entry has at least one wave task that produces or covers it. The two gaps below are verification-binding gaps, not coverage gaps — they should be fixed but they don't block the engine from being built; they make /check-on-build harder.
+## Should Fix
 
-## Should Fix (important but not blocking)
+1. **e6 stale-cache banner (14+ days) not explicitly enumerated in T-UI-2.** Spec §Edge Cases e6 requires "Dashboard shows stale-cache banner with last refresh timestamp." T-UI-2 lists multiple banners (warning banner, fresh-install banner, insufficient-sample banner via T-UI-3) but does not call out the 14-day stale-cache banner. Without it, e6 ships unverified. Either add to T-UI-2's enumeration or carve as T-UI-4. A7 (e1–e12 coverage) only tests the data-layer side; the UI surface for e6 has no dedicated check.
 
-### S1. A1 has no explicit Wave 3 verification task
-A1 ("per-persona cost = sum of subagent rows, exact equality") is the headline cost-attribution invariant. Wave 1 task 1.3 builds the cost walk and 1.4 covers A1.5 (parent-vs-subagent agreement check), but Wave 3 task 3.1 only enumerates A2, A3, A4, A7, A11. A1's "sum(per_persona_tokens across all gates) == sum(usage rows from subagents/agent-*.jsonl)" assertion isn't bound to any named test file.
+2. **`MONSTERFLOW_DEBUG_PATHS=1` env-var path-logging behavior unassigned.** Spec §Project Discovery (Δ4) mandates: paths emitted only behind this env var, logged to `~/.cache/monsterflow/debug.log`. No task in T-CORE-1..15 explicitly owns this implementation, and no test in T-TEST-1..10 verifies the gating. Suggest folding into T-CORE-12 (telemetry) and adding an assertion in T-TEST-8 or a dedicated case in T-TEST-7.
 
-**Fix:** add A1 to task 3.1's enumeration (it's the same `tests/test-compute-persona-value.sh` file), or fold it into task 1.4 explicitly. One-line plan edit.
+3. **Counts-only stderr telemetry format not verified by any test.** Spec Δ4 pins the literal format `[persona-value] discovered N projects (sources: cwd:1, config:M, scan:K)`. T-TEST-8 grep-bans raw `print()`/`sys.stderr.write()` (discipline), but no test asserts the literal one-line format renders correctly under each cascade tier. Without this, Δ4 regresses silently. Add a single assertion to T-TEST-7 (it already exercises cascade flows).
 
-### S2. A8 idempotent-refresh has no explicit verification task
-Task 1.8 implements the mechanics (`sort_keys=True`, `round(x, 6)`, sorted `contributing_finding_ids[]`, atomic write), and §Idempotency contract names the diff-stable allowlist — but no Wave 3 task runs `compute-persona-value.py` twice and asserts byte-for-byte equality (excluding `last_artifact_created_at`). A8 is the only acceptance criterion in the spec without a named test owner in the plan.
+4. **`/wrap-insights` Phase 1c rendered-format match has no automated check.** T-WRAP-1 modifies `commands/wrap.md` and A6 verifies "output includes 'Persona insights (last 45 …)' …" but no test in Wave 2 captures `/wrap-insights` text-section output and asserts the top/bottom-3-per-gate-per-dimension structure. T-VERIFY-1 covers this manually only. For a deterministic gate, consider a fixture-driven test that runs the rendering function (refactored out of `wrap.md` into a Python helper if needed) and asserts shape.
 
-**Fix:** add a small task 3.x ("run engine twice on identical fixture data, diff outputs excluding `last_artifact_created_at`, assert empty diff") or fold into 3.1. Important because A8 silently regressing would be invisible in dashboard renders.
+5. **A4 fixture pre-conditions not made explicit.** T-TEST-2 lists A4 as covered, but A4 requires "(1) seed N invocations; (2) modify persona file body; (3) run one fresh dispatch; (4) re-run compute." That's a four-step fixture choreography. Worth carving as an explicit sub-step inside T-TEST-2's task description so the build agent doesn't ship a thin assertion.
 
-### S3. e12 fresh-install assertion is folded into A5, not A11
-Spec e12 says "fresh-install adopter sees empty data area + full (never run) roster + 'No data yet' banner — A11 explicitly excludes this case." Plan task 3.2 mentions "empty-state" banner "render correctly under each precondition" but doesn't enumerate the e12 precondition (no `persona-rankings.jsonl` exists) as a distinct DOM-test scenario. A11 in 3.1 also doesn't assert the negative case.
+## Notes
 
-**Fix:** add one line to task 3.2 making the "no rankings file at all" scenario explicit, or note it under task 3.1 as A11's contrapositive.
+- **All 11 spec ACs map to ≥1 task and ≥1 verification path** per the §Verification & Acceptance Mapping table. No spec requirement is orphaned.
+- **All 8 must-fix items (M1–M8) and all 6 deltas (Δ1–Δ6) are present** in either Wave 0 or Wave 1 tasks.
+- **Operational readiness is appropriate for the spec's scope**: no rollback plan, no monitoring, no error-budget — but this is measurement-only/additive, no production runtime path, so the omission is intentional and correct.
+- **Test orchestrator wiring (T-WIRE-1) is correctly carved as a single-owner sequential post-step**, addressing the recurring `feedback_test_orchestrator_wiring_gap.md` pattern.
+- **Subagent invocation post-build (T-VERIFY-2 → `persona-metrics-validator`) is explicitly listed**, matching spec §Integration "Subagents to invoke during/after build."
+- **`tests/fixtures/cross-project/` for A3 is explicitly named** (T-TEST-2 task description). Good — it would otherwise be implied work.
+- **Schema-migration policy (D6) and `<unknown>` bucket contract (D4) are net-new design decisions added by the plan**, both warranted, both with verification (A12 + T-TEST-9; UI toggle in T-UI-2).
+- **Linux-untested disclaimer is folded into T-DOC-2** per Open Question #3 — appropriate.
+- **T-DOC-1 modifies the spec itself** to append a "Build-time clarifications" appendix codifying D5–D13. Unusual but defensible since these are pin-downs of underspecified items, not re-litigation. Worth flagging to the build agent so it understands this is intentional and not scope creep.
+- **`install.sh` wiring for `~/.config/monsterflow/README.md` is correctly deferred** per spec; T-DOC-4 stages content at `docs/specs/token-economics/config-readme.md` for future copy-in. BACKLOG note is acknowledged.
+- **R6 (CC subagent layout drift)** is well-handled by T-CORE-6 runtime probe; format-drift will produce a stderr warning rather than a silent miss.
+- **D1 single-bundle architecture is a strict simplification** of the spec's two-file design — risk #2 is fully mitigated and no spec AC depends on the two-file shape.
 
-## Observations (non-blocking)
+## Verdict
 
-### O1. `tests/test-no-raw-print.sh` is created inside task 1.2's description rather than as a standalone task line
-Spec lists it in "Files created"; plan task 1.2 says "banned by `tests/test-no-raw-print.sh` grep gate" and task 3.5 says "verify no raw print()". The file gets written, the test gets run — coverage is real, just not as a numbered row. Fine as-is; flagging only because the spec inventories it as a first-class file.
-
-### O2. Δ6 (don't modify session-cost.py) is a negative requirement and the plan handles it correctly
-Task 1.3 says "Imports `PRICING` + `entry_cost` from `session_cost`. **Does NOT modify `session-cost.py`.**" Good — explicit negative is preserved through to the build instructions, which is the only way negative requirements survive parallel execution.
-
-### O3. The `MONSTERFLOW_DEBUG_PATHS=1` env var (Δ4) is described in spec but not in any task
-The spec defines this as an opt-in path-exposure debug switch logging to `~/.cache/monsterflow/debug.log`. Task 1.2 implements `safe_log()` and the SAFE_EVENTS enum, but neither the env-var read nor the debug-log path is enumerated in any wave task. Likely subsumed under "implement Project Discovery + safe_log" but worth a one-line callout in 1.2 or 1.1 so the build agent doesn't drop it. (The privacy posture works either way — env-off is the safe default.)
-
-### O4. e6 stale-data banner has no test
-Task 2.3 says the stale-cache banner is rendered; task 3.2 asserts "all three banners render correctly under each precondition." Since e6 requires "no `/wrap-insights` run in 14+ days" — the test would need to fixture a stale `last_artifact_created_at`. Not blocking; flagging because date-arithmetic banners are exactly the kind of UI that ships broken.
-
-### O5. The `persona-metrics-validator` subagent invocation is wired in task 2.1 + verified in 3.5 — good
-This was a spec requirement under "Subagents to invoke during/after build" and the plan correctly puts the wiring in `commands/wrap.md` Phase 1c (2.1) with a smoke verification in 3.5. Coverage is complete.
-
-### O6. Wave 3 additions (3.6, 3.7) for pre-commit hook + docs are bonus scope that the spec didn't explicitly require
-Spec mentions `docs/persona-ranking.md` only in the round-3 polish table ("Will be addressed in `docs/persona-ranking.md` (out of scope here; opens a docs issue post-merge)") — so 3.7 is in-scope-expansion vs. spec deferral. Not a completeness defect; flagging because it crosses the spec's stated scope boundary. (Defer to scope-discipline persona for the call.)
-
-## Coverage Summary
-
-| Spec element | Plan coverage |
-|---|---|
-| A0–A11 + A1.5 acceptance criteria | A1 + A8 lack named verification tasks (S1, S2); rest covered |
-| e1–e12 edge cases | e1–e11 covered by 3.1's enumeration; e12 implicit in 3.2 (S3) |
-| Δ1–Δ6 spec deltas | All six reflected in concrete tasks (Δ1→0.2, Δ2→0.2, Δ3→1.6, Δ4→1.2, Δ5→1.1+3.4, Δ6→1.3) |
-| Files created (15 entries) | 14 explicit; `test-no-raw-print.sh` folded into 1.2 (O1) |
-| Phase 0 spike Q1 forcing function | Task 1.4 closes A1.5 with explicit non-zero exit on disagreement |
-| Privacy gates (A9, A10, redaction, salt, scan-confirm) | All bound to named test files in Waves 1+3 |
+**PASS WITH NOTES** — Plan covers every spec AC with explicit task mappings, fixtures are enumerated, wave structure respects parallel-agent constraints, and risks are itemized; a handful of edge-case banners and telemetry-format checks need explicit task ownership before `/build` to avoid silent regression.

@@ -1,77 +1,83 @@
 # Scope Discipline — /check Review
 
-**Spec:** token-economics v4.1
-**Plan:** 4-wave, 28 tasks
-**Lens:** YAGNI — what's overbuild?
+**Verdict:** PASS WITH NOTES — plan is largely proportionate to spec v4.2, but several plan-introduced items are gold-plating, premature future-proofing, or duplicated test surface that should be cut or folded before /build dispatches.
 
-## Verdict
+---
 
-**PASS WITH NOTES** — plan is largely disciplined (already deferred composite scores, `/wrap-insights ranking`, per-dispatch hashing, A12), but it carries a few v1.1-shaped tasks and surface decorations that should defer for a leaner first ship.
+## Must Fix
 
-## Must Fix (cuts that BLOCK ship)
+None. No item is structurally load-bearing enough to block /build, but several Should-Fix cuts will trim 3–5 tasks from Wave 2/3 with zero spec risk.
 
-None. There is no overbuild large enough to block. The plan has clear v1 boundaries; everything below is "should defer" not "must cut."
+---
 
-## Should Fix (cuts worth making)
+## Should Fix
 
-### S1. Defer `--explain PERSONA[:GATE]` to v1.1 (cut from decision #16's flag list)
-- This is a debugging convenience. v1 ships `contributing_finding_ids[]` already and a dashboard collapsible column. Drill-down at the CLI duplicates that surface for a population of one (Justin debugging). Nothing in A0–A11 requires it. **Cut the flag, cut the help text, cut whatever test row would have covered it.** Ships in v1.1 when the first "why is this persona ranked low" investigation needs more than the dashboard offers.
-- **Resulting CLI surface: 5 flags** — `--scan-projects-root` (privacy), `--best-effort` (A1.5 escape hatch), `--list-projects` (discovery dry-run), `--out PATH` (test plumbing), `--dry-run` (compute-without-write). Each earns its slot.
+**SF-1 — Cut T-DOC-4 (`config-readme.md`).**
+- **finding_id:** scope-T-DOC-4-premature
+- **class:** scope-cuts
+- **severity:** minor
+- **body:** Spec §Project Discovery / Lifecycle explicitly says the `~/.config/monsterflow/README.md` is *"out of scope here; opens an issue in onboarding"* — i.e., it belongs to the install.sh spec that hasn't been written. Plan T-DOC-4 pre-writes content for that future install.sh wiring. This is the textbook "while we're in there" cleanup the persona checklist warns against, and it adds a committed file (`docs/specs/token-economics/config-readme.md`) that has no consumer in v1.
+- **suggested_fix:** Drop T-DOC-4. Add one BACKLOG line: *"install.sh writes `~/.config/monsterflow/README.md` — content TBD when install.sh spec lands."* Move on.
 
-### S2. Drop `--list-projects` OR `--dry-run` — pick one
-- Both are "compute discovery / compute output, don't write." `--dry-run` (don't write the JSONL) subsumes `--list-projects` (just print discovered roots) if `--dry-run` also prints the discovery telemetry to stderr (which Δ4 already mandates anyway). Keep `--dry-run`; cut `--list-projects`. **Resulting CLI: 4 flags.**
-- If you keep `--list-projects` for the interactive `--scan-projects-root` confirmation flow (where the user needs to see paths before saying y/N), note that flow is already inline in `--scan-projects-root` first-use behavior. No separate flag needed.
+**SF-2 — Defer T-CORE-13 (`--explain PERSONA[:GATE]`) to v1.1.**
+- **finding_id:** scope-explain-flag-deferral
+- **class:** scope-cuts
+- **severity:** minor
+- **body:** `--explain` is listed in the spec's post-M5 CLI surface, but D3 reveals it's interactive-debug surface that's TTY-gated, prints plaintext finding titles, and never feeds the JSONL/bundle/`/wrap-insights`. The two render surfaces this spec actually ships are the dashboard tab and the `/wrap-insights` text section — those are the value delivery. `--explain` is a debugging affordance for a maintainer (Justin) who can already grep `findings.jsonl` directly with one shell line. Adds a TTY-gating code path, a privacy-posture carve-out (titles allowed here but nowhere else), and a separate verification path. Net new value vs. complexity is low.
+- **suggested_fix:** Cut `--explain` from the v1 CLI surface (now 5 flags); move to BACKLOG with a one-line rationale ("local-debug; v1 maintainers grep findings.jsonl directly"). Update T-CORE-1 argparse to drop it; remove T-CORE-13 entirely. Update spec §Project Discovery / CLI surface in T-DOC-1 appendix to reflect 5 flags, not 6.
 
-### S3. Cut Wave 3 task 3.6 (`scripts/install-precommit-hooks.sh`)
-- Q1 added 3.6 + 3.7 in the same /plan session — that's two new artifacts bolted on right before /check. Pre-commit hook installation is **adopter ergonomics**, not a v1-ship requirement.
-- A10 (the allowlist test) already runs in CI / local test runs. The pre-commit hook only catches the case "adopter `git add -f`s a fixture file with a forbidden field locally" — which is exactly what A10 catches at PR-review time per the risk register ("A10 catches at PR review time; allowlist removes most leak vectors").
-- **Defer 3.6 to a follow-up issue.** Document the recommendation in 3.7 with a 3-line `git config core.hooksPath` snippet adopters can copy. Ship the hook script post-merge if anyone asks.
+**SF-3 — Cut T-CORE-12's `--quiet` flag.**
+- **finding_id:** scope-quiet-flag-creep
+- **class:** scope-cuts
+- **severity:** nit
+- **body:** Plan adds `--quiet` to T-CORE-12 *"resolves gaps #6"*, but spec §Project Discovery / CLI surface lists the canonical 5 flags + `--confirm-scan-roots`. `--quiet` is plan-introduced scope and isn't load-bearing — `safe_log()` is already counts-only and a single line per invocation. Adopters who want silence can `2>/dev/null`.
+- **suggested_fix:** Drop `--quiet` from T-CORE-12. Keep `safe_log()` and the raw-print ban; that's the spec's actual ask.
 
-### S4. Collapse the 11-column dashboard table to 7 columns for v1
-- Current: persona, gate, runs_in_window, run_state (badge), judge_retention_ratio, downstream_survival_rate, uniqueness_rate, total_tokens, avg_tokens_per_invocation, last_seen, persona_content_hash, contributing_finding_ids (collapsible). That's 11 visible + 1 collapsible.
-- **Cut for v1:** `total_tokens` (avg is the right cost-rank field per decision #20; total just confuses), `persona_content_hash` (debug column; nobody reads sha256 prefixes — surface in tooltip on persona name instead), `last_seen` (timestamp clutter; surface in tooltip on persona name), `runs_in_window` AND `run_state` standalone column (decision #20 already says "Coverage column derived from run_state_counts" renders `14/18 complete` — that single column replaces both).
-- **Resulting v1 columns (7):** persona, gate, coverage (`14/18 complete`), judge_retention_ratio, downstream_survival_rate, uniqueness_rate, avg_tokens_per_invocation, contributing_finding_ids (collapsible — counts as the 8th if collapsed counts). Tooltip on persona surfaces last_seen + content_hash. Same data emitted to JSONL — just less rendered.
+**SF-4 — Fold T-TEST-9 (dashboard recovery) into T-TEST-6 (salt).**
+- **finding_id:** scope-test-9-dup
+- **class:** tests
+- **severity:** nit
+- **body:** T-TEST-9 simulates salt corruption + regen + dashboard fresh-install banner render. Salt corruption is already T-TEST-6's domain; the dashboard fresh-install banner is already T-UI-3's e12 path. T-TEST-9 sits in the seam and creates a third test file for behavior the other two cover. Cross-test coupling (T-TEST-9 depends on T-UI-2) also breaks Wave 2 parallelism.
+- **suggested_fix:** Delete T-TEST-9. Add one assertion to T-TEST-6: after corruption + regen, assert `persona-rankings.jsonl` is cleared and `persona-insights-bundle.js` `__PERSONA_RANKINGS` is `[]`. Banner-render check is already T-UI-3's responsibility against e12.
 
-### S5. Merge two of the seven new test files
-- Per task list there are: `test-compute-persona-value.sh`, `test-phase-0-artifact.sh`, `test-allowlist.sh`, `test-path-validation.sh`, `test-finding-id-salt.sh`, `test-scan-confirmation.sh`, `test-no-raw-print.sh` — **7 files.**
-- Two natural merges:
-  - **Merge `test-finding-id-salt.sh` + `test-scan-confirmation.sh` + `test-path-validation.sh` → `test-privacy-gates.sh`.** All three are privacy-side enforcement (salt perms, scan confirmation, path traversal). Single test file, three test functions. Keeps the "one privacy gate, one test" mental model intact.
-  - **Merge `test-no-raw-print.sh` into `test-allowlist.sh`.** Both enforce output-side privacy (allowlist on rows, grep gate on stderr). One file, two assertions.
-- **Resulting test files: 4** (`test-compute-persona-value.sh`, `test-phase-0-artifact.sh`, `test-allowlist.sh`, `test-privacy-gates.sh`). Same coverage; less file-count overhead; easier to find privacy regressions.
+**SF-5 — Defer T-CORE-11 (schema-version reader guard) until v1.1 ships.**
+- **finding_id:** scope-schema-guard-premature
+- **class:** scope-cuts
+- **severity:** nit
+- **body:** D6 specifies `compute-persona-value.py` refuses to read non-v1 rows. There is no v1.1 yet; nothing emits `schema_version != 1`. The full-rebuild contract (D5) means readers regenerate from source on every invocation anyway — the JSONL is never *read* by `compute-persona-value.py` itself, only emitted. The guard fires for a non-existent input. v1.1 build can add the guard at the same time it adds the new schema field; A12 currently asserts a v1-only behavior with no v1.1 to compare against.
+- **suggested_fix:** Drop T-CORE-11 and A12 from this plan; move both to v1.1 BACKLOG with note *"add schema-version reader guard when introducing schema_version: 2"*. Saves a task + an AC + the inverted-fixture work to verify.
 
-## Observations (not cuts, just framing)
+**SF-6 — Trim T-DOC-2 (`notes.md`) to two essentials.**
+- **finding_id:** scope-notes-md-six-topics
+- **class:** scope-cuts
+- **severity:** minor
+- **body:** D16 lists six sub-topics (interpreting low scores, salt rotation, persona-author posture, `--scan-projects-root` walkthrough, Linux disclaimer, v1.1-unblock criterion). Two — persona-author posture (R12) and `--scan-projects-root` onboarding (R11) — close concrete review gaps. The other four are speculative content for problems no one has hit yet. Salt-rotation procedure has zero adopters today; Linux disclaimer is contradicted by the spec's macOS-only stance (Open Q3); v1.1-unblock is a planning artifact, not user-facing docs; "interpreting low scores" overlaps with the dashboard warning banner already specified in A5.
+- **suggested_fix:** Cut `notes.md` to two sections: persona-author posture (one paragraph) + `--scan-projects-root` first-time walkthrough (5–10 lines). Drop the rest. If the cut sections become real questions post-merge, write them then.
 
-### O1. Two survival rates is correct — keep both
-The user prompt asked whether v1 could ship `judge_retention_ratio` OR `downstream_survival_rate` and add the other later. **Keep both.** Round-3 explicitly renamed retention ratio away from "survival" precisely because it's *not* a survival rate — they measure different things (compression density vs downstream pickup), and the spec is careful to document that. Cutting either one means giving up either Judge-stage signal or downstream-stage signal. Both axes are load-bearing. The "stakeholders find one rate easier to reason about" framing dissolves once they're clearly named — and they are.
+---
 
-### O2. A12 (Pro-friend commitment) is correctly punted to BACKLOG
-A12 was "spec for `account-type-scaling` exists within 14 days of v1 merge" — that's a **process commitment**, not a software requirement. It can't be tested by `compute-persona-value.py`. Punting to BACKLOG is right; trying to enforce it via this spec would be scope creep into project-management automation. Plan handles correctly.
+## Notes
 
-### O3. Two test fixtures (`persona-attribution/` real + `cross-project/` synthetic) should NOT merge
-The user prompt asked. They serve different test surfaces:
-- `persona-attribution/` — real (redacted) JSONL excerpts validating Phase 0 spike linkage + A0 + A10 (allowlist on real-shaped data including the deliberate-failure `leakage-fail.jsonl`).
-- `cross-project/` — synthetic two-project tree exercising Project Discovery cascade + cross-project aggregation (A3) + cross-fixture (persona, gate) pairs at multiple `runs_in_window` values for A6's "(only N qualifying)" branch.
-- Merging would conflate "is the real data shape correct" with "does cross-project aggregation work" — different failure modes. Keep separate.
+**N-1 — Open Q3 (Linux stance) is internally contradictory.**
+- **class:** documentation
+- The spec says macOS-only is out of scope. Plan Open Q3 then recommends *"add a one-line 'should work on Linux but untested' note to T-DOC-2."* Either Linux is in scope (then test it) or out of scope (then don't document it). Pick one — recommendation is to align with spec and drop the Linux note from T-DOC-2 entirely (compounds with SF-6).
 
-### O4. Δ6 (don't modify session-cost.py) is the right call and reduces scope
-Importing `PRICING` + `entry_cost` via `sys.path` insert — lower blast radius, no concurrent-edit conflict with existing `/wrap` Phase 1 display. Proper YAGNI: don't refactor what you don't need to refactor.
+**N-2 — Plan-introduced ACs (A12, A13, A14) are reasonable but should be reflected in spec, not just plan.**
+- **class:** documentation
+- A13 (multi-persona +1 each, D10) and A14 (silent retention semantics, D8) pin real spec ambiguities the reviewers found. T-DOC-1's "Build-time clarifications" appendix is the right home — confirm those ACs land in spec.md so future builders aren't reading the plan to learn the contract. A12 should be cut alongside SF-5.
 
-### O5. Sidecar bundle pattern (decision #2) is the correct minimum for `file://` rendering
-Both `persona-roster.js` and `persona-rankings-bundle.js` exist because the dashboard can't `fetch()` under `file://`. This isn't gold-plating; it's the established pattern (per `feedback_settings_file_relocation.md` cohort of file://-vs-http lessons). No cut here.
+**N-3 — D9 `cost_window_size: 45` field is fine but symmetrical-with-existing.**
+- **class:** scope-cuts
+- **severity:** nit
+- The spec already pins window=45 for value and explicitly separates value vs cost windows (M3). Adding a parallel field is honest schema, not creep. Keep, but verify it earns its allowlist slot in T-SCHEMA-1.
 
-### O6. `schema_version: 1` reservation is correct (no future field pre-reservation)
-Decision #7 is explicit: reserve the bump path, do NOT pre-reserve future field names. Plan is disciplined. No cut.
+**N-4 — Wave 2 has 10 tests; Wave 3 has 3 docs files + 1 spec appendix.**
+- **class:** scope-cuts
+- After SF-4 + SF-5 + SF-6 + SF-1, Wave 2 drops to 8 tests, Wave 3 drops to 1–2 docs files. That's a more proportionate distribution for a measurement-only v1.
 
-### O7. Net effect of S1–S5 if applied
-- CLI: 6 → 4 flags (cut --explain, --list-projects)
-- Wave 3: 7 → 6 tasks (cut 3.6; 3.7 absorbs the pre-commit hook docs paragraph)
-- Dashboard: 11 → 7 visible columns (move three to tooltips, merge runs_in_window+run_state into Coverage)
-- Tests: 7 → 4 files (merge privacy-gates trio, fold no-raw-print into allowlist)
-- **Estimated saved effort:** ~3-5 subagent-task-sizes worth (one M task and 2-3 S tasks). Not a wave reduction, but a meaningful Wave 2/3 trim.
-- **Risk of cutting:** essentially zero — every cut is either deferred to v1.1 (still ships when needed) or a presentation-layer reduction (data still emitted to JSONL).
+**N-5 — Cut candidate confidence: high.**
+- All six Should-Fix cuts are reversible (re-add post-merge in v1.1 if pain emerges) and remove ~5 tasks + 1 AC + 1 schema field + 1 CLI flag from /build's plate. None touch the data-layer correctness path (T-CORE-5/7/8/10) or the privacy gates (T-SCHEMA-1, T-TEST-3/4). Net effect: smaller PR, faster /build, same v1 value.
 
-## Out-of-Scope-for-This-Persona Notes
+---
 
-- I did **not** look for missing items (completeness owns).
-- I did **not** look for risks (risk owns).
-- All cuts above are pure overbuild reduction; if completeness or risk persona disagrees with any specific cut, defer to them.
+**Verdict:** PASS WITH NOTES — accept the plan and proceed to /build, applying SF-1 through SF-6 inline before dispatching wave 0.

@@ -1,74 +1,37 @@
-# Scope Analysis — Round 3
-
-**Reviewer:** scope (PRD Review)
-**Spec:** `docs/specs/token-economics/spec.md` (revision 3, 2026-05-04)
-**Round 3 trajectory check:** clean. All four round-2 important findings landed:
-
-- Spike-failure path: Open Q3 explicitly routes the logging-shim path to a separate spec — not in-flight scope expansion. ✓
-- Cross-project aggregation: `persona_content_hash` lives on every row; window reset is hash-based, not mtime. ✓
-- BACKLOG #3 trigger: "≥10 validated runs accumulate" is mechanical, not vibes. ✓
-- v1 stays static: Approach Phase 2 + A6 both lock "no week-over-week deltas" for v1. ✓
-
-The v1+v3 split this persona pushed for in round 2 has held. v3 is instrumentation-only with a public-release-readiness layer bolted on; the layer added scope (privacy, project discovery, fixture redaction) but no new features. That's the right shape.
+# Scope Analysis — token-economics v4.2
 
 ## Critical Gaps
 
-(none — round 3 has no scope blockers)
+None. Out-of-scope statements are explicit and well-bounded; v1.1 commitments and deferral targets are named. MVP boundary (measurement-only, no automatic action) is unambiguous.
 
 ## Important Considerations
 
-### 1. Three render surfaces is one too many for v1
+- **"Two honestly separated signals" (M3) re-opens the MVP question.** The whole spec frames itself around per-persona cost ↔ value alignment, but v1 explicitly declines to align them — cost-window and value-window have different denominators, and the proper join is v1.1+. This is correct under "best-effort instrumentation," but a stakeholder reading the dashboard will instinctively compare `avg_tokens_per_invocation` against `judge_retention_ratio` per persona and assume those are aligned. Recommend the dashboard tooltip on the cost columns *and* the `/wrap-insights` text section explicitly state "cost and value are measured over different windows in v1; treat side-by-side comparison as directional, not arithmetic." This is a one-line UX change, not a re-scope, but it should be in scope here, not deferred.
 
-Spec ships a Persona Insights dashboard tab (Phase 2) **and** a `/wrap-insights` text sub-section (top/bottom 3 per gate × per dimension) **and** a `/wrap-insights ranking` bare-arg full-table view, all reading the same JSONL. For an instrumentation-only v1 whose first user is Justin (and one Pro-tier friend who won't see this until v1.1 anyway), two surfaces would suffice: the JSONL itself + one of {dashboard tab, wrap text}.
+- **v1.1 commitment ("immediately after this lands") risks becoming the real MVP.** BACKLOG #3 (account-type agent scaling) is what actually delivers Pro-tier relief, which is explicitly named as the original motivation. The spec is honest about this ("the friend-on-Pro who motivated the work gets actionable cost reduction once the next spec ships, not from this one"). Watch for: if `/wrap-insights` after first 10 runs shows the data is too noisy for #3 to act on (e.g., everyone's `insufficient_sample: true`), v1.1 stalls and v1 becomes orphan instrumentation. Worth a single sentence in the spec naming the success criterion for "v1.1 unblocked": e.g., "≥10 personas per gate have `runs_in_window ≥ 3` within 30 days of v1 ship."
 
-The dashboard tab is the durable, sortable, drill-down-capable surface. The `/wrap-insights` text section is the in-terminal at-a-glance surface. Both have a real job. The `/wrap-insights ranking` bare-arg full-table is the third surface and earns the least: it duplicates the dashboard tab in ASCII, in a context (terminal) where the dashboard tab is one click away.
+- **Eight M-fixes + six Δ-deltas + three rounds of resolved concerns is a lot of scar tissue for one spec.** Each individual change is justified, but the cumulative effect is a spec where the MVP is hard to extract from the revision log. Consider folding M1–M8 and Δ1–Δ6 into the body of the spec at /build time and demoting the change tables to a CHANGELOG appendix — otherwise reviewers of v1.1 will re-litigate decisions that are buried in tables.
 
-**Recommendation:** drop the `/wrap-insights ranking` bare-arg full-table from v1 scope. Keep the per-gate top/bottom 3 sub-section. If terminal full-table demand materializes after release, add it then. Mention this as deferred in §Out of scope.
+- **Dashboard "Persona Insights" tab is the third top-level mode tab.** Spec doesn't say what the existing two are or whether adding a third changes navigation hierarchy. Low-risk but worth a one-line confirmation that the existing tabs aren't being reshuffled.
 
-This is a v1-MVP integrity concern, not a blocker — the bare-arg variant is cheap to add and cheap to remove. Flag for `/plan` to weigh, not a hard cut.
-
-### 2. A0 fixture redaction script is borderline meta-spec
-
-`scripts/redact-persona-attribution-fixture.py` is listed under §Files created. It exists to make A0 testable on a public repo. That's defensible — privacy is in this spec's scope because public release is in this spec's audience constraint.
-
-But the redaction script is a **tooling dependency for one acceptance criterion**, not a deliverable adopters use. Two scope risks:
-
-- It can grow. ("While we're in there, redact the build-cost fixtures too." "Add a CI hook that re-runs redaction on every fixture commit.") The spec doesn't bound what it does — just "lives at scripts/redact-persona-attribution-fixture.py".
-- It overlaps with anything BACKLOG #2 (install.sh rewrite) or a future "fixture-management" spec might want.
-
-**Recommendation:** add one sentence to §Files created bounding the script: "single-purpose: reads a real session JSONL, writes a redacted excerpt with prompts/bodies/file-paths stripped; not a general-purpose redaction tool." This kills future scope-creep arguments. No restructure needed.
-
-### 3. Project Discovery cascade is well-bounded but adopter-knob count is at the ceiling
-
-The 3-tier cascade (explicit config file → auto-discovery via `~/Projects/*/docs/specs/` → CLI args with both `--project` and `--projects-root`) is the right design — it gives adopters two escape hatches without forcing config on the median user. But that's now **four configuration entry points** (config file, default scan path, two CLI flag families) for a v1 instrumentation feature.
-
-Watch for:
-
-- Adopter reports "auto-discovery missed my project at `~/work/foo/`" → pressure to add `~/work/`, `~/code/`, `~/dev/` to the default scan list. **Resist.** Tier 1 is the answer.
-- Adopter wants per-project disable ("don't aggregate Luna's into my MonsterFlow rankings") → not in spec. Likely the day-after-launch ask given the Privacy section explicitly notes the script reads private-repo `findings.jsonl`.
-
-**Recommendation:** add to §Out of scope: "Per-project exclusion / opt-out from aggregation — adopter removes the path from `~/.config/monsterflow/projects` or doesn't add it. v1 has no allow-list/deny-list mechanism beyond the cascade." This anticipates the day-after ask and gives a clean answer.
-
-### 4. A11 outcome criterion needs a graceful degradation note
-
-A11 says: "After first `/wrap-insights` run on a project with ≥10 historical gate runs, `persona-rankings.jsonl` contains ≥1 row per (persona, gate) pair seen in those runs."
-
-For Justin: fine — MonsterFlow has years of pipeline runs.
-For a fresh adopter who installs MonsterFlow today and runs `/wrap-insights` on day 1: they have **zero** historical gate runs. A11 is unsatisfiable not because the script is broken but because the precondition isn't met.
-
-The current wording ("a project with ≥10 historical gate runs") technically scopes A11 only to projects that satisfy the precondition. But for an adopter following the spec to verify their install, A11 reads like "this should produce data" → they get an empty file → they file a bug.
-
-**Recommendation:** add one line to A11: "On a fresh install with zero historical runs, the JSONL is created empty (or absent) and `/wrap-insights` prints `No persona data yet — run a /spec-review, /plan, or /check first.` Verified by `tests/test-fresh-install.sh` (or folded into the existing test-compute-persona-value.sh)." This makes day-1 install behavior an explicit outcome, not a footnote.
+- **`tests/fixtures/cross-project/` synthetic trees (A3) need a size budget.** Two synthetic project trees with `findings.jsonl` + `survival.jsonl` + `run.json` + `raw/<persona>.md` per gate per feature could grow large. If unbounded, fixture maintenance becomes a recurring tax. Recommend ≤5 features per synthetic project, ≤3 personas per gate.
 
 ## Observations
 
-- **Out of scope list is excellent.** "The logging-shim path if Phase 0 spike fails — that's a separate spec, not in-flight scope expansion here" is exactly the right framing and exactly what round 2 asked for. Scope-discipline persona is happy.
-- **BACKLOG routing table.** The table at the top is the cleanest scope-fence I've seen in this repo. Item #3's "after this spec ships and ≥10 validated runs accumulate" trigger is mechanical and audit-able.
-- **Phase 0 spike result inline.** Worth noting that v3 carries a *preliminary* spike result with two open questions (Q1, Q2) listed as "must resolve in /plan". This is technically scope-deferral into `/plan`, but it's the right call — the questions are bounded, A1.5 forces resolution, and gating the spec on the spike completing before `/plan` would slip the public release. Watch that `/plan` doesn't quietly punt them again.
-- **Hybrid render layer (e9).** The "personas in roster files but not in JSONL render as (never run)" rule is good adopter-facing UX — a fresh install will see all 28 default personas as "(never run)" rather than an empty table. This subtly fixes part of A11's day-1 problem; if A11's wording gets the recommended tweak, the two work together.
-- **Survival + uniqueness as separate columns, no composite.** The "consumers compose them however they need" stance is the right MVP move. Resists the inevitable "just give me one number" ask.
-- **Cost-attribution pseudocode being conditional on Open Q1.** `/plan` will need a definite path before any code merges. Not a v3 spec problem; just flagging for the planner.
+- **Phasing is clean.** Phase 0 spike → Phase 1 instrumentation → Phase 2 visualization is well-seamed. The A1.5 forcing function (build fails on Q1 disagreement, `/plan` re-opens) is a strong incremental gate.
+
+- **Out-of-scope list is unusually thorough** (10 items, each with a clear deferral target). This is a sign of a well-bounded spec. The "logging-shim path if Phase 0 spike fails — separate spec, not in-flight expansion" line is exactly the right call.
+
+- **Privacy carve-outs scale with the spec.** Allowlist enforcement (A10), salted finding IDs (Δ3), counts-only telemetry (Δ4), opt-in scan with non-tty refusal (M6), salt-corruption recovery (M7), inverted-assertion meta-runner (M8) — each addresses a real risk. Watch for adopter onboarding friction: a new user running `/wrap-insights` for the first time on a fresh install gets cwd-only data and a stderr nudge, but the path from "I see one project's data" to "I want all my projects" requires reading spec docs to find `--scan-projects-root` + interactive confirm. Consider whether `/wrap-insights` itself should print a one-line "want cross-project? run `compute-persona-value.py --scan-projects-root ~/Projects --confirm-scan-roots`" hint when it detects only cwd data. (Not blocking; UX nicety for v1.1.)
+
+- **Window unit "(persona, gate) artifact directories" is unusual but defensible.** It's the right MVP choice given no per-dispatch join key, but it means `runs_in_window: 18` doesn't mean "this persona ran 18 times" — it means "18 directories where this persona contributed at least one bullet." That distinction matters for stakeholder interpretation and should be in the dashboard tooltip, not just the spec.
+
+- **`scope-cuts` candidate already cut:** `/wrap-insights ranking` bare-arg full-table was correctly removed (one render surface fewer). No other obvious cuts available — the spec is already at MVP.
+
+- **Natural seam for v1.1:** the `agent_tool_use_id` + `persona_content_hash` capture in `findings.jsonl` / `run.json` at emit time. Spec correctly names this as the unlock for invocation-level metrics. The `findings-emit` directive is explicitly NOT touched in v1, preserving the seam cleanly.
 
 ## Verdict
 
-**PASS WITH NOTES** — Round 3 trajectory is clean. All four round-2 important items landed in v3. No critical scope gaps. Four important considerations (drop wrap-insights bare-arg full-table; bound the redaction script's scope in one sentence; add per-project opt-out to out-of-scope; gracefully degrade A11 for day-1 fresh-install) are tunings the planner can absorb in `/plan`, not blockers requiring a v4 spec revision. Ship to `/plan`.
+**PASS WITH NOTES** — scope is tight, MVP is well-bounded, deferrals are named with routing. The two-signal separation (M3) is the only structural risk, and it's a UX/framing concern (one tooltip + one text-section caveat), not a scope re-open.
+
+class: scope-cuts | severity: minor — recommendation to add cost↔value alignment tooltip and v1.1-unblock success criterion are the only actionable items; neither blocks /plan.
