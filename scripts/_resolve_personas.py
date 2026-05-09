@@ -137,7 +137,16 @@ def emit_schema() -> None:
     print(json.dumps(CONFIG_SCHEMA, indent=2))
 
 
-def run(args: argparse.Namespace, repo_dir: Path) -> int:
+def run(args: argparse.Namespace, repo_dir: Path, project_dir: Path | None = None) -> int:
+    # Backlog #46 fix (2026-05-09): when MonsterFlow is invoked from an
+    # adopter project (RedRabbit, etc.), `repo_dir` resolves to MonsterFlow
+    # (where personas + dashboard live) but `docs/specs/<feature>/` lives
+    # in the adopter's repo — `project_dir` separates the two. When
+    # `project_dir` is None we fall back to `repo_dir` so MonsterFlow's
+    # own self-tests (which live under MonsterFlow/docs/specs/) keep
+    # working unchanged.
+    if project_dir is None:
+        project_dir = repo_dir
     gate = args.gate
     if gate not in VALID_GATES:
         warn(f"unknown gate '{gate}' (expected one of: {', '.join(sorted(VALID_GATES))})")
@@ -160,7 +169,7 @@ def run(args: argparse.Namespace, repo_dir: Path) -> int:
             print(f"on_disk({gate}): {', '.join(on_disk)}", file=sys.stderr)
         return _emit(on_disk, codex_avail and not _codex_disabled_in_config(config_path),
                      method="full", config_path=str(config_path),
-                     feature_slug=feature_slug, gate=gate, repo_dir=repo_dir,
+                     feature_slug=feature_slug, gate=gate, repo_dir=repo_dir, project_dir=project_dir,
                      budget_used=len(on_disk), budget_source="kill-switch",
                      pins_used=[], dropped_pins=[], dropped_over_budget=[],
                      selection_method="full", emit_json=args.emit_selection_json)
@@ -169,7 +178,7 @@ def run(args: argparse.Namespace, repo_dir: Path) -> int:
     lock = None
     lock_path = None
     if feature_slug:
-        lock_path = repo_dir / "docs" / "specs" / feature_slug / ".budget-lock.json"
+        lock_path = project_dir / "docs" / "specs" / feature_slug / ".budget-lock.json"
         if lock_path.is_file():
             lock = read_json(lock_path)
 
@@ -197,7 +206,7 @@ def run(args: argparse.Namespace, repo_dir: Path) -> int:
         codex_disabled = bool((config or {}).get("codex_disabled", False))
         return _emit(on_disk, codex_avail and not codex_disabled,
                      method="full", config_path=str(config_path),
-                     feature_slug=feature_slug, gate=gate, repo_dir=repo_dir,
+                     feature_slug=feature_slug, gate=gate, repo_dir=repo_dir, project_dir=project_dir,
                      budget_used=len(on_disk), budget_source="unconfigured",
                      pins_used=[], dropped_pins=[], dropped_over_budget=[],
                      selection_method="full", emit_json=args.emit_selection_json,
@@ -289,7 +298,7 @@ def run(args: argparse.Namespace, repo_dir: Path) -> int:
 
     # 5. Lock for this feature on first budgeted run
     if selection_method_hint != "locked" and feature_slug:
-        feature_dir = repo_dir / "docs" / "specs" / feature_slug
+        feature_dir = project_dir / "docs" / "specs" / feature_slug
         if feature_dir.is_dir():
             lock_data = {
                 "schema_version": 1,
@@ -313,7 +322,7 @@ def run(args: argparse.Namespace, repo_dir: Path) -> int:
 
     return _emit(chosen, codex_avail and not codex_disabled,
                  method=method, config_path=str(config_path),
-                 feature_slug=feature_slug, gate=gate, repo_dir=repo_dir,
+                 feature_slug=feature_slug, gate=gate, repo_dir=repo_dir, project_dir=project_dir,
                  budget_used=budget,
                  budget_source=("lock" if selection_method_hint == "locked" else "config"),
                  pins_used=[p for p in pins if p in chosen],
@@ -353,6 +362,7 @@ def _emit(
     on_disk: list[str] | None = None,
     lock_path: str | None = None,
     codex_disabled: bool = False,
+    project_dir: Path | None = None,
 ) -> int:
     """Emit stdout grammar + (optionally) selection.json + (optionally) --why reasoning."""
     # Validate stdout grammar before write
@@ -396,9 +406,12 @@ def _emit(
         print(f"budget:  {budget_used} (source={budget_source})", file=sys.stderr)
 
     # Optional selection.json — written by the resolver itself (per check.md MF2:
-    # eliminates 3-way contract drift across consumer commands).
+    # eliminates 3-way contract drift across consumer commands). Backlog #46:
+    # use project_dir (adopter project) for docs/specs lookups; falls back to
+    # repo_dir when called without project_dir for self-test compatibility.
     if emit_json and feature_slug:
-        feature_dir = repo_dir / "docs" / "specs" / feature_slug
+        emit_dir = project_dir if project_dir is not None else repo_dir
+        feature_dir = emit_dir / "docs" / "specs" / feature_slug
         gate_dir = feature_dir / gate
         if feature_dir.is_dir():
             gate_dir.mkdir(parents=True, exist_ok=True)
@@ -467,11 +480,22 @@ def main() -> int:
         # Resolve from this script's location: scripts/_resolve_personas.py → repo root
         repo_dir = Path(__file__).resolve().parent.parent
 
+    # Backlog #46 fix (2026-05-09): split engine dir (personas, dashboard,
+    # configs — always MonsterFlow) from adopter project dir (docs/specs/
+    # — RedRabbit / etc when MonsterFlow drives an autorun in another repo).
+    # `PROJECT_DIR` is exported by autorun's run.sh; when absent we keep the
+    # legacy behavior (repo_dir for both) so MonsterFlow's own self-tests
+    # under MonsterFlow/docs/specs/ still resolve.
+    project_dir_env = os.environ.get("PROJECT_DIR")
+    project_dir: Path | None = None
+    if project_dir_env:
+        project_dir = Path(project_dir_env).resolve()
+
     if args.emit_selection_json and not args.feature:
         warn("--emit-selection-json requires --feature")
         return 4
 
-    return run(args, repo_dir)
+    return run(args, repo_dir, project_dir)
 
 
 if __name__ == "__main__":
