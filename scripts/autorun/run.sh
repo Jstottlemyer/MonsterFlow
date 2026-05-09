@@ -1018,18 +1018,39 @@ else
     || git -C "$PROJECT_DIR" remote get-url origin 2>/dev/null \
        | sed -E 's|^git@github\.com:([^/]+/[^/]+)\.git$|\1|; s|^https://github\.com/([^/]+/[^/]+)\.git$|\1|; s|^https://github\.com/([^/]+/[^/]+)$|\1|')"
 
-  # autorun-merge-policy v0.11.0 — PR conventions (D9):
+  # autorun-merge-policy v0.11.0 — PR conventions (D9 / AC#15):
   # - Title: [autorun] <slug>
   # - Body: includes verdict + run.log path + spec link
-  # - Draft state: gated on verdict + dispatch outcome (decided AFTER PR body
-  #   is constructed but BEFORE merge dispatch — see Stage 7).
+  # - Draft state: `--draft` if verdict ∈ {GO_WITH_FIXES, NO_GO} (best-effort
+  #   read of check-verdict.json sidecar — defaults to NO draft if unknown,
+  #   matching the verdict==GO and action==pr_only ready-for-review case).
+  #   Action-based drafting (action==fell_back) handled post-dispatch via
+  #   `gh pr ready --undo` flip in Stage 7.
   # - Label: `autorun`
   STAGE_EXIT=0
   PR_TITLE="[autorun] $SLUG"
+
+  # AC#15 — early verdict peek for draft-state decision.
+  PR_DRAFT_VERDICT="GO"
+  _PR_SIDECAR="$PROJECT_DIR/docs/specs/$SLUG/check-verdict.json"
+  if [ -f "$_PR_SIDECAR" ]; then
+    PR_DRAFT_VERDICT="$(python3 "$ENGINE_DIR/scripts/autorun/_policy_json.py" \
+      get "$_PR_SIDECAR" "/verdict" --default "GO" 2>/dev/null || echo GO)"
+  elif [ -f "$ARTIFACT_DIR/check.md" ]; then
+    if grep -qi "NO-GO\|NO_GO" "$ARTIFACT_DIR/check.md"; then
+      PR_DRAFT_VERDICT="NO_GO"
+    fi
+  fi
+  PR_DRAFT_FLAG=""
+  case "$PR_DRAFT_VERDICT" in
+    GO_WITH_FIXES|NO_GO) PR_DRAFT_FLAG="--draft" ;;
+  esac
+
   PR_URL_VAL="$(gh pr create \
       --repo "$PR_REPO" \
       --title "$PR_TITLE" \
       --label autorun \
+      $PR_DRAFT_FLAG \
       --body "$(cat <<PRBODY
 ## Summary
 Automated implementation of \`$SLUG\` via autorun pipeline.
@@ -1275,11 +1296,31 @@ else
     pr_only)
       echo "[autorun] $SLUG: PR opened (policy=$RESOLVED_POLICY) — no merge attempted"
       log_run "merge-skipped" 0
+      # AC#15 — verdict==GO + action==pr_only → ensure ready-for-review.
+      # PR_URL_VAL was captured from `gh pr create ... 2>&1` and may contain
+      # warning lines; extract the canonical PR URL before passing to gh pr.
+      # Idempotent: gh pr ready exits 0 if already ready. Failure is non-fatal.
+      if [ "$VERDICT" = "GO" ] && [ -n "${PR_URL_VAL:-}" ]; then
+        _PR_CLEAN_URL="$(printf '%s\n' "$PR_URL_VAL" \
+          | grep -Eo 'https://[^ ]+/pull/[0-9]+' | tail -1)"
+        if [ -n "$_PR_CLEAN_URL" ]; then
+          gh pr ready "$_PR_CLEAN_URL" 2>/dev/null || true
+        fi
+      fi
       ;;
     fell_back)
       echo "[autorun] $SLUG: merge fell back — PR left for manual review"
       log_run "merge-fell-back" 0
       FINAL_STATE="pr-awaiting-review"
+      # AC#15 — action==fell_back → ensure draft. `gh pr ready --undo` is the
+      # documented way to convert a ready PR back to draft. Non-fatal on error.
+      if [ -n "${PR_URL_VAL:-}" ]; then
+        _PR_CLEAN_URL="$(printf '%s\n' "$PR_URL_VAL" \
+          | grep -Eo 'https://[^ ]+/pull/[0-9]+' | tail -1)"
+        if [ -n "$_PR_CLEAN_URL" ]; then
+          gh pr ready --undo "$_PR_CLEAN_URL" 2>/dev/null || true
+        fi
+      fi
       ;;
     merge_failed)
       echo "[autorun] $SLUG: merge failed — PR left open"

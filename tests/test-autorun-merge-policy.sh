@@ -247,15 +247,41 @@ BAD_RC=0
 BAD_OUT="$(merge_policy_resolve "$SPEC_BAD" "" 2>&1)" || BAD_RC=$?
 assert_rc "AC#7: invalid spec value exits 2" 2 "$BAD_RC"
 
-# AC#8 unknown key (typo) → falls through (no halt).
+# AC#8 unknown key (typo) → falls through (no halt) AND emits stderr warning naming the key.
 SPEC_TYPO="$WORK/queue/typo-spec.spec.md"
 cat > "$SPEC_TYPO" <<'SPEC'
 ---
 auto_merge_polocy: clean
 ---
 SPEC
-RES_TYPO="$(merge_policy_resolve "$SPEC_TYPO" "")"
+TYPO_STDERR="$WORK/typo-stderr.txt"
+RES_TYPO="$(merge_policy_resolve "$SPEC_TYPO" "" 2>"$TYPO_STDERR")"
 assert_eq "AC#8: typo'd key falls through to default:pr" "default:pr" "$RES_TYPO"
+if grep -q "unknown frontmatter key" "$TYPO_STDERR" && grep -q "auto_merge_polocy" "$TYPO_STDERR"; then
+  echo "  ✓ AC#8: stderr warning names the unknown key"
+  PASS=$((PASS + 1))
+else
+  echo "  ✗ AC#8: stderr warning missing or doesn't name the key"
+  echo "    stderr was: $(cat "$TYPO_STDERR")"
+  FAIL=$((FAIL + 1))
+fi
+
+# AC#8 — known key (auto_merge_policy) does NOT emit warning.
+SPEC_OK="$WORK/queue/ok-spec.spec.md"
+cat > "$SPEC_OK" <<'SPEC'
+---
+auto_merge_policy: clean
+---
+SPEC
+OK_STDERR="$WORK/ok-stderr.txt"
+merge_policy_resolve "$SPEC_OK" "" 2>"$OK_STDERR" >/dev/null
+if grep -q "unknown frontmatter key" "$OK_STDERR"; then
+  echo "  ✗ AC#8: false-positive warning on canonical key"
+  FAIL=$((FAIL + 1))
+else
+  echo "  ✓ AC#8: no false-positive on canonical auto_merge_policy"
+  PASS=$((PASS + 1))
+fi
 
 # AC#21: validated → resolves fine; dispatch falls back.
 SPEC_V="$WORK/queue/v-spec.spec.md"
@@ -622,6 +648,13 @@ assert_contains "run.sh: PR title is [autorun] <slug>" "[autorun]" "$(cat "$RUN_
 assert_contains "autorun-batch.sh: --merge-policy flag accepted" "--merge-policy" "$(cat "$BATCH_SH")"
 assert_contains "autorun-batch.sh: --auto-merge alias accepted" "--auto-merge" "$(cat "$BATCH_SH")"
 assert_contains "autorun-batch.sh: queue_copy_drift_check invoked" "queue_copy_drift_check" "$(cat "$BATCH_SH")"
+
+# AC#15 — draft-state logic structurally present in run.sh.
+assert_contains "AC#15: run.sh has PR_DRAFT_FLAG variable for --draft gating" "PR_DRAFT_FLAG" "$(cat "$RUN_SH")"
+assert_contains "AC#15: run.sh drafts on GO_WITH_FIXES verdict" "GO_WITH_FIXES|NO_GO" "$(cat "$RUN_SH")"
+assert_contains "AC#15: run.sh passes --draft conditionally to gh pr create" '$PR_DRAFT_FLAG' "$(cat "$RUN_SH")"
+assert_contains "AC#15: run.sh ensures ready-for-review on pr_only+GO via gh pr ready" "gh pr ready" "$(cat "$RUN_SH")"
+assert_contains "AC#15: run.sh converts to draft on fell_back via gh pr ready --undo" "gh pr ready --undo" "$(cat "$RUN_SH")"
 
 echo ""
 echo "=========================================="

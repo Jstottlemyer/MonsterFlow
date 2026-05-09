@@ -190,6 +190,48 @@ merge_policy_field_state() {
 }
 
 # ---------------------------------------------------------------------------
+# merge_policy_warn_unknown_keys — AC#8 implementation.
+#
+# Scans frontmatter of the given file for keys that look like typos of
+# `auto_merge_policy` (any frontmatter key that starts with `auto_merge` but
+# is NOT exactly `auto_merge_policy`). Emits a stderr warning naming each
+# offender and the source file. Never halts.
+#
+# Args:
+#   $1 = file path (spec.md or constitution.md)
+#   $2 = label used in warning (e.g. "queue/foo.spec.md")
+#
+# This is intentionally conservative — only `auto_merge_*` keys are flagged
+# (Levenshtein typo-suggestion was demoted to BACKLOG per Definitions §
+# "Levenshtein typo detector"). One warning per offending key.
+# ---------------------------------------------------------------------------
+merge_policy_warn_unknown_keys() {
+  _mp_uk_path="$1"
+  _mp_uk_label="${2:-$1}"
+  [ -f "$_mp_uk_path" ] || return 0
+
+  awk -v label="$_mp_uk_label" '
+    BEGIN { in_fm = 0; seen = 0 }
+    /^---[[:space:]]*$/ {
+      if (seen == 0) { in_fm = 1; seen = 1; next }
+      else if (in_fm == 1) { exit }
+    }
+    in_fm == 1 {
+      # match indented YAML keys: optional leading space, key, colon
+      if (match($0, "^[[:space:]]*auto_merge[A-Za-z0-9_]*[[:space:]]*:")) {
+        key = substr($0, RSTART, RLENGTH)
+        sub(/^[[:space:]]+/, "", key)
+        sub(/[[:space:]]*:[[:space:]]*$/, "", key)
+        if (key != "auto_merge_policy") {
+          printf "[autorun] warning: unknown frontmatter key %c%s%c in %s (did you mean auto_merge_policy?)\n", \
+            39, key, 39, label > "/dev/stderr"
+        }
+      }
+    }
+  ' "$_mp_uk_path"
+}
+
+# ---------------------------------------------------------------------------
 # merge_policy_resolve — full precedence resolution.
 #
 # Precedence: CLI > spec > constitution > default("pr").
@@ -221,6 +263,11 @@ merge_policy_resolve() {
     return 0
   fi
 
+  # AC#8 — warn (but never halt) on `auto_merge_*` typo-keys in spec frontmatter.
+  if [ -f "$_mp_spec" ]; then
+    merge_policy_warn_unknown_keys "$_mp_spec" "$_mp_spec"
+  fi
+
   # Spec frontmatter
   _mp_spec_val="$(_gh_frontmatter_field "$_mp_spec" auto_merge_policy 2>/dev/null || true)"
   if [ -n "$_mp_spec_val" ]; then
@@ -236,6 +283,8 @@ merge_policy_resolve() {
   # Constitution (project-local)
   _mp_const_path="${PROJECT_DIR:-$PWD}/docs/specs/constitution.md"
   if [ -f "$_mp_const_path" ]; then
+    # AC#8 — also scan the constitution for typo-keys.
+    merge_policy_warn_unknown_keys "$_mp_const_path" "$_mp_const_path"
     _mp_const_val="$(_gh_frontmatter_field "$_mp_const_path" auto_merge_policy 2>/dev/null || true)"
     if [ -n "$_mp_const_val" ]; then
       if ! merge_policy_validate "$_mp_const_val"; then
