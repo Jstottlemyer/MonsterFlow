@@ -8,6 +8,22 @@ Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready
 
 ---
 
+## Cross-model adversarial review (from 2026-05-08 docs-rewrite session)
+
+- **`openrouter-qwen-roster-integration` (NEW spec candidate, 2026-05-08; user has SDK found)** — wire OpenRouter (Qwen 27B and other Qwen models on OpenRouter's catalog) into autorun's adversarial-review path alongside the existing Codex integration. Mirrors Codex plumbing (`scripts/_codex_probe.sh` → `scripts/_openrouter_probe.sh`); silent-skip if `~/.claude/Openrouter.apikey` missing or empty. New persona at `personas/review/openrouter-adversary.md`. OpenRouter exposes an OpenAI-compatible API; SDK route preferred over raw curl (per user note).
+  - **Constraint: must not increase agent max count** — Codex is additive today. Three policy options carved at /spec time:
+    - (a) Replace Codex when both keys present (rotate or prefer cheaper)
+    - (b) Aggregate-as-one-slot — both run, Judge clusters their findings into one "external adversarial" position. **Lean: (b)** because cross-model perspective is conceptually one concern, not N.
+    - (c) Configurable: `external_adversary: codex | qwen | both | none` constitution knob.
+  - **Confirmation needed at /spec time:** the exact OpenRouter model ID for "Qwen 3.6 27B" — this combo doesn't appear in OpenRouter's current public catalog; need user to confirm the slug they intended (likely `qwen/qwen-2.5-72b-instruct`, `qwen/qwen3-6b-instruct`, or a model recently added to OpenRouter not yet documented).
+  - **Wiring surfaces:** `scripts/autorun/spec-review.sh` + `check.sh` (currently dispatch Codex via `_codex_probe.sh`); `findings.schema.json` (allow `openrouter-adversary` as persona name); Judge synthesis (cluster external-adversary findings). `/plan` and `/build` extension paths covered by separate `pipeline-codex-coverage-extension` spec already in backlog.
+  - **Out of scope for v1:** extending to /plan and /build (covered separately); MCP server wrapper (heavier path, not preferred); per-finding cost attribution (covered by `holistic-token-cost-instrumentation`).
+  - **Sequencing:** unblocked. Independent of autorun-merge-policy and autorun-runtime-validation-gate. Could ship before, alongside, or after.
+  - **Size:** S-M (mostly plumbing; ~150-300 LoC + 5-6 test fixtures + persona authoring).
+  - **Codex review optional** — extends an existing pattern; standard /check sufficient.
+
+---
+
 ## ULTRAPROMPT extraction plan (from 2026-05-06 Codex session; recovered 2026-05-07)
 
 - **`ultraprompt-extraction` (NEW spec candidate — meta-plan; spawns 6 child specs)** — full extraction plan lives at `extractionplan.md` (project root, 294 lines). Six durable-proof / resumability / feature-local-state additions sequenced in rollout order. Each is independently shippable; #1-#3 are observational/mechanical (low-risk), #4-#6 change workflow behavior more visibly.
