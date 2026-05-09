@@ -1,3 +1,13 @@
+---
+# Autorun knobs — uncomment any line to opt into project-wide settings.
+# Per-spec frontmatter overrides constitution; --merge-policy= CLI flag overrides spec.
+# See commands/autorun.md for the trade-off discussion before enabling clean / validated.
+#
+# auto_merge_policy: pr        # default; opens PR but does not auto-merge
+# auto_merge_policy: clean     # auto-merge when 4-axis gate satisfied (mode-aware)
+# auto_merge_policy: validated # falls back to pr until autorun-runtime-validation-gate ships
+---
+
 # [PROJECT_NAME] Constitution
 
 **Version:** 1.0
@@ -43,6 +53,18 @@ Default pipeline agents (27) are always active. Project-specific agents listed b
 
 ### Technical Constraints
 [Language, platform, deployment, dependencies]
+
+## Autorun
+
+Optional knobs the autorun pipeline reads from this file's **frontmatter** (the YAML block at the top of this file, between the `---` delimiters):
+
+- `auto_merge_policy` — `pr` | `clean` | `validated`. Default `pr` (autorun
+  opens a PR but does not auto-merge). Set to `clean` to auto-merge when the
+  four-axis gate is satisfied (`MERGE_CAPABLE == 1 AND CODEX_HIGH_COUNT == 0
+  AND RUN_DEGRADED == 0` AND mode-aware verdict). `validated` falls back to
+  `pr` until `autorun-runtime-validation-gate` ships.
+- Per-spec frontmatter overrides this constitution; `--merge-policy=` CLI
+  flag overrides spec.
 
 ## Governance
 

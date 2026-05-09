@@ -56,6 +56,141 @@ Do NOT read the stage commands (spec-review.md, plan.md, etc.) and simulate them
 
 ---
 
+## Merge Policy (v0.11.0+)
+
+Autorun's merge behavior is controlled by `auto_merge_policy`:
+
+- **`pr`** (default since v0.11.0) — autorun opens a PR and stops. You merge it
+  manually after morning review.
+- **`clean`** — autorun opens a PR and auto-merges via `gh pr merge --squash
+  --auto` if the four-axis gate passes (`MERGE_CAPABLE == 1` AND
+  `CODEX_HIGH_COUNT == 0` AND `RUN_DEGRADED == 0` AND mode-aware verdict).
+  Under `gate_mode: permissive`, the verdict requires `GO` (NOT
+  `GO_WITH_FIXES`). Under `gate_mode: strict`, both `GO` and `GO_WITH_FIXES`
+  are accepted.
+- **`validated`** — RESERVED. Falls back to `pr` until
+  `autorun-runtime-validation-gate` ships. Banner stderr-warns once at run
+  start; run.log records `action=fell_back, reason=validated_fallback`.
+
+### Resolution Precedence
+
+CLI flag > spec frontmatter > project constitution > hardcoded default (`pr`).
+
+```bash
+# Per-run override (top precedence):
+scripts/autorun/run.sh --merge-policy=clean my-feature
+# Legacy spelling (deprecated; emits one-line stderr notice each run):
+scripts/autorun/run.sh --auto-merge=clean my-feature
+```
+
+```yaml
+# Per-spec (queue/<slug>.spec.md frontmatter):
+---
+auto_merge_policy: clean
+---
+```
+
+```yaml
+# Project-wide (<project>/docs/specs/constitution.md frontmatter):
+---
+auto_merge_policy: clean
+---
+```
+
+### Run-Start Banner
+
+Autorun emits a 4-knob runtime-config banner to stdout BEFORE Phase 0b
+dispatch (D10 / R7). Knobs displayed: `auto_merge_policy`, `agent_budget`,
+`gate_mode`, `gate_max_recycles`. Each line shows the resolved value and its
+`resolved_from=<cli|spec|frontmatter|constitution|config|default>`.
+
+The merge-policy line warns on every run where `resolved_from=default` until
+the user explicitly chooses any value (banner fires forever-until-opt-in; no
+sentinel suppression). To silence the warning, set `auto_merge_policy: pr`
+(or any value) in spec or constitution frontmatter.
+
+### Per-Run Escape Hatch
+
+To skip auto-merge for a single run regardless of resolved policy, touch:
+
+```bash
+mkdir -p queue/<slug>     # required if dir does not exist yet
+touch queue/<slug>/.manual-review
+```
+
+`merge_policy_dispatch` checks for this file immediately before merge and
+records `action=fell_back, reason=manual_review_requested`. PR stays open.
+
+### Audit Trail
+
+Two events per slug, both on `queue/run.log` (JSONL), joinable on
+`(slug, run_id)`:
+
+- `event=merge_policy_resolved` — written immediately after policy resolution
+  at run start. Captures `policy`, `resolved_from`, `gate_mode`, `spec_sha`
+  (immutable for the run via `git hash-object queue/<slug>.spec.md`). The
+  start row survives mid-run crashes — forensic data is preserved.
+- `event=merge_action_completed` — written at the merge-call site. Captures
+  closed-set `action ∈ {pr_only, auto_merged, fell_back, merge_failed}` and
+  closed-set `reason ∈ {warnings_present, verdict_no_go,
+  codex_high_severity, run_degraded, validated_fallback, branch_protection,
+  merge_call_failed, manual_review_requested, recycle_demoted_findings,
+  pr_create_failed, codex_absent}` (required when action is `fell_back` or
+  `merge_failed`, null otherwise).
+
+### Drift Detector
+
+When `<project>/docs/specs/<slug>/spec.md` (canonical) and
+`queue/<slug>.spec.md` (queue copy) disagree on `auto_merge_policy`, the
+detector at `run.sh` start:
+
+- **Halts (exit 2)** when queue ELEVATES policy above canonical (e.g.
+  canonical=`pr`, queue=`clean`). Privilege-elevation guard (D6).
+- **Warns** on downward drift (queue is safer than canonical). Run continues.
+- **Silent-skips** when canonical absent (cross-project / hand-queued).
+
+Partial order: `pr ≡ validated_today < clean`.
+
+### YAML-Subset Semantics
+
+Frontmatter parsing (via `_gh_frontmatter_field`):
+
+- Reads only between first two `---` lines at column 1.
+- `field: value` with optional leading spaces. First match wins; duplicate
+  keys resolve to first.
+- Strips trailing comments only when preceded by whitespace.
+- Strips one pair of surrounding quotes (single or double).
+- **Does NOT support block/multiline values (`|`, `>`).**
+- Quoted `#` values can be mangled in edge cases.
+- Resolver halts (exit 2) on any non-enum value the parser returns.
+
+### Interim PR-Backlog Triage
+
+Until `pipeline-autorun-final-status-render` ships, an overnight batch of
+10+ specs lands a triage wall in your morning PR review. Run autorun-batch
+with no more than ~10 specs at a time and use this recipe each morning:
+
+```bash
+gh pr list -l autorun --json number,title,isDraft \
+  --jq '.[] | "\(.number)\t\(if .isDraft then "DRAFT" else "READY" end)\t\(.title)"' \
+  | column -t -s $'\t'
+```
+
+### `gate_mode` ≠ `AUTORUN_MODE`
+
+Two orthogonal axes:
+
+- `gate_mode` (spec frontmatter) — `strict | permissive`. Controls whether
+  `clean`-policy auto-merge accepts `GO_WITH_FIXES` (strict) or only `GO`
+  (permissive).
+- `AUTORUN_MODE` (CLI `--mode=`) — `overnight | supervised`. Controls the
+  per-axis warn/block presets (verdict / branch / codex_probe / verify_infra).
+
+Both can be set independently; the banner reads `gate_mode` from spec
+frontmatter directly.
+
+---
+
 ## Queue Format
 
 - **File naming:** `queue/<slug>.spec.md`
