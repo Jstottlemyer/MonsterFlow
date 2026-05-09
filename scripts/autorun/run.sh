@@ -72,6 +72,7 @@ MODE=""
 DRY_RUN=0
 SLUG=""
 MODE_FROM_FLAG=0
+CLI_MERGE_POLICY=""   # autorun-merge-policy v0.11.0 — empty unless --merge-policy / --auto-merge passed
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -92,6 +93,36 @@ while [ "$#" -gt 0 ]; do
       fi
       MODE="$1"
       MODE_FROM_FLAG=1
+      shift
+      ;;
+    # autorun-merge-policy v0.11.0 — canonical CLI flag.
+    --merge-policy=*)
+      CLI_MERGE_POLICY="${1#--merge-policy=}"
+      shift
+      ;;
+    --merge-policy)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "INVALID_FLAG: --merge-policy requires a value (pr|clean|validated)" >&2
+        exit 2
+      fi
+      CLI_MERGE_POLICY="$1"
+      shift
+      ;;
+    # Deprecated alias — emits stderr deprecation notice once at run start (D3).
+    --auto-merge=*)
+      CLI_MERGE_POLICY="${1#--auto-merge=}"
+      echo "[autorun] DEPRECATED: --auto-merge= is the legacy spelling; prefer --merge-policy= (will be removed in a future major release)" >&2
+      shift
+      ;;
+    --auto-merge)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "INVALID_FLAG: --auto-merge requires a value (pr|clean|validated)" >&2
+        exit 2
+      fi
+      CLI_MERGE_POLICY="$1"
+      echo "[autorun] DEPRECATED: --auto-merge is the legacy spelling; prefer --merge-policy (will be removed in a future major release)" >&2
       shift
       ;;
     --dry-run)
@@ -669,6 +700,102 @@ ARTIFACT_DIR="$QUEUE_DIR/$SLUG"
 mkdir -p "$ARTIFACT_DIR"
 export SPEC_FILE ARTIFACT_DIR
 
+# ---------------------------------------------------------------------------
+# autorun-merge-policy v0.11.0 — policy resolution + drift check + banner.
+#
+# Order is load-bearing per the plan (W3.1-W3.4b):
+#   1. Source helper (idempotent guard inside).
+#   2. Drift check at run start (D5: NOT in autorun-batch.sh).
+#   3. Resolve policy (CLI > spec > constitution > default(pr)).
+#   4. Capture spec_sha (D8: git hash-object — once per run, immutable).
+#   5. Capture FOLLOWUPS_BASELINE for slug (R1 guard's anchor — must be
+#      sampled BEFORE any wave runs, so follow-ups added during this run
+#      can be detected at merge dispatch).
+#   6. Emit start-event row to queue/run.log (D22 / R2 — start row survives
+#      mid-run crash).
+#   7. Render the runtime-config banner (before Phase 0b dispatch).
+# ---------------------------------------------------------------------------
+# shellcheck disable=SC1090
+source "$ENGINE_DIR/scripts/autorun/_merge_policy.sh"
+
+# Drift check (D5/D6 + AC#13).
+QUEUE_COPY="$SPEC_FILE"
+CANONICAL_SPEC="$PROJECT_DIR/docs/specs/$SLUG/spec.md"
+DRIFT_RC=0
+queue_copy_drift_check "$CANONICAL_SPEC" "$QUEUE_COPY" || DRIFT_RC=$?
+if [ "$DRIFT_RC" -eq 2 ]; then
+  echo "[autorun] $SLUG: halted by queue-copy drift detector (privilege elevation)" >&2
+  write_failure_item "drift-check" "queue elevates auto_merge_policy above canonical"
+  exit 2
+fi
+
+# Policy resolution (CLI > spec > constitution > default).
+RESOLVED=""
+RESOLVED="$(merge_policy_resolve "$SPEC_FILE" "$CLI_MERGE_POLICY")" || {
+  echo "[autorun] $SLUG: invalid auto_merge_policy — halting" >&2
+  exit 2
+}
+RESOLVED_FROM="${RESOLVED%%:*}"
+RESOLVED_POLICY="${RESOLVED#*:}"
+export RESOLVED_FROM RESOLVED_POLICY
+
+# Spec SHA — immutable for this run (D8).
+SPEC_SHA="$(git -C "$PROJECT_DIR" hash-object "$SPEC_FILE" 2>/dev/null || echo "unknown")"
+export SPEC_SHA
+
+# gate_mode for banner + dispatch — read from spec frontmatter directly (D14).
+GATE_MODE=""
+GATE_MODE_SOURCE="default"
+GATE_MODE_FM="$(_gh_frontmatter_field "$SPEC_FILE" gate_mode 2>/dev/null || true)"
+case "$GATE_MODE_FM" in
+  strict|permissive) GATE_MODE="$GATE_MODE_FM"; GATE_MODE_SOURCE="frontmatter" ;;
+  *) GATE_MODE="permissive" ;;
+esac
+export GATE_MODE GATE_MODE_SOURCE
+
+# gate_max_recycles — read via existing helper (clamped 1..5).
+MAX_RECYCLES_RAW="$(_gh_frontmatter_field "$SPEC_FILE" gate_max_recycles 2>/dev/null || true)"
+case "$MAX_RECYCLES_RAW" in
+  ''|*[!0-9]*) MAX_RECYCLES=2; MAX_RECYCLES_SOURCE="default" ;;
+  *)           MAX_RECYCLES="$MAX_RECYCLES_RAW"; MAX_RECYCLES_SOURCE="spec" ;;
+esac
+
+# Agent budget — read existing config or default. account-type-agent-scaling owns this.
+AGENT_BUDGET="${AGENT_BUDGET:-6}"
+AGENT_BUDGET_SOURCE="default"
+if [ -f "$CONFIG_FILE" ]; then
+  AB_FROM_CFG="$(python3 "$ENGINE_DIR/scripts/autorun/_policy_json.py" get "$CONFIG_FILE" "/agent_budget" --default "" 2>/dev/null || true)"
+  if [ -n "$AB_FROM_CFG" ]; then
+    AGENT_BUDGET="$AB_FROM_CFG"
+    AGENT_BUDGET_SOURCE="config"
+  fi
+fi
+
+# Run log path (project-wide, slug-shared file).
+RUN_LOG_PATH="$QUEUE_DIR/run.log"
+export RUN_LOG_PATH
+
+# Followups baseline — slug-scoped count BEFORE any wave runs (R1 anchor).
+FOLLOWUPS_PATH="$PROJECT_DIR/docs/specs/$SLUG/followups.jsonl"
+FOLLOWUPS_BASELINE="$(merge_policy_followups_count "$FOLLOWUPS_PATH" "$SLUG")"
+export FOLLOWUPS_PATH FOLLOWUPS_BASELINE
+
+# Validated → pr stderr-warn (one-line, banner-adjacent — AC#21).
+if [ "$RESOLVED_POLICY" = "validated" ]; then
+  echo "[autorun] $SLUG: WARN — validated policy not yet shipped; falling back to PR-only" >&2
+fi
+
+# Start-event row — written before any work runs (D22 / R2).
+log_merge_policy_resolved "$RUN_LOG_PATH" "$SLUG" "$RESOLVED_POLICY" "$RESOLVED_FROM" \
+  "$GATE_MODE" "$SPEC_SHA" "$RUN_ID"
+
+# Banner — to stdout (R7); fires before Phase 0b dispatch (AC#10 ordering).
+merge_policy_render_banner "$SLUG" \
+  "$RESOLVED_POLICY" "$RESOLVED_FROM" \
+  "$GATE_MODE" "$GATE_MODE_SOURCE" \
+  "$AGENT_BUDGET" "$AGENT_BUDGET_SOURCE" \
+  "$MAX_RECYCLES" "$MAX_RECYCLES_SOURCE"
+
 write_failure_item() {
   local stage="$1" reason="$2"
   [ -f "$ARTIFACT_DIR/failure.md" ] && return 0
@@ -891,10 +1018,18 @@ else
     || git -C "$PROJECT_DIR" remote get-url origin 2>/dev/null \
        | sed -E 's|^git@github\.com:([^/]+/[^/]+)\.git$|\1|; s|^https://github\.com/([^/]+/[^/]+)\.git$|\1|; s|^https://github\.com/([^/]+/[^/]+)$|\1|')"
 
+  # autorun-merge-policy v0.11.0 — PR conventions (D9):
+  # - Title: [autorun] <slug>
+  # - Body: includes verdict + run.log path + spec link
+  # - Draft state: gated on verdict + dispatch outcome (decided AFTER PR body
+  #   is constructed but BEFORE merge dispatch — see Stage 7).
+  # - Label: `autorun`
   STAGE_EXIT=0
+  PR_TITLE="[autorun] $SLUG"
   PR_URL_VAL="$(gh pr create \
       --repo "$PR_REPO" \
-      --title "autorun: $SLUG" \
+      --title "$PR_TITLE" \
+      --label autorun \
       --body "$(cat <<PRBODY
 ## Summary
 Automated implementation of \`$SLUG\` via autorun pipeline.
@@ -906,10 +1041,13 @@ Automated implementation of \`$SLUG\` via autorun pipeline.
 - **Pre-build SHA:** $PRE_BUILD_SHA
 - **Autorun version:** $AUTORUN_VERSION
 - **Mode:** $MODE
+- **Merge policy:** $RESOLVED_POLICY (resolved_from=$RESOLVED_FROM)
+- **Gate mode:** $GATE_MODE (source=$GATE_MODE_SOURCE)
 - **Wave count:** $WAVE_COUNT
 - **Test cmd:** $TEST_CMD_DISPLAY
 - **Timestamp (UTC):** $(date -u +%Y-%m-%dT%H:%M:%SZ)
 - **Artifacts:** queue/$SLUG/{review-findings,plan,check,build-log}.md
+- **Run log:** queue/run.log (audit JSONL)
 PRBODY
 )" \
       --base main \
@@ -922,11 +1060,16 @@ PRBODY
     echo "[autorun] $SLUG: PR created: $PR_URL_VAL"
     log_run "pr-creation" 0
   else
+    # autorun-merge-policy D23 / R3 — gh pr create failure is now a
+    # primary terminal action under default config. Record the failure
+    # via the canonical end-event row + preserve branch + exit 0 to
+    # match the contract for fell_back/branch_protection symmetry.
     echo "[autorun] $SLUG: PR creation failed (exit $STAGE_EXIT): $PR_URL_VAL" >&2
     log_run "pr-creation" 1
-    write_failure_item "pr-creation" "PR creation failed (exit $STAGE_EXIT)"
+    log_merge_action_completed "$RUN_LOG_PATH" "$SLUG" merge_failed pr_create_failed "" "" "$RUN_ID"
+    write_failure_item "pr-creation" "gh pr create failed (exit $STAGE_EXIT) — branch preserved"
     FINAL_STATE="completed-no-pr"
-    exit 1
+    exit 0
   fi
 fi
 
@@ -954,7 +1097,9 @@ if [ "$DRY_RUN" -eq 1 ]; then
 elif [ -f "$CODEX_OUTPUT_FILE" ]; then
   CODEX_AVAILABLE=1
   CODEX_HIGH_COUNT="$(grep -c '^\*\*High:\*\*' "$CODEX_OUTPUT_FILE" 2>/dev/null || true)"
-  CODEX_HIGH_COUNT="${CODEX_HIGH_COUNT:-0}"
+  # Guard: integer-only (per autorun-shell-reviewer recommendation; matches
+  # the canonical pattern in scripts/_gate_helpers.sh:111).
+  case "$CODEX_HIGH_COUNT" in ''|*[!0-9]*) CODEX_HIGH_COUNT=0 ;; esac
 else
   CODEX_PROBE_EXIT=0
   bash "$CODEX_PROBE_BIN" >/dev/null 2>&1 || CODEX_PROBE_EXIT=$?
@@ -985,7 +1130,7 @@ else
         CODEX_AVAILABLE=1
         log_run "codex-review" 0
         CODEX_HIGH_COUNT="$(grep -c '^\*\*High:\*\*' "$CODEX_OUTPUT_FILE" 2>/dev/null || true)"
-        CODEX_HIGH_COUNT="${CODEX_HIGH_COUNT:-0}"
+        case "$CODEX_HIGH_COUNT" in ''|*[!0-9]*) CODEX_HIGH_COUNT=0 ;; esac
         echo "[autorun] $SLUG: Codex High findings: $CODEX_HIGH_COUNT"
       else
         echo "[autorun] $SLUG: Codex review skipped/timed out (exit $CODEX_EXIT)" >&2
@@ -1073,32 +1218,79 @@ if [ "$CODEX_HIGH_COUNT" -eq 0 ] && [ "$RUN_DEGRADED" -eq 0 ]; then
   esac
 fi
 
+# ---------------------------------------------------------------------------
+# autorun-merge-policy v0.11.0 dispatch — replaces the legacy merge gate.
+#
+# Composition with existing four-axis gate (preserved):
+#   merge_capable iff CODEX_HIGH_COUNT == 0 AND RUN_DEGRADED == 0
+#                 AND verdict ∈ {GO, GO_WITH_FIXES}
+#
+# is_clean_for_merge() refines only the verdict portion under permissive mode
+# (requires GO, not GO_WITH_FIXES) — see _merge_policy.sh.
+# ---------------------------------------------------------------------------
+
+# FOLLOWUPS_ADDED — line-diff on followups.jsonl for this slug between run-start
+# baseline and merge dispatch (R1 anchor; D21).
+FOLLOWUPS_NOW="$(merge_policy_followups_count "$FOLLOWUPS_PATH" "$SLUG")"
+FOLLOWUPS_ADDED=$(( FOLLOWUPS_NOW - FOLLOWUPS_BASELINE ))
+[ "$FOLLOWUPS_ADDED" -lt 0 ] && FOLLOWUPS_ADDED=0
+export FOLLOWUPS_ADDED
+
+# CODEX_RAN — SA-1 hardening. 1 iff probe exited 0 AND review file exists.
+CODEX_RAN=0
+if [ "$CODEX_AVAILABLE" = "1" ] && [ -f "$CODEX_OUTPUT_FILE" ]; then
+  CODEX_RAN=1
+fi
+
+# Extract PR number for audit row (best-effort).
+PR_NUMBER=""
+if [ -n "${PR_URL_VAL:-}" ]; then
+  PR_NUMBER="$(printf '%s' "$PR_URL_VAL" | sed -E 's|.*/pull/([0-9]+).*|\1|' | grep -E '^[0-9]+$' || true)"
+fi
+
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "[autorun] $SLUG: DRY RUN — skipping merge"
+  echo "[autorun] $SLUG: DRY RUN — skipping merge dispatch"
 elif [ "$PR_CREATED" -ne 1 ]; then
-  echo "[autorun] $SLUG: no PR — skipping merge"
-elif [ "$MERGE_CAPABLE" -ne 1 ]; then
-  echo "[autorun] $SLUG: merge gate not met (codex_high=$CODEX_HIGH_COUNT, run_degraded=$RUN_DEGRADED, verdict=$VERDICT) — PR left for manual review"
-  log_run "merge-gate" 0
-  FINAL_STATE="pr-awaiting-review"
+  echo "[autorun] $SLUG: no PR — skipping merge dispatch"
 else
   update_stage "merging"
-  MERGE_EXIT=0
-  gh pr merge "$PR_URL_VAL" --squash --auto 2>/dev/null || MERGE_EXIT=$?
-  if [ "$MERGE_EXIT" -eq 0 ]; then
-    MERGE_STATE="$(gh pr view "$PR_URL_VAL" --json state -q .state 2>/dev/null || echo "UNKNOWN")"
-    if [ "$MERGE_STATE" = "MERGED" ]; then
+  echo "[autorun] $SLUG: dispatching merge policy=$RESOLVED_POLICY resolved_from=$RESOLVED_FROM gate_mode=$GATE_MODE merge_capable=$MERGE_CAPABLE verdict=$VERDICT followups_added=$FOLLOWUPS_ADDED codex_ran=$CODEX_RAN"
+
+  merge_policy_dispatch "$SLUG" "$PR_URL_VAL" "$RESOLVED_POLICY" "$RESOLVED_FROM" \
+    "$GATE_MODE" "$MERGE_CAPABLE" "$VERDICT" "$FOLLOWUPS_ADDED" "$RUN_ID" \
+    "$RUN_LOG_PATH" "$PR_NUMBER" "$CODEX_RAN"
+
+  # Determine final-state from the just-written end-event (best-effort grep).
+  LAST_ACTION="$(grep '"event": "merge_action_completed"' "$RUN_LOG_PATH" 2>/dev/null \
+                  | grep "\"slug\": \"$SLUG\"" \
+                  | grep "\"run_id\": \"$RUN_ID\"" \
+                  | tail -1 \
+                  | sed -E 's/.*"action": "([^"]+)".*/\1/' || echo "")"
+  case "$LAST_ACTION" in
+    auto_merged)
       MERGED=1
-      echo "[autorun] $SLUG: squash merged: $PR_URL_VAL"
+      echo "[autorun] $SLUG: auto-merged (or queued via gh --auto)"
       log_run "merge" 0
-    else
-      echo "[autorun] $SLUG: auto-merge enabled (state=$MERGE_STATE)"
-      log_run "merge-auto-enabled" 0
-    fi
-  else
-    echo "[autorun] $SLUG: WARN — merge failed (exit $MERGE_EXIT)" >&2
-    log_run "merge" "$MERGE_EXIT"
-  fi
+      ;;
+    pr_only)
+      echo "[autorun] $SLUG: PR opened (policy=$RESOLVED_POLICY) — no merge attempted"
+      log_run "merge-skipped" 0
+      ;;
+    fell_back)
+      echo "[autorun] $SLUG: merge fell back — PR left for manual review"
+      log_run "merge-fell-back" 0
+      FINAL_STATE="pr-awaiting-review"
+      ;;
+    merge_failed)
+      echo "[autorun] $SLUG: merge failed — PR left open"
+      log_run "merge-failed" 1
+      FINAL_STATE="pr-awaiting-review"
+      ;;
+    *)
+      echo "[autorun] $SLUG: WARN — could not parse final action from run.log"
+      log_run "merge-unknown" 0
+      ;;
+  esac
 fi
 
 # ---------------------------------------------------------------------------

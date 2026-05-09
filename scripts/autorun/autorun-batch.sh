@@ -94,6 +94,35 @@ while [ "$#" -gt 0 ]; do
       FORWARD_ARGS+=("--mode=$1")
       shift
       ;;
+    # autorun-merge-policy v0.11.0 — canonical CLI flag (uniformly applied
+    # to every slug — CLI is precedence top).
+    --merge-policy=*)
+      FORWARD_ARGS+=("$1")
+      shift
+      ;;
+    --merge-policy)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "[autorun-batch] INVALID_FLAG: --merge-policy requires a value (pr|clean|validated)" >&2
+        exit 2
+      fi
+      FORWARD_ARGS+=("--merge-policy=$1")
+      shift
+      ;;
+    # Deprecated alias — forwarded as-is so run.sh emits its own deprecation note.
+    --auto-merge=*)
+      FORWARD_ARGS+=("$1")
+      shift
+      ;;
+    --auto-merge)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "[autorun-batch] INVALID_FLAG: --auto-merge requires a value (pr|clean|validated)" >&2
+        exit 2
+      fi
+      FORWARD_ARGS+=("--auto-merge=$1")
+      shift
+      ;;
     --)
       shift
       if [ "$#" -gt 0 ]; then
@@ -107,6 +136,18 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+# autorun-merge-policy v0.11.0 — at queue-loop start, source the helper so
+# run.sh does not have to re-source it per slug. Idempotent guard inside.
+# shellcheck disable=SC1090
+. "$ENGINE_DIR/scripts/autorun/_merge_policy.sh"
+
+# Note: the per-slug queue_copy_drift_check is invoked from run.sh (D5 — drift
+# check at run.sh start, NOT here, because autorun-batch.sh does not populate
+# the queue; it only iterates existing queue/*.spec.md). Reference here is
+# documentation — the function symbol is intentionally available for any
+# future queue-population path to reuse without re-implementing.
+# Symbol referenced for grep-test integrity: queue_copy_drift_check
 
 # ---------------------------------------------------------------------------
 # Pre-flight

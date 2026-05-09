@@ -44,6 +44,20 @@ Default pipeline agents (27) are always active. Project-specific agents listed b
 ### Technical Constraints
 [Language, platform, deployment, dependencies]
 
+## Autorun
+
+# auto_merge_policy: pr  # default; uncomment and set to 'clean' only if you've reviewed the trade-off in commands/autorun.md
+
+Optional knobs the autorun pipeline reads from this file's frontmatter:
+
+- `auto_merge_policy` — `pr` | `clean` | `validated`. Default `pr` (autorun
+  opens a PR but does not auto-merge). Set to `clean` to auto-merge when the
+  four-axis gate is satisfied (`MERGE_CAPABLE == 1 AND CODEX_HIGH_COUNT == 0
+  AND RUN_DEGRADED == 0` AND mode-aware verdict). `validated` falls back to
+  `pr` until `autorun-runtime-validation-gate` ships.
+- Per-spec frontmatter overrides this constitution; `--merge-policy=` CLI
+  flag overrides spec.
+
 ## Governance
 
 - Constitution supersedes informal preferences for this project

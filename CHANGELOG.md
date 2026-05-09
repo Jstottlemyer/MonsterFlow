@@ -4,6 +4,120 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-08
+
+Autorun merge-policy default flip — autorun now opens a PR by default;
+auto-merge is opt-in per-spec, per-project, or per-CLI. Spec / plan / check
+artifacts: `docs/specs/autorun-merge-policy/`.
+
+### ⚠ BREAKING DEFAULT
+
+- **Autorun no longer auto-merges by default.** Previous behavior:
+  `gh pr create` → `gh pr merge --squash --auto` if gates clean. New
+  behavior: `gh pr create` → leave PR open (`action=pr_only`). Auto-merge
+  fires only when an explicit policy is set anywhere in the precedence
+  chain (CLI > spec.md > constitution > default).
+- **Default value:** `auto_merge_policy: pr` (safe). Reasoning: silent
+  regression in main is much costlier than morning PR review, especially
+  for downstream projects MonsterFlow runs against (asymmetric-risk).
+- **Action required (external adopters):** to preserve the legacy
+  auto-merge-on-clean behavior, set one of:
+  - Per-spec: `auto_merge_policy: clean` in `spec.md` frontmatter
+  - Per-project: `auto_merge_policy: clean` in `<project>/docs/specs/constitution.md`
+  - Per-run: `scripts/autorun/run.sh --merge-policy=clean <slug>`
+  - Or via `autorun-batch.sh --merge-policy=clean`
+- A run-start banner displays the resolved policy + 3 other knobs
+  (gate_mode, agent_budget, gate_max_recycles) every run; the merge-policy
+  line warns on every run where `resolved_from=default` until the user
+  explicitly chooses any value (banner fires forever-until-opt-in).
+- **Soft batch-size ceiling:** until `pipeline-autorun-final-status-render`
+  ships, run autorun-batch with no more than ~10 specs at a time to avoid
+  triage-wall on morning PR review. Interim recipe in `commands/autorun.md`:
+  `gh pr list -l autorun --json number,title,isDraft`.
+
+### Added
+
+- New optional frontmatter key `auto_merge_policy: pr | clean | validated`
+  in `spec.md` and `<project>/docs/specs/constitution.md`.
+- New CLI flag `--merge-policy=<pr|clean|validated>` on
+  `scripts/autorun/run.sh` and `scripts/autorun/autorun-batch.sh`.
+  Legacy `--auto-merge=` accepted as a deprecated alias (emits one-line
+  stderr deprecation notice; will be removed in a future major release).
+- `scripts/autorun/_merge_policy.sh` — helper library with
+  `merge_policy_resolve`, `merge_policy_validate`, `is_clean_for_merge`
+  (mode-aware predicate refining the verdict axis under `gate_mode:
+  permissive` to require `VERDICT == GO`), `merge_policy_render_banner`,
+  `merge_policy_dispatch` (sole caller of `log_merge_action_completed`),
+  `queue_copy_drift_check`, `merge_policy_field_state`, and
+  `merge_policy_followups_count`.
+- New `validated` policy value falls back to `pr` (NOT `clean`) until
+  `autorun-runtime-validation-gate` ships; banner stderr-warns once at
+  run start; run.log records `action=fell_back, reason=validated_fallback`.
+- New per-run escape hatch: `queue/<slug>/.manual-review` touch file
+  forces auto-merge skip for this slug only. Records
+  `action=fell_back, reason=manual_review_requested`.
+- New audit row schema (split start + end events) on `queue/run.log`:
+  `event=merge_policy_resolved` written immediately after policy
+  resolution at run start (start row survives mid-run crashes);
+  `event=merge_action_completed` written by `merge_policy_dispatch` at
+  end. Both joinable on `(slug, run_id)`. Forensic fields: `spec_sha`
+  (immutable for the run), `pr_number`, `merge_sha` (MAY be null on
+  `auto_merged` because `gh --auto` queues the merge for later).
+- `action` enum (closed, 4 values): `pr_only, auto_merged, fell_back,
+  merge_failed`.
+- `reason` enum (closed, 11 values): `warnings_present, verdict_no_go,
+  codex_high_severity, run_degraded, validated_fallback,
+  branch_protection, merge_call_failed, manual_review_requested,
+  recycle_demoted_findings, pr_create_failed, codex_absent`.
+- Drift detector at `run.sh` start: compares `auto_merge_policy` line in
+  `queue/<slug>.spec.md` vs canonical at
+  `<project>/docs/specs/<slug>/spec.md`. Asymmetric: halts on privilege
+  elevation (queue elevates above canonical); warns on downward drift;
+  silent-skip when canonical absent (cross-project / hand-queued).
+- PR conventions: title `[autorun] <slug>`, body includes verdict +
+  spec link + run.log path + merge-policy resolution; label `autorun`;
+  re-run force-pushes existing branch.
+- Hardening: `gh pr create` failure on the primary terminal-action path
+  is caught and recorded as `action=merge_failed, reason=pr_create_failed`;
+  branch is preserved; autorun exits 0.
+- Hardening: `clean` policy + missing/auth-failed Codex (CODEX_RAN==0)
+  under `gate_mode: permissive` falls back to PR-only with
+  `reason=codex_absent`. Strict mode preserves vacuous-zero semantics.
+- Hardening: `MERGE_POLICY_DISPATCH_OVERRIDE` test hook is gated on
+  `MONSTERFLOW_TEST_MODE=1` sentinel; warn-and-ignore in production
+  shells.
+- Hardening: PR body sanitizer (`_mp_sanitize_pr_body_text`) NFKC-
+  normalizes + zero-width-strips reviewer summaries; hard-fails on
+  `check-verdict` substring (prompt-injection guard for downstream LLM
+  consumers).
+- `tests/test-autorun-merge-policy.sh` — 60+ assertions covering
+  AC#3/7/8/11/13/16/17/18/19/20/21/22/23/24/25, AC-R1/R2, SA-1/2/3,
+  YAML-subset behavior, `is_clean_for_merge` truth table, `(slug,
+  run_id)` join key, slug-scoped followups counter.
+- `templates/constitution.md` — adds commented-out `auto_merge_policy:`
+  example with explanatory note.
+
+### Changed
+
+- `scripts/autorun/run.sh:1069-1102` (legacy four-axis merge gate) is
+  now composed via `merge_policy_dispatch`; the four-axis gate
+  (`MERGE_CAPABLE`, `CODEX_HIGH_COUNT`, `RUN_DEGRADED`, `VERDICT`) is
+  preserved unchanged. `is_clean_for_merge` refines only the verdict
+  axis under `clean`-policy permissive mode.
+- `commands/autorun.md` — documents the new key, precedence, CLI flag,
+  banner content (both verbose/terse tiers), per-run escape hatch,
+  manual-pipeline pointer, how to silence the banner, YAML-subset
+  semantics, and interim PR-backlog triage recipe.
+
+### Notes
+
+- Manual pipeline (`/spec → /spec-review → /plan → /check → /build`
+  invoked interactively) is unaffected — there is no auto-merge step in
+  manual flow; the user invokes `gh pr merge` themselves.
+- Per-axis merge policy, repository-level branch protection rules, env-
+  var escape hatches, and Levenshtein typo-suggestion are explicitly
+  out of scope. See `BACKLOG.md`.
+
 ## [0.10.10] - 2026-05-07
 
 ### Added
