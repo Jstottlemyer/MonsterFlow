@@ -1264,9 +1264,16 @@ if [ "$CODEX_AVAILABLE" = "1" ] && [ -f "$CODEX_OUTPUT_FILE" ]; then
 fi
 
 # Extract PR number for audit row (best-effort).
+# Use the same robust URL extraction as elsewhere — pick the LAST canonical
+# https://.../pull/N line (gh may emit multi-line warnings citing other PR
+# numbers before the actual URL). Apply sed only to that single line so we
+# never capture a stray /pull/N from a warning blob.
 PR_NUMBER=""
 if [ -n "${PR_URL_VAL:-}" ]; then
-  PR_NUMBER="$(printf '%s' "$PR_URL_VAL" | sed -E 's|.*/pull/([0-9]+).*|\1|' | grep -E '^[0-9]+$' || true)"
+  _PR_CLEAN_URL="$(printf '%s' "$PR_URL_VAL" | grep -Eo 'https://[^ ]+/pull/[0-9]+' | tail -1 || true)"
+  if [ -n "$_PR_CLEAN_URL" ]; then
+    PR_NUMBER="$(printf '%s' "$_PR_CLEAN_URL" | sed -E 's|.*/pull/([0-9]+).*|\1|' | grep -E '^[0-9]+$' || true)"
+  fi
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
