@@ -718,6 +718,23 @@ export SPEC_FILE ARTIFACT_DIR
 # shellcheck disable=SC1090
 source "$ENGINE_DIR/scripts/autorun/_merge_policy.sh"
 
+# write_failure_item — defined here (above first use at drift-check, line ~728)
+# so any early-exit path can write the canonical failure artifact. Codex review
+# of PR #8 flagged: prior placement was AFTER first call, leaving drift-elevation
+# halt with a `command not found` error and no failure.md written.
+write_failure_item() {
+  local stage="$1" reason="$2"
+  [ -f "$ARTIFACT_DIR/failure.md" ] && return 0
+  cat > "$ARTIFACT_DIR/failure.md" <<FAIL_EOF
+<!-- autorun:stage=$stage slug=$SLUG run_id=$RUN_ID -->
+# Failure: $SLUG
+
+**Stage:** $stage
+**Reason:** $reason
+**Timestamp:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+FAIL_EOF
+}
+
 # Drift check (D5/D6 + AC#13).
 QUEUE_COPY="$SPEC_FILE"
 CANONICAL_SPEC="$PROJECT_DIR/docs/specs/$SLUG/spec.md"
@@ -795,19 +812,6 @@ merge_policy_render_banner "$SLUG" \
   "$GATE_MODE" "$GATE_MODE_SOURCE" \
   "$AGENT_BUDGET" "$AGENT_BUDGET_SOURCE" \
   "$MAX_RECYCLES" "$MAX_RECYCLES_SOURCE"
-
-write_failure_item() {
-  local stage="$1" reason="$2"
-  [ -f "$ARTIFACT_DIR/failure.md" ] && return 0
-  cat > "$ARTIFACT_DIR/failure.md" <<FAIL_EOF
-<!-- autorun:stage=$stage slug=$SLUG run_id=$RUN_ID -->
-# Failure: $SLUG
-
-**Stage:** $stage
-**Reason:** $reason
-**Timestamp:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
-FAIL_EOF
-}
 
 # ---------------------------------------------------------------------------
 # STOP file handling — render morning report and exit 3
@@ -1046,12 +1050,11 @@ else
     GO_WITH_FIXES|NO_GO) PR_DRAFT_FLAG="--draft" ;;
   esac
 
-  PR_URL_VAL="$(gh pr create \
-      --repo "$PR_REPO" \
-      --title "$PR_TITLE" \
-      --label autorun \
-      $PR_DRAFT_FLAG \
-      --body "$(cat <<PRBODY
+  # Build PR body separately so it can be sanitized before passing to gh.
+  # Codex review of PR #8 flagged: _mp_sanitize_pr_body_text was defined but
+  # never called — promised hard-fail on forbidden 'check-verdict' text was not
+  # enforced for PR body inputs. Now sanitized here as a single pass.
+  PR_BODY_RAW="$(cat <<PRBODY
 ## Summary
 Automated implementation of \`$SLUG\` via autorun pipeline.
 
@@ -1070,12 +1073,45 @@ Automated implementation of \`$SLUG\` via autorun pipeline.
 - **Artifacts:** queue/$SLUG/{review-findings,plan,check,build-log}.md
 - **Run log:** queue/run.log (audit JSONL)
 PRBODY
-)" \
+)"
+  PR_BODY_SANITIZED="$(_mp_sanitize_pr_body_text "$PR_BODY_RAW")"
+  PR_BODY_RC=$?
+  if [ "$PR_BODY_RC" -ne 0 ]; then
+    echo "[autorun] $SLUG: PR body contains forbidden 'check-verdict' literal — halting (SA-3 prompt-injection guard)" >&2
+    log_run "pr-creation" 1
+    log_merge_action_completed "$RUN_LOG_PATH" "$SLUG" merge_failed pr_body_sanitize_failed "" "" "$RUN_ID"
+    write_failure_item "pr-creation" "PR body sanitize rejected (forbidden 'check-verdict' literal in interpolated field)"
+    FINAL_STATE="completed-no-pr"
+    exit 0
+  fi
+
+  PR_URL_VAL="$(gh pr create \
+      --repo "$PR_REPO" \
+      --title "$PR_TITLE" \
+      --label autorun \
+      $PR_DRAFT_FLAG \
+      --body "$PR_BODY_SANITIZED" \
       --base main \
       --head "autorun/$SLUG" \
       2>&1)" || STAGE_EXIT=$?
 
+  # Codex HIGH: gh pr create ... 2>&1 may emit warning lines mixed with the URL;
+  # the raw blob must NOT be passed to gh pr merge downstream. Extract the
+  # canonical https://.../pull/N URL once, here, and store ONLY that downstream.
   if [ "$STAGE_EXIT" -eq 0 ] && [ -n "$PR_URL_VAL" ]; then
+    # `|| true` guards against pipefail-on-no-match if set -e is ever enabled;
+    # `[^[:space:]]+` (vs `[^ ]+`) hardens against stray CR/TAB in gh output.
+    _PR_CLEAN_URL="$(printf '%s\n' "$PR_URL_VAL" | grep -Eo 'https://[^[:space:]]+/pull/[0-9]+' | tail -1 || true)"
+    if [ -z "$_PR_CLEAN_URL" ]; then
+      echo "[autorun] $SLUG: ERROR — gh pr create exited 0 but no canonical PR URL extracted" >&2
+      printf '%s\n' "$PR_URL_VAL" | head -20 >&2
+      log_run "pr-creation" 1
+      log_merge_action_completed "$RUN_LOG_PATH" "$SLUG" merge_failed pr_create_url_extract_failed "" "" "$RUN_ID"
+      write_failure_item "pr-creation" "gh pr create exited 0 but no canonical https://.../pull/N URL extracted from output"
+      FINAL_STATE="completed-no-pr"
+      exit 0
+    fi
+    PR_URL_VAL="$_PR_CLEAN_URL"
     echo "$PR_URL_VAL" > "$ARTIFACT_DIR/pr-url.txt"
     PR_CREATED=1
     echo "[autorun] $SLUG: PR created: $PR_URL_VAL"
