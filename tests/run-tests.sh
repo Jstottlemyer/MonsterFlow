@@ -107,6 +107,8 @@ TESTS=(
   test-spec-edge-case-16.sh
   # dynamic-roster-1-tags — persona tag-schema integrity validation
   test-persona-fit-tags.sh
+  # autorun-merge-policy v0.11.0 — PR-by-default + opt-in clean/validated merge
+  test-autorun-merge-policy.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).
