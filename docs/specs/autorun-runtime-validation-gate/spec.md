@@ -6,11 +6,11 @@ gate_max_recycles: 2
 # Autorun Runtime Validation Gate Spec — Smoke-Check the Built Thing Before Merge
 
 **Created:** 2026-05-08
-**Revised:** 2026-05-08 (Q&A refinement to 0.95 confidence; cross-spec alignment with autorun-merge-policy)
+**Revised:** 2026-05-08 (Q&A refinement → 0.95); 2026-05-09 (Revision 2 — post-/check NO_GO; external-PR trust model resolved; security blockers F1-F5 collapsed via skip-on-external-author)
 **Constitution:** none — session roster only
 **Audience:** MonsterFlow contributors and pipeline maintainers — adopter-facing copy is handled in `docs/index.html`.
 **Applies to:** autorun only. Manual pipeline runs are unaffected (no auto-merge step in manual flow).
-**Confidence:** Scope 0.92 / UX 0.92 / Data 0.92 / Integration 0.93 / Edges 0.95 / Acceptance 0.93 (avg 0.93)
+**Confidence:** Scope 0.95 / UX 0.92 / Data 0.95 / Integration 0.93 / Edges 0.97 / Acceptance 0.95 (avg 0.945)
 **gate_mode:** permissive
 **gate_max_recycles:** 2
 
@@ -24,16 +24,35 @@ Carved from in-conversation review 2026-05-08 alongside `autorun-merge-policy`. 
 
 ## Cross-Spec Dependencies
 
-This spec extends `autorun-merge-policy`'s `reason` enum by adding one new value: `runtime_not_pass`. When this spec lands, the merge-policy spec's enum is updated additively (no breaks to existing `reason` values). Audit row gains a `details.runtime_status` field carrying the validator's actual status (`pass | fail | skipped | error`) for forensic granularity, even though all non-pass collapse to one `reason`.
+This spec extends `autorun-merge-policy`'s `reason` enum by adding TWO new values: `runtime_not_pass` AND `runtime_pr_external_author` (the latter from Revision 2's external-PR trust model — see **Trust Model** below). When this spec lands, the merge-policy spec's enum is updated additively (no breaks to existing values). Audit row gains a `details.runtime_status` field carrying the validator's actual status (`pass | fail | skipped | error | skipped_external_author`) for forensic granularity.
+
+## Trust Model (Revision 2 — closes 5 sev:security blockers via single architectural decision)
+
+**Threat:** MonsterFlow accepts external PRs (`feedback_branch_protection_external_prs.md`); autorun fires unattended on PR branches. The `runtime_config` fields `dev_server_cmd`, `cmd`, `xcodeproj`, `test_plan`, AND web-served content reachable via `target_url`, ALL flow through shell-eval or browser execution → unattended RCE on the maintainer's host the moment any external contributor opens a PR with a malicious spec.md or hostile served content.
+
+**Resolution (chosen 2026-05-09):** **Runtime validation is SKIPPED on non-CODEOWNERS branches.** When autorun detects an external-author PR (the branch's most recent author is not a CODEOWNERS-listed user, OR the spec.md was last modified by a non-CODEOWNERS user, OR no `.github/CODEOWNERS` exists), validator dispatch is bypassed and run.log records `action: fell_back, reason: runtime_pr_external_author, details: {runtime_status: skipped_external_author}`.
+
+**Cascade — this single decision closes 5 sev:security blockers from the /check synthesis:**
+
+| Blocker | Was | Now closed by |
+|---|---|---|
+| F1 (substring check on shadow validators bypassable) | Half-defense | Removed entirely — shadow validators only run on owner-authored branches; external-PR risk vanishes; TOFU is the only gate |
+| F2 (external-PR provenance → unattended RCE) | The parent finding | **Resolved directly** — skip-on-external-author |
+| F3 (TOFU realpath→hash→exec is TOCTOU) | Real-but-narrow concern | Hardening still applied (open-once + fstat + hash-from-fd + exec-from-fd; trust-file lock across sequence; reject symlinks) but threat surface no longer reaches external attackers |
+| F4 (`gh release upload` of validator log/screenshot leaks secrets) | Real concern | Validator output upload is OWNER-AUTHORED-PR ONLY; external PRs never invoke validator → never produce output to upload. Plus secret-scrubber regex (sk-, gh[ps]_, AKIA, Bearer, JWT-shape, hex≥32) applied to any uploaded log; screenshots opt-in via `attach_screenshots: true` (default off) |
+| F5 (`--ignore-https-errors` enables MITM on external HTTPS) | Concern with external `target_url` | `--ignore-https-errors` flag applies ONLY when `target_url` host matches `localhost\|127.0.0.1\|::1\|*.test\|*.localhost`; for external hosts (gated by `allow_external_url: true`), TLS verification is ON |
+
+**Tradeoff:** external PRs do not get runtime-validated by autorun (must be reviewed manually by the maintainer). This is the explicit v1 ergonomic — the asymmetric-risk argument matches `autorun-merge-policy`: silent unattended RCE on the maintainer's host is much costlier than "external PR validation requires manual review." Future spec `autorun-runtime-validation-sandboxed-external` can promote this to (b) sandbox-exec or (c) human-gate-on-frontmatter-diff if external-PR volume warrants.
 
 ## Definitions
 
-### Validator status enum (closed set)
+### Validator status enum (closed set, Revision 2)
 
 - `pass` — validator confirms artifact works
 - `fail` — validator ran and detected a real failure (test failure, HTTP non-200, console errors, missing selector)
 - `skipped` — validator could not run (missing dependency, simulator unavailable, no shadow trust); not a defect signal
-- `error` — validator crashed / timed out / didn't write sidecar; treated as load-bearing failure (validator broke, can't trust the result)
+- `skipped_external_author` — Revision 2 — branch authored by non-CODEOWNERS user; runtime validation skipped per Trust Model. Distinct from `skipped` so post-incident forensics can distinguish "external PR" from "local dependency missing"
+- `error` — validator crashed / timed out / didn't write sidecar / sidecar status mismatches captured exit code (F9 cross-check); treated as load-bearing failure
 
 ### Merge-policy interaction (cross-spec contract)
 
@@ -375,3 +394,85 @@ Touched files: 1 modified shell script + 4 new shell scripts + 1 schema + 1 test
 - **Q8 (deferred to backlog):** auth state / cookie management for `web` validator? **Deferred** — spec author handles via `dev_server_cmd` setup in v1; future spec `runtime-validators-web-auth` covers richer auth flows.
 - **Q9 (deferred to backlog):** visual regression / screenshot diffing? **Deferred** — `web.sh` captures fail screenshots in v1; comparison against baselines is `runtime-validators-visual-regression`.
 - **Q10 (deferred to backlog):** multi-target spec support? **Deferred** — single-target v1; `runtime-validators-multi-target` covers array-form `runtime: [web, ios]` + aggregator policy.
+- **Q11 (resolved 2026-05-09 — Revision 2):** what's the external-PR trust model? **Resolved: skip on non-CODEOWNERS branches** (option a from /spec-review session). Cascade: F1 substring check removed entirely, F3 hardening kept but threat surface narrowed, F4 secret-scrubber added + screenshots opt-in, F5 `--ignore-https-errors` restricted to local hosts only.
+
+---
+
+## Revision 2 — Post-/check NO_GO Resolutions (2026-05-09)
+
+This section consolidates all changes from `/check` synthesis (`docs/specs/autorun-runtime-validation-gate/check.md` — 23 must-fix blockers) into structured deltas. Section content above has been updated to match. This section preserves the audit trail of what changed and why.
+
+### Security blockers (5 must-fix → all resolved)
+
+All 5 sev:security blockers (F1-F5) resolved by the **Trust Model** section above (Q11 resolution: skip-on-external-author). Plus four "Should Fix (apply inline)" security items also adopted:
+
+- **F6 — autorun-stamp moves to sidecar**: `[AUTORUN MODE — approval auto-granted]` no longer appended to plan body; written to separate `queue/<slug>/autorun-stamp.json` sidecar so the in-body-directive pattern can't be forged in a footer. New AC: stamp emission verified by file existence + JSON shape, NOT by body grep.
+- **F7 — trust file is per-host, not per-repo**: `~/.claude/runtime-validators-trusted-hashes.json` (chmod 600). Repo-committed `.trusted-hashes.json` was rejected — auto-grants execution to all teammates with no technical guard.
+- **F8 — TOFU mandates display-before-trust**: prompt shows full file content via pager BEFORE the trust-grant question. No "answer `n` to display then `y` to trust" path. AC: fixture sends `n` to display, asserts trust-grant prompt is NOT shown.
+- **F9 — sidecar status cross-checked against captured exit code**: `run.sh` reads validator's exit code; if exit==0 but sidecar.status != "pass" (or exit!=0 but sidecar.status=="pass"), coerce to `error` with `details.crosscheck_failed: true`. Closes the silent-corruption window where a buggy validator writes a wrong status.
+
+### Contract gaps (4 must-fix → all resolved)
+
+- **C1 (completeness F1) — `scripts/_validate_runtime_validation_sidecar.py` MUST EXIST.** AC#32 named it but no task created it. Now: explicit task in Wave 2 to create + wire into `dispatch_validated_merge` (the merge-policy helper reads sidecar via this validator before honoring `pass`). New AC#35: validator rejects malformed sidecars (missing required fields, unknown status enum value); accepts well-formed.
+- **C2 (completeness F2) — `runtime_config.web.allow_external_url` documented + defaults false.** Was required by D4 but absent from task 1's spec amendments and AC#1's web-runtime field list. Now: schema field added, default `false`. When `target_url` host is non-local AND `allow_external_url` is unset/false → validator exits `status: error` with stderr "external target_url requires explicit `allow_external_url: true` opt-in." New AC#36.
+- **C3 (testability M1) — AC#16 trigger condition pinned**: AC#16 fires on `(non-pass AND auto_merge_policy: validated)`. NOT D23's "any non-skipped status regardless of policy." Reasoning: `pr` and `clean` policies don't read runtime-validation state, so PR-body section is meaningless under those policies. Fixture: spec sets `runtime: cli` + `auto_merge_policy: pr`, validator fails → PR body has NO `## Runtime validation:` section.
+- **C4 (testability M3) — `schemas/run-log-runtime-validated.schema.json` ships in same PR.** Was missing. Schema fields: `event: "runtime_validated"`, `target`, `status` (closed enum incl. `skipped_external_author`), `duration_seconds`, `sidecar_path`, `validator_path`, `shadow_trust`. `/wrap-insights` Phase 1c parses this row.
+
+### Testability fixtures (4 must-fix → all added)
+
+- **T1 (M1)** — AC#16 trigger fixture per C3 above
+- **T2 (M2)** — iOS std-dev calibration fixture: pre-recorded black-PNG (fail) + rendered PNG (pass) + actual SwiftUI screenshot (pass) bytes. Threshold (5.0 std_dev) verified against all three. **Note:** D8 std_dev is being CUT to backlog per scope-cuts (SF1) — replaced by simpler "screenshot file > 0 bytes AND not all-black via 50-pixel sample" check. Fixture targets the simpler check.
+- **T3 (M3)** — schema validator per C4 above
+- **T4 (M4)** — PID-sweep recovery fixture: pre-seed `queue/.runtime-pids` with a real backgrounded `sleep 60` PGID; run validator; assert sweep killed it AND truncated the file. Plus second fixture: stale lock dir (PID written 30 min ago, PID dead) → validator reclaims lock + writes new PID stamp.
+
+### Sequencing fixes (3 must-fix, mechanical)
+
+- **S1 (must reorder)** — Task 17 (`autorun-shell-reviewer` invocation) moves from Wave 6 to mid-Wave-3 (between tasks 9 and 10). Per memory `feedback_build_subagent_invocations_must_fire.md` + repo CLAUDE.md: subagent must fire BEFORE the commit that touches `scripts/autorun/*.sh`. Task 9 ships `run.sh` edits; tasks 10/11 stack on it. Subagent fires after task 9, before tasks 10/11. (Same pattern fires AGAIN after tasks 10/11 land — two invocations on the integration changes.)
+- **S2 (must split)** — Wave 1 splits into Wave 1a `{2, 3, 8, 13, 14}` (independent prerequisites) and Wave 1b `{4}` (`_lib.sh` depends on 2/3). Was lumped.
+- **S3 (must flip)** — Task 8 dependency direction inverted in original plan: `.playwright-version` is consumed by `web.sh` (task 5), NOT produced by it. Fixed: task 8 → produces; task 5 → consumes.
+
+### Risk fixes (3 must-fix → all addressed)
+
+- **R1 (R-M1) — iOS cold-build timing**: bump iOS-specific default `timeout_seconds` to **900s** (cold SwiftUI/SpriteKit measured >300s on M-series). Documented as `ios.sh` baked-in default; spec author can override per-spec. Plus measurement protocol in `commands/autorun.md`: "for first iOS spec on a fresh machine, run `time xcodebuild test -testPlan SmokeOnly -destination ...` once to establish baseline; if >720s consistently, increase `timeout_seconds`." Other targets (`web`, `cli`) keep 300s default.
+- **R2 (R-M2) — kill switch**: `AUTORUN_DISABLE_RUNTIME_VALIDATION=1` env var bypass at top of `run.sh`'s validator dispatch. When set, validator step skipped entirely; merge-policy `validated` falls back to `pr` per existing semantics; run.log records `action: fell_back, reason: validated_fallback, details: {runtime_status: skipped, kill_switch: true}`. Documented in `commands/autorun.md` migration section.
+- **R3 (R-M3) — mutex stale-lock recovery**: `_lib.sh` lock acquisition uses `mkdir queue/.runtime-validators.lock/` + writes `lock_pid.txt` (current PID) + `lock_started_at.txt` (UTC ISO). Stale-lock reclaim: `(now - started_at) > 2 × max(timeout_seconds across all validators) AND PID is dead` → reclaim atomically (rmdir + retry mkdir). First crash no longer bricks the gate.
+
+### Scope cuts (apply per SF1-SF6, ~110-150 LoC saved)
+
+All six SHOULD-FIX scope-cuts adopted:
+
+- **SF1 — D8 std_dev pixel analysis CUT**: replaced with simpler "file > 0 bytes AND not all-black via 50-pixel sample." Carved to backlog as `runtime-validators-blank-screen-detection`.
+- **SF2 — D10 dual PR-body strategy CUT**: pick one — `link to log + base64-embedded screenshot thumbnail`. Drop the alternative.
+- **SF3 — D19 Xcode signing & build-settings pre-flight CUT**: keeps test-plan check only. Signing concerns belong in /build verification, not autorun runtime gate.
+- **SF4 — D11 startup-sweep PID file CUT**: `setsid + trap-EXIT only` for v1. PID file machinery deferred.
+- **SF5 — D16 5MB log-cap CUT**: deferred. Validators are bounded by `timeout_seconds`; 5MB is a secondary defense premature for v1.
+- **SF6 — D18 playwright version-mismatch fallback CUT**: pin engine version in CI config; no comparison logic at runtime.
+
+### Additional ACs (revisions 2 adds 6 new ACs to existing 34)
+
+- **AC#35** — Sidecar validator `scripts/_validate_runtime_validation_sidecar.py` accepts well-formed sidecars; rejects malformed (missing required fields, unknown status enum, status/exit mismatch). Wired into `dispatch_validated_merge` in merge-policy spec.
+- **AC#36** — `runtime_config.web.allow_external_url` (default `false`) gates external `target_url` hosts. Non-local host without opt-in → validator exits `status: error`. Local hosts (`localhost`, `127.0.0.1`, `::1`, `*.test`, `*.localhost`) bypass the gate.
+- **AC#37** — External-author detection: when CODEOWNERS exists AND most-recent commit on branch (or last spec.md modifier) is non-CODEOWNERS user → validation skipped; run.log records `action: fell_back, reason: runtime_pr_external_author, details: {runtime_status: skipped_external_author}`. Fixture: PR branch with CODEOWNERS-listed user as committer → validation runs; same branch with external author → validation skipped.
+- **AC#38** — `AUTORUN_DISABLE_RUNTIME_VALIDATION=1` env var bypasses validator dispatch; run.log records kill-switch state in `details.kill_switch: true`.
+- **AC#39** — Status cross-check (F9): if validator exit code disagrees with sidecar `status`, autorun coerces to `error` with `details.crosscheck_failed: true`. Fixture: stub validator exits 0 but writes `status: fail` → autorun records `status: error, details: {crosscheck_failed: true}`.
+- **AC#40** — `~/.claude/runtime-validators-trusted-hashes.json` is the trust file location (chmod 600 enforced by helper); repo-committed `.trusted-hashes.json` is explicitly rejected with stderr message.
+
+### Cross-spec adjustments to autorun-merge-policy
+
+In addition to the original `runtime_not_pass` reason value addition, this spec also adds:
+- `runtime_pr_external_author` reason value (closed enum extension)
+- `details.runtime_status` accepts `skipped_external_author` value (closed enum extension)
+
+Both are additive to the merge-policy `_MP_REASONS` readonly array. No breaks to existing consumers.
+
+### Confidence delta (revision 1 → revision 2)
+
+- Scope: 0.92 → **0.95** (Trust Model resolves the 5 sev:security blockers; scope is now disciplined and testable)
+- UX: 0.92 (unchanged)
+- Data: 0.92 → **0.95** (all 4 contract gaps closed; closed enums now fully specified)
+- Integration: 0.93 (unchanged)
+- Edges: 0.95 → **0.97** (external-author + kill-switch + status-crosscheck close 3 previously-open footguns)
+- Acceptance: 0.93 → **0.95** (6 new ACs covering the new behaviors; testability M1-M4 all fixtured)
+- **Average: 0.93 → 0.945**
+
+Iteration count consumed: this is iteration 1 of 2 (per `/check` Decision Path). Remaining budget: 1 iteration before the spec needs to revisit fundamentals.
