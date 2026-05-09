@@ -16,6 +16,7 @@ dashboard/data-bundle.js
 dashboard/judge-bundle.js
 dashboard/data/persona-roster.js
 dashboard/data/persona-rankings-bundle.js
+dashboard/data/persona-insights-bundle.js
 __pycache__/
 *.pyc
 

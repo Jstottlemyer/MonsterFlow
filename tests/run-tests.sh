@@ -27,6 +27,8 @@ TESTS=(
   # token-economics tests (cheapest first per code-review rec)
   test-no-raw-print.sh
   test-phase-0-artifact.sh
+  test-session-cost-import-clean.sh # T-PRE-1 (Phase 0.5 import-clean gate)
+  test-token-source-canonical.sh    # T-PRE-4 / MF-1 (canonical-source probe)
   test-allowlist.sh
   test-allowlist-inverted.sh        # M8: must exit non-zero (handled below)
   test-path-validation.sh
@@ -34,7 +36,9 @@ TESTS=(
   test-scan-confirmation.sh
   test-wrap-insights-text.sh
   test-dashboard-render.sh
+  test-dashboard-recovery.sh        # T-TEST-9 (A12 salt-corruption recovery)
   test-compute-persona-value.sh
+  test-compute-perf.sh              # T-TEST-10 / tv-3 (perf hard ceiling 15s)
   test-build-final.sh
   autorun-dryrun.sh
   # install-rewrite W4 — supply-chain gate first (cheap), then full install harness
