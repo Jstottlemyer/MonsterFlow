@@ -192,7 +192,7 @@ flowchart LR
 ║  /wrap → summary · learnings · knowledge flush · git ends    ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
-║  AGENTS: review(6) plan(6) check(5) code-review(9)           ║
+║  AGENTS: review(6) design(7) check(5) code-review(9)         ║
 ║  + judge · synthesis · domain agents                         ║
 ║                                                              ║
 ║  PLUGINS                                                     ║

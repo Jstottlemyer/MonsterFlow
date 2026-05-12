@@ -36,7 +36,7 @@ Existing spec found for [feature-name].
 
 What are we doing?
   a) Bug fix — skip spec, go straight to fix
-  b) Small change — quick brainstorm (3-4 questions), skip review/plan/check
+  b) Small change — quick brainstorm (3-4 questions), skip review/design/check
   c) Feature addition — full pipeline, builds on existing spec
   d) Revision / V2 — full pipeline, revises existing spec
   e) New spec — start fresh
