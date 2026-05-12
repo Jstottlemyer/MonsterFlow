@@ -68,3 +68,4 @@ docs/specs/*/.verdict-attempts.log
 docs/specs/*/.gate-mode-warned
 docs/specs/*/.persona-metrics-warned
 docs/specs/*/.force-permissive-log
+dashboard/data/persona-insights-bundle.js
