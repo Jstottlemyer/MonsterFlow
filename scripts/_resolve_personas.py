@@ -615,6 +615,17 @@ def run_with_tier(
     project_dir: Path,
 ) -> int:
     """Tier-mix flow: tag_baseline → persona_score → tier_assign → emit."""
+    # MONSTERFLOW_DISABLE_BUDGET=1 — emergency kill switch. Honored in --with-tier
+    # mode by delegating to the legacy run() path, which short-circuits to the
+    # full-roster bypass. Without this delegation the kill switch is silently
+    # bypassed because all autorun shells now invoke with --with-tier.
+    if os.environ.get("MONSTERFLOW_DISABLE_BUDGET") == "1":
+        sys.stderr.write(
+            "kill-switch: MONSTERFLOW_DISABLE_BUDGET=1 — bypassing --with-tier; "
+            "delegating to legacy full-roster path\n"
+        )
+        return run(args, repo_dir, project_dir)
+
     gate = args.gate
     if gate not in VALID_GATES:
         warn(f"unknown gate '{gate}' (expected one of: {', '.join(sorted(VALID_GATES))})")
