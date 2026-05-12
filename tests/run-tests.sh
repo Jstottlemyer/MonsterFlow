@@ -109,12 +109,50 @@ TESTS=(
   test-persona-fit-tags.sh
   # autorun-merge-policy v0.11.0 — PR-by-default + opt-in clean/validated merge
   test-autorun-merge-policy.sh
+  # dynamic-roster-per-gate Slice 2 — A19 schema lockstep + MF#6 fit_tags enum guard
+  test-schema-lockstep.sh
+  # dynamic-roster-per-gate Slice 5 — dynamic roster resolver end-to-end
+  test-dynamic-roster.sh
+  # dynamic-roster-per-gate Slice 5 — tier resolver (model/cost selection)
+  test-tier-resolver.sh
+  # dynamic-roster-per-gate Slice 5 — spec → tags → roster flow integration
+  test-spec-tags-flow.sh
+  # dynamic-roster-per-gate Slice 5 — security floor invariant (always-present personas)
+  test-security-floor.sh
+  # dynamic-roster-per-gate Slice 5 — tag-enum baseline canonical content
+  test-tag-baseline.sh
+  # dynamic-roster-per-gate Slice 5 — persona-frontmatter baseline drift guard
+  test-baseline-drift.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).
 INVERTED_TESTS=(
   test-allowlist-inverted.sh
 )
+
+# Orchestrator wiring guard (dynamic-roster-per-gate task 24,
+# feedback_test_orchestrator_wiring_gap memory): every test-*.sh on disk
+# must be wired into the TESTS array above. Mismatch = silent test gap.
+# Counts autorun-dryrun.sh too (legacy non-test- prefix); add to expected
+# extras list if more such names appear. Skipped when ONLY filter is set
+# (single-test runs shouldn't fail on whole-suite parity).
+if [ -z "$ONLY" ]; then
+  DISK_COUNT="$(ls "$TESTS_DIR"/test-*.sh 2>/dev/null | wc -l | tr -d ' ')"
+  # Count wired test-*.sh entries (exclude autorun-dryrun.sh, which is wired
+  # but doesn't match the test-*.sh glob).
+  WIRED_COUNT=0
+  for t in "${TESTS[@]}"; do
+    case "$t" in
+      test-*.sh) WIRED_COUNT=$(( WIRED_COUNT + 1 )) ;;
+    esac
+  done
+  if [ "$DISK_COUNT" != "$WIRED_COUNT" ]; then
+    echo "ERROR: run-tests.sh wiring drift — $DISK_COUNT test-*.sh files on disk, $WIRED_COUNT wired in TESTS array" >&2
+    echo "Run: ls $TESTS_DIR/test-*.sh and reconcile against the TESTS array in $0" >&2
+    echo "Likely cause: a parallel /build agent added a test file but did not wire it." >&2
+    exit 2
+  fi
+fi
 
 PASS=0
 FAIL=0

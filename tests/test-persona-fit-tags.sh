@@ -100,7 +100,7 @@ _python_check() {
   local target_dir="${1:-}"
   python3 - "$target_dir" <<'PY'
 import re, sys, glob, json, os
-ENUM = {"api","data","docs","integration","migration","refactor","scalability","security","ux"}
+ENUM = {"api","data","docs","integration","migration","pipeline","refactor","scalability","security","ux"}
 FM = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
 FIT = re.compile(r"^fit_tags:\s*\[([^\]]*)\]\s*$", re.MULTILINE)
 FIT_BLOCK = re.compile(r"^fit_tags:\s*$", re.MULTILINE)

@@ -144,8 +144,12 @@ def codex_authenticated() -> bool:
 
 
 def write_atomic(path: Path, content: str) -> None:
+    # Per-PID tmp suffix: concurrent invocations writing the same selection.json
+    # would otherwise stomp on each other's .tmp file between create and replace
+    # (caught by tests/test-resolve-personas.sh case 44 — 7 parallel writes
+    # produced FileNotFoundError on 1-3 of 7 children).
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = path.with_suffix(f"{path.suffix}.tmp.{os.getpid()}")
     with tmp.open("w") as f:
         f.write(content)
         f.flush()
