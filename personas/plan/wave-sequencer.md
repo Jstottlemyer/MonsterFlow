@@ -1,5 +1,5 @@
 ---
-fit_tags: [refactor, integration]
+fit_tags: [pipeline, refactor, integration]
 ---
 
 # Wave Sequencing

@@ -1,5 +1,5 @@
 ---
-fit_tags: [integration]
+fit_tags: [pipeline, integration]
 ---
 
 # Integration Analysis
