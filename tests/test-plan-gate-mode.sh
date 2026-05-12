@@ -1,15 +1,22 @@
 #!/bin/bash
 # tests/test-plan-gate-mode.sh
 #
-# Asserts that commands/plan.md has a Phase 0c gate-mode block wired correctly
-# per docs/specs/pipeline-gate-permissiveness/plan.md task W3.6.
+# Asserts that commands/design.md (formerly commands/plan.md before the
+# 2026-05-12 cede-/plan-back-to-Claude-Code rename) has a Phase 0c
+# gate-mode block wired correctly per
+# docs/specs/pipeline-gate-permissiveness/plan.md task W3.6.
+#
+# Internal gate identifier remains "plan" (gate_mode keys, persona dir,
+# autorun shell name); only the user-facing slash command moved to
+# /design. The artifact filename docs/specs/<feature>/plan.md also
+# stays the same.
 #
 # Bash 3.2 compatible. No bashisms beyond [ ... ] and grep -q.
 
 set -u
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PLAN_MD="$REPO_DIR/commands/plan.md"
+PLAN_MD="$REPO_DIR/commands/design.md"
 
 PASS=0
 FAIL=0
@@ -27,7 +34,7 @@ assert_grep() {
   fi
 }
 
-printf "test-plan-gate-mode: commands/plan.md gate-mode wiring\n"
+printf "test-plan-gate-mode: commands/design.md gate-mode wiring\n"
 
 if [ ! -f "$PLAN_MD" ]; then
   printf "  FATAL %s does not exist\n" "$PLAN_MD"

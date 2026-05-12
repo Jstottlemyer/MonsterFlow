@@ -4,7 +4,7 @@ description: Gap checkpoint — 5 specialist agents validate the plan before imp
 
 **IMPORTANT: Do NOT invoke superpowers skills from this command. This command IS the checkpoint workflow.**
 
-You are the check step in the pipeline: `/spec → /spec-review → /plan → /check → /build`
+You are the check step in the pipeline: `/spec → /spec-review → /design → /check → /build`
 
 Your job is to dispatch 5 parallel plan reviewer agents, synthesize their findings into a go/no-go verdict, and present gaps for resolution before implementation begins.
 
@@ -14,7 +14,7 @@ Your job is to dispatch 5 parallel plan reviewer agents, synthesize their findin
 
 1. **Find artifacts**: Load `docs/specs/<feature>/spec.md`, `docs/specs/<feature>/review.md`, and `docs/specs/<feature>/plan.md`.
    - If `$ARGUMENTS` names a feature, use that.
-   - If plan doesn't exist: "No plan found. Run /plan first."
+   - If plan doesn't exist: "No plan found. Run /design first."
 
 2. **Load constitution** (if exists) for constraint checking.
 
@@ -28,7 +28,7 @@ Pre-flight before reviewers dispatch. If `docs/specs/<feature>/plan/findings.jso
 - Output: atomic write to `<feature>/plan/survival.jsonl`. Schema: `schemas/survival.schema.json`.
 - Echo one-liner if any `outcome: "classifier_error"` rows are written: `[persona-metrics] N findings could not be classified — see plan/survival.jsonl for reasons.`
 
-If `<feature>/plan/findings.jsonl` does not exist (legacy spec or `/plan` skipped), this phase is a silent no-op — no `survival.jsonl` written, no error.
+If `<feature>/plan/findings.jsonl` does not exist (legacy spec or `/design` skipped), this phase is a silent no-op — no `survival.jsonl` written, no error.
 
 **This phase never blocks the stage** — instrumentation failures continue to Phase 1 review work.
 
@@ -300,7 +300,7 @@ The recommended-option lean (option 1) is canonical — do not reword. Architect
 
    [If GO]: Ready for /build. (go / hold)
    [If GO WITH FIXES]: Address fixes above, then /build. (fix now / defer to build / hold)
-   [If NO-GO]: Revise plan with /plan, then re-run /check.
+   [If NO-GO]: Revise plan with /design, then re-run /check.
    ```
 
 2. **Write `docs/specs/<feature>/check.md`** with the full checkpoint results.
@@ -322,7 +322,7 @@ Address the must-fix items by updating plan.md, then re-present. Do NOT re-run a
 Checkpoint failed. The plan needs revision.
 Key issues: [list the FAIL reasons]
 
-Run /plan to revise, then /check again.
+Run /design to revise, then /check again.
 ```
 
 ## Key Principles

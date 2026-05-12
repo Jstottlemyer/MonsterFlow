@@ -1,14 +1,23 @@
 # MonsterFlow — Repo-level Instructions for Claude
 
 Personal-tooling repo. Holds commands, personas, templates, and cross-project
-reference docs for Justin's 8-command pipeline (`/kickoff → /spec → /review
-→ /plan → /check → /build`, plus `/flow` and `/wrap`).
+reference docs for Justin's 8-command pipeline (`/kickoff → /spec → /spec-review
+→ /design → /check → /build`, plus `/flow` and `/wrap`).
+
+(`/design` is MonsterFlow's design-and-implementation-planning gate. It was
+previously named `/plan`, but we ceded that name back to Claude Code on
+2026-05-12 — `/plan` belongs to Claude Code's built-in plan-mode tooling
+(`EnterPlanMode` / `ExitPlanMode`), not to this pipeline. The internal
+gate identifier remains `plan` — schemas, persona dir paths, gate_mode
+keys, on-disk selection.json files, the artifact filename `plan.md`, and
+the autorun shell `scripts/autorun/plan.sh` all stay backward-compatible.
+Only the user-facing slash command moved.)
 
 Apply in addition to user-level `~/CLAUDE.md`.
 
 ## Built-in Claude Code commands
 
-`/plan` is the canonical planner — it stays in the terminal and writes `docs/specs/<feature>/plan.md`. Avoid `/ultraplan` for pipeline work; it dispatches a remote browser session and produces no local artifact. `/insights` is opt-in via `/wrap-insights` (measurement mode); `/powerup` is ad-hoc educational and not wired into any flow.
+`/design` is MonsterFlow's design gate. It stays in the terminal and writes `docs/specs/<feature>/plan.md` (the artifact filename keeps the historical name for on-disk backward compat). Avoid `/ultraplan` for pipeline work; it dispatches a remote browser session and produces no local artifact. `/insights` is opt-in via `/wrap-insights` (measurement mode); `/powerup` is ad-hoc educational and not wired into any flow. **`/plan` is Claude Code's built-in plan-mode** — different tool, different intent. If you want MonsterFlow's design pass, use `/design`.
 
 `/wrap` has three tab-completable variants: `/wrap-quick` (fast triage only), `/wrap-insights` (adds Phase 1b `/insights`), `/wrap-full` (insights + force-run conditional phases). Bare-word args (`quick`, `insights`, `full`) still work for direct invocation; the subcommands exist so the variants show up in tab completion.
 

@@ -118,9 +118,9 @@ The developer is returning to mobile development after a break and relies on Cla
 Canonical session workflow:
 
 ```
-/kickoff → /spec → /spec-review → /plan → /check → /build
-              define    6 PRD        7 design  5 plan   execute
-              (Q&A)     agents       agents    agents   (parallel)
+/kickoff → /spec → /spec-review → /design → /check → /build
+              define    6 PRD        7 design   5 plan    execute
+              (Q&A)     agents       agents     agents    (parallel)
 ```
 
 Work scales to size: bug fix (no spec) → small change (spec + build) → feature (full pipeline) → V2 (revise spec + full pipeline).
@@ -128,7 +128,7 @@ Work scales to size: bug fix (no spec) → small change (spec + build) → featu
 **Artifacts:** `docs/specs/constitution.md` + `docs/specs/<feature>/{spec,review,plan,check}.md`
 
 **Two-tier system:**
-- **Pipeline commands**: `/spec` → `/spec-review` → `/plan` → `/check` → `/build` with 27 parallel agent personas
+- **Pipeline commands**: `/spec` → `/spec-review` → `/design` → `/check` → `/build` with 27 parallel agent personas (`/plan` is Claude Code's built-in plan-mode, not MonsterFlow's design gate — use `/design`)
 - **Superpowers**: in-session execution discipline — debugging, verification, code review
 - **Plugins**: specialized capabilities — firecrawl (research), context7 (docs), code-review (PR), playwright (browser)
 

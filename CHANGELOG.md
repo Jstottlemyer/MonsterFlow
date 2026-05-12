@@ -4,6 +4,35 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+### Renamed
+
+- **`/plan` ceded back to Claude Code; MonsterFlow's design gate is now
+  `/design`.** MonsterFlow's pipeline previously claimed the `/plan` slash
+  command, which collided with Claude Code's own built-in plan-mode tooling
+  (`EnterPlanMode` / `ExitPlanMode` and the `superpowers:writing-plans`
+  skill). On 2026-05-12 we removed our `commands/plan.md` entirely so
+  `/plan` belongs unambiguously to Claude Code's plan-mode. MonsterFlow
+  ships `/design` for the design step. The pipeline now reads as
+  `/spec → /spec-review → /design → /check → /build`.
+- **No deprecation alias.** Earlier drafts of this rename kept `/plan` as
+  a stub that redirected to `/design`; that approach was dropped because
+  it kept MonsterFlow occupying a name that legitimately belongs to
+  Claude Code. Adopters who type `/plan` will now get Claude Code's
+  plan-mode behavior, which is the correct outcome.
+- **Internal gate identifier unchanged:** schemas, persona directory paths
+  (`personas/plan/`), `gate_mode` keys, `selection.json` `gate` field,
+  autorun shell name (`scripts/autorun/plan.sh`), and the artifact filename
+  (`docs/specs/<feature>/plan.md`) all keep `plan` as the internal name
+  for on-disk artifact backward-compatibility. Only the user-facing slash
+  command moved.
+- Updated: root CLAUDE.md, README.md, docs/index.html, sibling commands/*.md
+  (build, check, spec, spec-review, wrap, kickoff, autorun, _gate-mode),
+  domain CLAUDE.mds (`domains/games/`, `domains/mobile/`). Historical
+  `docs/specs/*/` artifacts retain `/plan` references as audit trail of
+  past pipeline invocations.
+- Captured rationale: `feedback_slashcmd_collision_with_claude_builtins`
+  memory.
+
 ## [0.11.0] - 2026-05-08
 
 Autorun merge-policy default flip — autorun now opens a PR by default;

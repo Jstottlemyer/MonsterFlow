@@ -34,7 +34,7 @@ flowchart TD
     S["/spec<br/><sub>Q&A · confidence-tracked</sub>"]:::define
     SR["/spec-review<br/><sub>requirements · gaps · ambiguity<br/>feasibility · scope · stakeholders</sub>"]:::review
     JS1["Judge · Dedupe · Synth<br/><sub>cluster · attribute · compose<br/>→ review.md</sub>"]:::synth
-    P["/plan<br/><sub>api · data-model · ux · scalability<br/>security · integration · wave-sequencer</sub>"]:::plan
+    P["/design<br/><sub>api · data-model · ux · scalability<br/>security · integration · wave-sequencer</sub>"]:::plan
     JS2["Judge · Dedupe · Synth<br/><sub>→ plan.md</sub>"]:::synth
     C["/check<br/><sub>completeness · sequencing · risk<br/>scope-discipline · testability</sub>"]:::gate
     JS3["Judge · Dedupe · Synth<br/><sub>→ check.md</sub>"]:::synth
@@ -77,9 +77,9 @@ flowchart TD
 ```
 
 ```
-/kickoff → /spec → /spec-review → /plan → /check → /build
-           define    6 PRD        7 design  5 plan   execute
-           (Q&A)     agents       agents    agents   (parallel)
+/kickoff → /spec → /spec-review → /design → /check → /build
+           define    6 PRD        7 design   5 plan    execute
+           (Q&A)     agents       agents     agents    (parallel)
 ```
 
 ### The knowledge loop
@@ -121,7 +121,7 @@ flowchart LR
 | `/kickoff` | One-time project init — scans repo, drafts constitution, selects agent roster | - |
 | `/spec` | Confidence-tracked Q&A — writes `spec.md` (falls back to session roster if no constitution) | Interactive |
 | `/spec-review` | Parallel PRD review — gaps, risks, ambiguity; + Codex adversarial pass (optional) | 6 reviewers |
-| `/plan` | Architecture + implementation design | 7 designers |
+| `/design` | Architecture + implementation design (renamed from `/plan` 2026-05-12 — `/plan` belongs to Claude Code's built-in plan-mode now, not to MonsterFlow) | 7 designers |
 | `/check` | Last gate before code — validates the plan; + Codex adversarial pass (optional) | 5 validators |
 | `/build` | Parallel execution with verification discipline; + Codex implementation review (optional) | Superpowers |
 | `/autorun` | Headless overnight pipeline — queues a spec and drives all 8 stages unattended via `autorun start` | Shell |
@@ -142,7 +142,7 @@ flowchart LR
 ║  /kickoff  →  constitution + agent roster                    ║
 ║                                                              ║
 ║  FEATURE (full pipeline)                                     ║
-║  /spec  →  /spec-review  →  /plan  →  /check  →  /build      ║
+║  /spec  →  /spec-review  →  /design  →  /check  →  /build    ║
 ║   define    6 PRD          7 design   5 plan     execute     ║
 ║   (Q&A)     agents         agents     agents     (parallel)  ║
 ║  + firecrawl (research) · context7 (API docs)                ║
@@ -192,7 +192,7 @@ flowchart LR
 ║  /wrap → summary · learnings · knowledge flush · git ends    ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
-║  AGENTS: review(6) plan(6) check(5) code-review(9)           ║
+║  AGENTS: review(6) design(7) check(5) code-review(9)         ║
 ║  + judge · synthesis · domain agents                         ║
 ║                                                              ║
 ║  PLUGINS                                                     ║
@@ -216,21 +216,21 @@ flowchart LR
 
 The repo ships **40 agents = 38 personas (29 pipeline + 9 domain) + 2 focused subagents**:
 
-- **29 always-available pipeline personas** — dispatched by `/spec-review`, `/plan`, `/check`, `/build` in parallel slices.
+- **29 always-available pipeline personas** — dispatched by `/spec-review`, `/design`, `/check`, `/build` in parallel slices.
 - **9 domain personas** — loaded conditionally at `/kickoff` based on project signals.
 - **2 Claude Code subagents** — invoked directly via `Agent(subagent_type: ...)`. See the [Subagents](#subagents-focused-reviewers) section below.
 
-A single session calls **only the subset relevant to the current phase** — never all 40 at once. Each `/spec-review`, `/plan`, `/check`, or `/build` invokes its own slice.
+A single session calls **only the subset relevant to the current phase** — never all 40 at once. Each `/spec-review`, `/design`, `/check`, or `/build` invokes its own slice.
 
 ### Pipeline agents (28) — always available
 
 | Stage | Count | Personas |
 |-------|-------|----------|
 | Review (`/spec-review`) | 6 | Requirements · Gaps · Ambiguity · Feasibility · Scope · Stakeholders |
-| Plan (`/plan`) | 7 | API · Data Model · UX · Scalability · Security · Integration · Wave Sequencer |
+| Design (`/design`) | 7 | API · Data Model · UX · Scalability · Security · Integration · Wave Sequencer |
 | Check (`/check`) | 5 | Completeness · Sequencing · Risk · Scope Discipline · Testability |
 | Code review (full mode) | 9 | Correctness · Dependency · Design Quality · Documentation · Performance · Resilience · Security · Test Quality · Wiring |
-| Synthesis layer | 2 | Judge (quality scoring) · Synthesis (multi-agent consolidation) — used by `/spec-review`, `/plan`, `/check` |
+| Synthesis layer | 2 | Judge (quality scoring) · Synthesis (multi-agent consolidation) — used by `/spec-review`, `/design`, `/check` |
 
 ### Domain agents (9) — loaded conditionally at `/kickoff`
 
@@ -317,7 +317,7 @@ docs/specs/<feature>/check.md       # Gap checkpoint (from /check)
 
 ### Persona Metrics (v0.2.0+)
 
-Every multi-agent gate (`/spec-review`, `/plan`, `/check`) emits structured measurement artifacts under `docs/specs/<feature>/<stage>/`:
+Every multi-agent gate (`/spec-review`, `/design`, `/check`) emits structured measurement artifacts under `docs/specs/<feature>/<stage>/`:
 
 ```
 spec-review/
@@ -335,7 +335,7 @@ spec-review/
 
 ### Followups — preserving warn-class findings (v0.9.0+)
 
-Under permissive gate mode (default since v0.9.0), `/spec-review` / `/plan` / `/check` classify each finding as **block** (architectural / security / integrity / unclassified — halt the gate) or **warn** (contract / documentation / tests / scope-cuts — carry forward). Warn-class findings are written to `docs/specs/<feature>/followups.jsonl` instead of blocking:
+Under permissive gate mode (default since v0.9.0), `/spec-review` / `/design` / `/check` classify each finding as **block** (architectural / security / integrity / unclassified — halt the gate) or **warn** (contract / documentation / tests / scope-cuts — carry forward). Warn-class findings are written to `docs/specs/<feature>/followups.jsonl` instead of blocking:
 
 ```
 docs/specs/<feature>/followups.jsonl   # one row per active warn-class finding

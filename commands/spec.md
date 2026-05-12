@@ -11,7 +11,7 @@ You are a spec-building assistant. Your job is to run an interactive Q&A intervi
 ## Pipeline
 
 ```
-/kickoff → /spec → /spec-review → /plan → /check → /build
+/kickoff → /spec → /spec-review → /design → /check → /build
            ▲ you are here
 ```
 
@@ -36,7 +36,7 @@ Existing spec found for [feature-name].
 
 What are we doing?
   a) Bug fix — skip spec, go straight to fix
-  b) Small change — quick brainstorm (3-4 questions), skip review/plan/check
+  b) Small change — quick brainstorm (3-4 questions), skip review/design/check
   c) Feature addition — full pipeline, builds on existing spec
   d) Revision / V2 — full pipeline, revises existing spec
   e) New spec — start fresh
@@ -141,7 +141,7 @@ If the user chose "proceed without constitution" in pre-flight, do a lightweight
 
 1. Read `~/.claude/templates/repo-signals.md` for the detection matrix.
 2. Run the signal scan against cwd (same probes as `/kickoff` Phase 0).
-3. From the domain mapping, propose agents available for this spec's `/spec-review`, `/plan`, `/check` runs:
+3. From the domain mapping, propose agents available for this spec's `/spec-review`, `/design`, `/check` runs:
    - `mobile` detected → 6 mobile agents
    - `games` detected → mobile 6 + games 3 = 9
    - `cli` / `mcp` / `plugin` detected → relevant AuthTools-pattern agents
@@ -252,7 +252,7 @@ Add to roster? (yes / pick subset / skip)
    - Record the addition in the spec under `## Roster Changes`.
 5. If skipped or no gap exists, write "No roster changes." under `## Roster Changes` and continue.
 
-The roster grows organically: additions made for one feature are available for future `/spec-review`, `/plan`, `/check` runs without re-proposing.
+The roster grows organically: additions made for one feature are available for future `/spec-review`, `/design`, `/check` runs without re-proposing.
 
 ## Phase 3: Write + Self-Review
 
