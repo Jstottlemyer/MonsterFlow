@@ -8,6 +8,12 @@ Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready
 
 ---
 
+## From dynamic-roster-per-gate /check (2026-05-12)
+
+- **Revisit `--tier-pin` accumulate vs last-wins semantics** — D14 currently ships accumulate-with-promote-and-drop-lowest. Spec.md:89 shows only single-flag usage; nothing in AC requires accumulation. Scope-discipline reviewer flagged this as invented semantics. **Why:** the promote-and-drop algorithm interacts with SEC-01 security-floor preservation and is non-trivially testable. **Size:** S (3-5 line change in `_tier_assign.py`). **Trigger:** revisit if a user actually files an issue using `--tier-pin` multiple times in one invocation, OR after 90 days of usage telemetry shows zero multi-flag invocations (then simplify). Followup row: `ck-2233445566` in `docs/specs/dynamic-roster-per-gate/followups.jsonl`.
+
+---
+
 ## Parked specs (from 2026-05-09 cleanup pass)
 
 Spec dirs deleted under `docs/specs/` because they were idea-only drafts (no implementation, never went through pipeline). Reasoning preserved here so the design thinking isn't lost. Re-promote via `/spec` when ready.

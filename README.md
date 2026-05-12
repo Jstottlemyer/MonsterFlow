@@ -333,6 +333,20 @@ spec-review/
 
 **Privacy for adopters:** these artifacts contain verbatim review prose (`body` field) that may be sensitive. Adopter installs default to **opt-in-to-commit** (`PERSONA_METRICS_GITIGNORE=1` is set automatically; metrics paths are appended to your `.gitignore`). To commit metrics intentionally, set `PERSONA_METRICS_GITIGNORE=0` before running `install.sh`. `MonsterFlow`'s own repo overrides this default via name-detection in the installer.
 
+### Followups — preserving warn-class findings (v0.9.0+)
+
+Under permissive gate mode (default since v0.9.0), `/spec-review` / `/plan` / `/check` classify each finding as **block** (architectural / security / integrity / unclassified — halt the gate) or **warn** (contract / documentation / tests / scope-cuts — carry forward). Warn-class findings are written to `docs/specs/<feature>/followups.jsonl` instead of blocking:
+
+```
+docs/specs/<feature>/followups.jsonl   # one row per active warn-class finding
+```
+
+Each row carries `class`, `title`, `body`, `suggested_fix`, `target_phase` (`build-inline` | `plan-revision` | `docs-only` | `post-build`), and `state` (`open` | `addressed` | `superseded`). `/build` consumes the file verdict-gated: `build-inline` items are tackled during wave work; `post-build` items stay open after the feature ships and surface in the next `/wrap-insights` pass.
+
+This is the load-bearing path for **scope-cuts** specifically — reviewer-suggested cuts that the team isn't ready to take don't get dropped on the floor; they live in `followups.jsonl` with a `target_phase: post-build` row and resurface at the right moment. Product-level decisions worth revisiting beyond one feature land in [`BACKLOG.md`](BACKLOG.md) with a cross-link to the followup `finding_id`.
+
+Schema: [`schemas/followups.schema.json`](schemas/followups.schema.json). Gate-mode reference: [`commands/_gate-mode.md`](commands/_gate-mode.md).
+
 ## Customization
 
 1. **Add project-specific agents** — create personas at `/kickoff` via the constitution template
