@@ -50,23 +50,16 @@ SEC01_FIXED='[tier-policy] SEC-01: persona security-architect (fit_tags=[securit
 # ---------------------------------------------------------------------------
 # Assertion 1: Spec-level `tier_pins` rejection (spec.md frontmatter site)
 #
-# Per task brief: if the Slice 3/4 resolver does NOT merge spec frontmatter
-# tier_pins (it currently does not — `_resolve_personas._read_baseline_and_spec_tags`
-# only parses `tags:` + `tags_provenance:`, never `tier_policy.tier_pins`),
-# this assertion legitimately deferred. We mark it SKIP rather than FAIL so
-# the test file as a whole still exits 0. The deferred assertion remains
-# documented inline (gated by `if false`) so a future slice that wires the
-# spec frontmatter merge can flip the gate and re-enable.
+# Wired in the post-Slice-5 SEC-01 D7 site 1 fix. The resolver now reads
+# `tier_policy.tier_pins` from spec frontmatter via _parse_spec_tier_pins,
+# merges with CLI per spec L88 (CLI > spec), and validates SEC-01 against
+# the merged result.
 # ---------------------------------------------------------------------------
 case_ "A1 spec.md frontmatter tier_pins triggers SEC-01"
 
-if false; then
-  # Deferred: spec-frontmatter tier_pins merge not yet wired through resolver.
-  # See plan D7 + spec A21. Re-enable once `_read_baseline_and_spec_tags`
-  # (or a sibling reader) returns tier_pins to the --with-tier flow.
-  fixture_dir="$TMPROOT/a1"
-  mkdir -p "$fixture_dir/docs/specs/sec01-spec"
-  cat > "$fixture_dir/docs/specs/sec01-spec/spec.md" <<'EOF'
+fixture_dir="$TMPROOT/a1"
+mkdir -p "$fixture_dir/docs/specs/sec01-spec"
+cat > "$fixture_dir/docs/specs/sec01-spec/spec.md" <<'EOF'
 ---
 name: sec01-spec
 tags: [security]
@@ -74,23 +67,87 @@ tier_policy:
   tier_pins:
     check:
       security-architect: sonnet
+tags_provenance:
+  baseline: [security]
 ---
 # Body
 oauth permissions check here.
 EOF
-  set +e
-  err="$(PROJECT_DIR="$fixture_dir" bash "$RESOLVER" check \
-            --feature sec01-spec --with-tier 2>&1 >/dev/null)"
-  rc=$?
-  set -e
-  if [ "$rc" = "4" ] && printf '%s' "$err" | grep -qF "$SEC01_FIXED"; then
-    _ok "A1 spec-frontmatter SEC-01 rejection"
-  else
-    _fail "A1 spec-frontmatter SEC-01 rejection" "rc=$rc err='$err'"
-  fi
+set +e
+err="$(PROJECT_DIR="$fixture_dir" bash "$RESOLVER" check \
+          --feature sec01-spec --with-tier 2>&1 >/dev/null)"
+rc=$?
+set -e
+if [ "$rc" = "4" ] && printf '%s' "$err" | grep -qF "$SEC01_FIXED"; then
+  _ok "A1 spec-frontmatter SEC-01 rejection"
 else
-  _skip "A1 spec-frontmatter SEC-01 rejection" \
-        "deferred — resolver does not yet merge spec.md tier_pins (plan D7 site 1 pending wiring)"
+  _fail "A1 spec-frontmatter SEC-01 rejection" "rc=$rc err='$err'"
+fi
+
+# A1b: CLI override-up rescues an adversarial spec pin (CLI > spec per L88)
+case_ "A1b spec sonnet pin + CLI opus override → accepted"
+set +e
+PROJECT_DIR="$fixture_dir" bash "$RESOLVER" check \
+  --feature sec01-spec --with-tier --tier-pin security-architect=opus >/dev/null 2>&1
+rc=$?
+set -e
+if [ "$rc" = "0" ]; then
+  _ok "A1b CLI override-up accepted (CLI > spec)"
+else
+  _fail "A1b CLI override-up accepted" "got rc=$rc"
+fi
+
+# A1c: CLI override-down still rejected (merged result is what enforces SEC-01)
+case_ "A1c spec opus pin + CLI sonnet override → rejected (merged = sonnet)"
+mkdir -p "$fixture_dir/docs/specs/sec01-spec-opus"
+cat > "$fixture_dir/docs/specs/sec01-spec-opus/spec.md" <<'EOF'
+---
+name: sec01-spec-opus
+tags: [security]
+tier_policy:
+  tier_pins:
+    check:
+      security-architect: opus
+tags_provenance:
+  baseline: [security]
+---
+# Body
+oauth content.
+EOF
+set +e
+PROJECT_DIR="$fixture_dir" bash "$RESOLVER" check \
+  --feature sec01-spec-opus --with-tier --tier-pin security-architect=sonnet >/dev/null 2>&1
+rc=$?
+set -e
+if [ "$rc" = "4" ]; then
+  _ok "A1c CLI override-down still hits SEC-01 floor"
+else
+  _fail "A1c CLI override-down still hits SEC-01 floor" "got rc=$rc"
+fi
+
+# A1d: cross-gate spec pin filtered (spec for plan when running check)
+case_ "A1d cross-gate spec pin filtered, no false reject"
+mkdir -p "$fixture_dir/docs/specs/sec01-cross"
+cat > "$fixture_dir/docs/specs/sec01-cross/spec.md" <<'EOF'
+---
+name: sec01-cross
+tier_policy:
+  tier_pins:
+    plan:
+      security-architect: sonnet
+---
+# Body
+oauth.
+EOF
+set +e
+PROJECT_DIR="$fixture_dir" bash "$RESOLVER" check \
+  --feature sec01-cross --with-tier >/dev/null 2>&1
+rc=$?
+set -e
+if [ "$rc" = "0" ]; then
+  _ok "A1d cross-gate spec pin filtered (plan-only pin doesn't reject check)"
+else
+  _fail "A1d cross-gate spec pin filtered" "got rc=$rc (expected 0)"
 fi
 
 # ---------------------------------------------------------------------------

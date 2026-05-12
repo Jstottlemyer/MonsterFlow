@@ -369,6 +369,82 @@ _FIT_TAGS_RE = re.compile(r"^fit_tags\s*:\s*\[([^\]]*)\]\s*$", re.MULTILINE)
 _TAGS_RE = re.compile(r"^tags\s*:\s*\[([^\]]*)\]\s*$", re.MULTILINE)
 _BASELINE_RE = re.compile(r"^\s*baseline\s*:\s*\[([^\]]*)\]\s*$", re.MULTILINE)
 _TAGS_PROV_RE = re.compile(r"^tags_provenance\s*:\s*$(.*?)(?=^\S|\Z)", re.MULTILINE | re.DOTALL)
+_TIER_POLICY_RE = re.compile(r"^tier_policy\s*:\s*$(.*?)(?=^\S|\Z)", re.MULTILINE | re.DOTALL)
+
+
+def _parse_spec_tier_pins(fm: str) -> dict:
+    """Extract tier_policy.tier_pins from spec.md frontmatter.
+
+    Returns nested dict: {<gate>: {<persona>: <tier>}}. Empty dict when the
+    block is absent (which is the normal case — `tier_policy` is optional).
+
+    The schema (per schemas/spec-frontmatter.schema.json):
+
+      tier_policy:
+        tier_pins:
+          spec-review:
+            <persona>: opus|sonnet
+          plan:
+            <persona>: opus|sonnet
+          check:
+            <persona>: opus|sonnet
+
+    Indent-aware parsing: walks lines after `tier_pins:` while indent is
+    deeper than the `tier_pins:` key. Tolerates 2- or 4-space indent and
+    extra blank lines. Stops at the first line whose indent ≤ the
+    `tier_pins:` indent (next sibling key) or end of frontmatter.
+
+    Stays regex-only (no YAML import) so adopters keep zero-deps and the
+    AST-banlist holds across all _*.py helpers.
+    """
+    pins: dict = {}
+    tp_match = _TIER_POLICY_RE.search(fm + "\n")
+    if not tp_match:
+        return pins
+    tp_block = tp_match.group(1)
+    # Find tier_pins: within the tier_policy block.
+    tp_lines = tp_block.splitlines()
+    tier_pins_indent = -1
+    tier_pins_start = -1
+    for i, line in enumerate(tp_lines):
+        stripped = line.lstrip()
+        if stripped.startswith("tier_pins:") or stripped.startswith("tier_pins :"):
+            tier_pins_indent = len(line) - len(stripped)
+            tier_pins_start = i + 1
+            break
+    if tier_pins_start < 0:
+        return pins
+    # Walk lines deeper than tier_pins_indent; track gate/persona indent.
+    current_gate: str | None = None
+    gate_indent: int = -1
+    for line in tp_lines[tier_pins_start:]:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent <= tier_pins_indent:
+            # Out of the tier_pins block.
+            break
+        stripped = line.strip()
+        # Comments are tolerated.
+        if stripped.startswith("#"):
+            continue
+        if current_gate is None or indent <= gate_indent:
+            # Gate-level row: <gate>:
+            if stripped.endswith(":"):
+                current_gate = stripped[:-1].strip()
+                gate_indent = indent
+                pins.setdefault(current_gate, {})
+            # Else: malformed; skip silently (frontmatter schema validates).
+        else:
+            # Persona-level row: <persona>: <tier>
+            if ":" in stripped:
+                persona, _, tier = stripped.partition(":")
+                persona = persona.strip()
+                tier = tier.strip().strip('"').strip("'")
+                if current_gate and persona and tier in ("opus", "sonnet"):
+                    pins[current_gate][persona] = tier
+    # Drop empty gate keys (no persona rows under them).
+    return {g: m for g, m in pins.items() if m}
 
 
 def _parse_list_literal(raw: str) -> list[str]:
@@ -400,8 +476,8 @@ def _build_persona_registry(repo_dir: Path, gate: str) -> dict[str, list[str]]:
     return registry
 
 
-def _read_spec_tags(feature_dir: Path) -> tuple[list[str], set[str], list[str]]:
-    """Return (recorded_baseline, recomputed_baseline, spec_tags).
+def _read_spec_tags(feature_dir: Path) -> tuple[list[str], set[str], list[str], dict]:
+    """Return (recorded_baseline, recomputed_baseline, spec_tags, spec_tier_pins).
 
     recorded_baseline:
       - tags_provenance.baseline if present (the authoritative recorded baseline
@@ -413,6 +489,11 @@ def _read_spec_tags(feature_dir: Path) -> tuple[list[str], set[str], list[str]]:
     spec_tags:
       - top-level frontmatter `tags:` list, used for persona scoring; may
         include LLM-added tags beyond the baseline
+    spec_tier_pins:
+      - tier_policy.tier_pins from frontmatter (nested {gate: {persona: tier}})
+      - empty dict when absent
+      - merged with CLI pins downstream; SEC-01 validated at the resolver
+        (D7 site 1; CLI is site 2).
     """
     spec_path = feature_dir / "spec.md"
     try:
@@ -428,6 +509,7 @@ def _read_spec_tags(feature_dir: Path) -> tuple[list[str], set[str], list[str]]:
 
     recorded: list[str] = []
     spec_tags: list[str] = []
+    spec_tier_pins: dict = {}
     if fm:
         prov_match = _TAGS_PROV_RE.search(fm + "\n")
         if prov_match:
@@ -437,9 +519,10 @@ def _read_spec_tags(feature_dir: Path) -> tuple[list[str], set[str], list[str]]:
         tags_m = _TAGS_RE.search(fm)
         if tags_m:
             spec_tags = _parse_list_literal(tags_m.group(1))
+        spec_tier_pins = _parse_spec_tier_pins(fm)
 
     recomputed = compute_baseline(spec_text)
-    return recorded, recomputed, spec_tags
+    return recorded, recomputed, spec_tags, spec_tier_pins
 
 
 def _emit_tier_aware_stdout(assignments: list[dict], codex_authed: bool) -> None:
@@ -549,7 +632,7 @@ def run_with_tier(
 
     # 1. SEC-04 baseline recompute + drift halt + D8 mid-pipeline edit clause.
     try:
-        recorded, recomputed, spec_tags = _read_spec_tags(feature_dir)
+        recorded, recomputed, spec_tags, spec_tier_pins = _read_spec_tags(feature_dir)
     except (FileNotFoundError, OSError, UnicodeDecodeError):
         return 5
 
@@ -595,9 +678,27 @@ def run_with_tier(
         warn(f"no personas found at personas/{GATE_TO_DIR.get(gate, gate)}/")
         return 3
 
-    # 3. CLI --tier-pin SEC-01 enforcement (D7 — CLI cannot be a downgrade
-    #    escape hatch). Parse + validate before any scoring/dispatch work.
-    tier_pins: dict = {}
+    # 3. Tier-pin merge + SEC-01 enforcement.
+    #    Per spec L88 ("CLI > spec; key-level merge"): the FINAL EFFECTIVE
+    #    tier_pins is what dispatches. SEC-01 floor is checked against the
+    #    merged result so a malicious spec-layer pin can be overridden
+    #    upward by CLI (intended escape hatch for operators), but neither
+    #    layer alone can route a security-class persona below the floor.
+    #
+    #    D7 site 1 = spec frontmatter `tier_policy.tier_pins` (this resolver)
+    #    D7 site 2 = CLI `--tier-pin` (same resolver, parsed below)
+    #    Both contribute to the merged dict; validate_tier_pins runs once
+    #    on the merger.
+
+    # 3a. Filter the spec's nested pins to the active gate (spec pins are
+    #     always nested by schema).
+    spec_pins_gate_scoped: dict = {}
+    for g, inner in spec_tier_pins.items():
+        if g == gate and isinstance(inner, dict):
+            spec_pins_gate_scoped.update(inner)
+
+    # 3b. CLI --tier-pin parse.
+    cli_tier_pins: dict = {}
     if args.tier_pin:
         for raw in args.tier_pin:
             if "=" not in raw:
@@ -609,41 +710,40 @@ def run_with_tier(
             if "." in key:
                 gate_part, persona_part = key.split(".", 1)
                 gate_part, persona_part = gate_part.strip(), persona_part.strip()
-                inner = tier_pins.setdefault(gate_part, {})
+                inner = cli_tier_pins.setdefault(gate_part, {})
                 if isinstance(inner, dict):
                     inner[persona_part] = tier_val
                 else:
                     warn(f"--tier-pin: gate '{gate_part}' has conflicting flat/nested shape")
                     return 2
             else:
-                if key in tier_pins and isinstance(tier_pins[key], dict):
+                if key in cli_tier_pins and isinstance(cli_tier_pins[key], dict):
                     warn(f"--tier-pin: persona '{key}' conflicts with prior nested pin")
                     return 2
-                tier_pins[key] = tier_val
+                cli_tier_pins[key] = tier_val
 
-        # Filter nested pins to the active gate only (Codex P2). A pin like
-        # `--tier-pin check.risk=opus` is irrelevant when resolving `plan`;
-        # collapsing all gates against the plan registry would either reject
-        # a valid pin or misapply a pin to the wrong panel. Flat pins
-        # (`--tier-pin risk=opus`) still apply to every gate.
-        gate_scoped: dict = {}
-        for k, v in tier_pins.items():
-            if isinstance(v, dict):
-                if k == gate:
-                    gate_scoped.update(v)
-                # else: pin is for a different gate; ignore silently
-            else:
-                gate_scoped[k] = v
-        tier_pins = gate_scoped
+    # 3c. Filter CLI pins to the active gate (Codex P2). Flat pins apply to
+    #     every gate; nested pins apply only to their gate.
+    cli_pins_gate_scoped: dict = {}
+    for k, v in cli_tier_pins.items():
+        if isinstance(v, dict):
+            if k == gate:
+                cli_pins_gate_scoped.update(v)
+        else:
+            cli_pins_gate_scoped[k] = v
 
-        # SEC-01 floor enforcement at the CLI parse site (D7). Skip when the
-        # gate-scoped filter produced an empty dict (all pins were for other
-        # gates); validate_tier_pins returns 3 on empty input, which would
-        # incorrectly halt the resolver.
-        if tier_pins:
-            rc = validate_tier_pins(tier_pins, registry, "opus")  # TODO(slice4): read from constitution
-            if rc != 0:
-                return rc
+    # 3d. Merge spec + CLI per spec L88 (CLI > spec; key-level). CLI wins on
+    #     persona collision. SEC-01 validated against the merged result so
+    #     the CLI can override a malicious spec-layer pin upward (operator
+    #     escape hatch) but neither layer alone can route security below
+    #     the floor.
+    tier_pins: dict = dict(spec_pins_gate_scoped)
+    tier_pins.update(cli_pins_gate_scoped)
+
+    if tier_pins:
+        rc = validate_tier_pins(tier_pins, registry, "opus")  # TODO(slice4): read from constitution
+        if rc != 0:
+            return rc
 
     # 4. opus_min handling.
     opus_min_arg: int | None = args.opus_min
