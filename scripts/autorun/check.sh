@@ -232,7 +232,15 @@ with open(sys.argv[1]) as f: d=json.load(f)
 arr=d.get('security_findings',[])
 print(len(arr) if isinstance(arr,list) else 0)
 " "$SIDECAR_PATH" 2>/dev/null || echo 0)"
-  sec_count="${sec_count:-0}"
+  # Integer-guard: a python traceback printed to stderr (suppressed by 2>/dev/null)
+  # combined with a partial stdout line, or a multi-line capture from a corrupt
+  # SIDECAR_PATH, would leave sec_count as a non-integer string ("0\n0" or "").
+  # The subsequent `[ "$sec_count" -gt 0 ]` test would error with "integer
+  # expression expected" and abort under set -e. Normalize to a single 0 when
+  # the value isn't a clean non-negative integer.
+  case "$sec_count" in
+    ''|*[!0-9]*) sec_count=0 ;;
+  esac
 
   # Security-axis attempt counter (supersedes v0.9.0 AC#4 hardcoded-block).
   # Policy: don't auto-halt on first security finding — give the pipeline N
@@ -552,24 +560,43 @@ PLAN_CONTENT="$(cat "$ARTIFACT_DIR/plan.md")"
 # Kill switch: MONSTERFLOW_DISABLE_BUDGET=1.
 # ---------------------------------------------------------------------------
 RESOLVER_ERR="$(mktemp "${TMPDIR:-/tmp}/autorun-check-resolver-XXXXXX.err")"
+trap 'rm -f "$RESOLVER_ERR"' EXIT
 RESOLVER_EXIT=0
 SELECTED_RAW="$(bash "$REPO_DIR/scripts/resolve-personas.sh" check \
-                  --feature "$SLUG" --emit-selection-json 2>"$RESOLVER_ERR")" \
+                  --feature "$SLUG" --with-tier --emit-selection-json 2>"$RESOLVER_ERR")" \
   || RESOLVER_EXIT=$?
 if [ "$RESOLVER_EXIT" -ne 0 ]; then
   echo "[autorun] check: ERROR — resolver exited $RESOLVER_EXIT" >&2
   if [ -s "$RESOLVER_ERR" ]; then
     sed 's/^/  /' "$RESOLVER_ERR" >&2
   fi
-  rm -f "$RESOLVER_ERR"
   exit 1
 fi
-rm -f "$RESOLVER_ERR"
+# Parse "<persona>:<tier>" lines from resolver stdout. Tier-aware dispatch
+# (dynamic-roster-per-gate Slice 4): each line is either
+#   <persona>:opus            → claude -p --model claude-opus-4-5
+#   <persona>:sonnet          → claude -p --model claude-sonnet-4-6
+#   codex-adversary           → bare (skipped here; run.sh handles Codex)
+# A bare non-codex-adversary line is a resolver contract violation; halt.
 SELECTED_PERSONAS=()
+SELECTED_TIERS=()
 while IFS= read -r line; do
   [ -z "$line" ] && continue
-  [ "$line" = "codex-adversary" ] && continue
-  SELECTED_PERSONAS+=("$line")
+  if [ "$line" = "codex-adversary" ]; then
+    continue
+  fi
+  case "$line" in
+    *:*)
+      persona_name="${line%%:*}"
+      tier_name="${line#*:}"
+      SELECTED_PERSONAS+=("$persona_name")
+      SELECTED_TIERS+=("$tier_name")
+      ;;
+    *)
+      echo "[autorun:check] resolver emitted bare persona '$line'; expected '<persona>:<tier>' — refusing to dispatch" >&2
+      exit 1
+      ;;
+  esac
 done <<< "$SELECTED_RAW"
 
 if [ "${#SELECTED_PERSONAS[@]}" -eq 0 ]; then
@@ -578,10 +605,14 @@ if [ "${#SELECTED_PERSONAS[@]}" -eq 0 ]; then
 fi
 
 PERSONA_FILES=()
-for name in "${SELECTED_PERSONAS[@]}"; do
+PERSONA_TIERS=()
+for idx in "${!SELECTED_PERSONAS[@]}"; do
+  name="${SELECTED_PERSONAS[$idx]}"
+  tier="${SELECTED_TIERS[$idx]}"
   pf="$REPO_DIR/personas/check/$name.md"
   if [ -f "$pf" ]; then
     PERSONA_FILES+=("$pf")
+    PERSONA_TIERS+=("$tier")
   else
     echo "[autorun] check: WARN — persona file missing: $pf" >&2
   fi
@@ -611,9 +642,21 @@ echo "[autorun] check: Phase 1 — launching ${#PERSONA_FILES[@]} reviewers in p
 PIDS=()
 NAMES=()
 
-for persona_file in "${PERSONA_FILES[@]}"; do
+for idx in "${!PERSONA_FILES[@]}"; do
+  persona_file="${PERSONA_FILES[$idx]}"
+  tier="${PERSONA_TIERS[$idx]}"
   persona="$(basename "$persona_file" .md)"
   NAMES+=("$persona")
+
+  # Tier → model translation (dynamic-roster-per-gate Slice 4 canonical table).
+  case "$tier" in
+    opus)    model="claude-opus-4-5" ;;
+    sonnet)  model="claude-sonnet-4-6" ;;
+    *)
+      echo "[autorun:check] unknown tier '$tier' for persona '$persona'; expected 'opus' or 'sonnet'" >&2
+      exit 1
+      ;;
+  esac
 
   USER_PROMPT="$(cat "$persona_file")
 
@@ -631,13 +674,14 @@ $PLAN_CONTENT"
 
   printf '%s' "$USER_PROMPT" | timeout "$TIMEOUT_PERSONA" claude -p \
     --dangerously-skip-permissions \
+    --model "$model" \
     --system-prompt "$AUTONOMY_DIRECTIVE" \
     > "$RAW_DIR/$persona.md" \
     2>"$RAW_DIR/$persona.err" &
 
   LAUNCHED_PID=$!
   PIDS+=($LAUNCHED_PID)
-  echo "[autorun] check: launched $persona (pid=$LAUNCHED_PID)"
+  echo "[autorun] check: launched $persona [$tier→$model] (pid=$LAUNCHED_PID)"
 done
 
 FAILED=()
@@ -722,11 +766,32 @@ $RAW_COMBINED"
 
 STDOUT_LOG="$(mktemp "${TMPDIR:-/tmp}/autorun-check-synth-XXXXXX.log")"
 STDERR_LOG="$(mktemp "${TMPDIR:-/tmp}/autorun-check-synth-err-XXXXXX.log")"
-trap 'rm -f "$STDOUT_LOG" "$STDERR_LOG"' EXIT
+# Extend the early RESOLVER_ERR trap (set at line ~555) to cover the
+# synthesis logs as well. Bash traps are last-wins, so re-include
+# "$RESOLVER_ERR" to preserve its cleanup.
+trap 'rm -f "$RESOLVER_ERR" "$STDOUT_LOG" "$STDERR_LOG"' EXIT
+
+# Phase 2 synthesis tier (dynamic-roster-per-gate Slice 4): the resolver only
+# emits tiers for the Phase 1 reviewer roster, not for the synthesis step.
+# Synthesis is the verdict-emit call (must reason across all reviewer outputs +
+# produce schema-strict check-verdict JSON) so it pins to opus by canonical
+# table. Env override CHECK_SYNTHESIS_TIER lets operators flip to sonnet for
+# budget testing without code edits.
+SYNTHESIS_TIER="${CHECK_SYNTHESIS_TIER:-opus}"
+case "$SYNTHESIS_TIER" in
+  opus)    synthesis_model="claude-opus-4-5" ;;
+  sonnet)  synthesis_model="claude-sonnet-4-6" ;;
+  *)
+    echo "[autorun:check] unknown CHECK_SYNTHESIS_TIER '$SYNTHESIS_TIER'; expected 'opus' or 'sonnet'" >&2
+    exit 1
+    ;;
+esac
+echo "[autorun] check: synthesis tier=$SYNTHESIS_TIER → $synthesis_model"
 
 SYNTH_EXIT=0
 printf '%s' "$SYNTHESIS_PROMPT" | timeout "$TIMEOUT_STAGE" claude -p \
   --dangerously-skip-permissions \
+  --model "$synthesis_model" \
   --system-prompt "$AUTONOMY_DIRECTIVE" \
   > "$STDOUT_LOG" \
   2>"$STDERR_LOG" || SYNTH_EXIT=$?

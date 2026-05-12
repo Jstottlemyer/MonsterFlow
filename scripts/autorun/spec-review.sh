@@ -53,25 +53,53 @@ SPEC_CONTENT="$(cat "$SPEC_FILE")"
 # Kill switch for emergencies: MONSTERFLOW_DISABLE_BUDGET=1 (full roster).
 # ---------------------------------------------------------------------------
 RESOLVER_ERR="$(mktemp "${TMPDIR:-/tmp}/autorun-spec-review-resolver-XXXXXX.err")"
+trap 'rm -f "$RESOLVER_ERR"' EXIT
 RESOLVER_EXIT=0
 SELECTED_RAW="$(bash "$REPO_DIR/scripts/resolve-personas.sh" spec-review \
-                  --feature "$SLUG" --emit-selection-json 2>"$RESOLVER_ERR")" \
+                  --feature "$SLUG" --with-tier --emit-selection-json 2>"$RESOLVER_ERR")" \
   || RESOLVER_EXIT=$?
 if [ "$RESOLVER_EXIT" -ne 0 ]; then
   echo "[autorun] spec-review: ERROR — resolver exited $RESOLVER_EXIT" >&2
   if [ -s "$RESOLVER_ERR" ]; then
     sed 's/^/  /' "$RESOLVER_ERR" >&2
   fi
-  rm -f "$RESOLVER_ERR"
   exit 1
 fi
-rm -f "$RESOLVER_ERR"
-# Filter codex-adversary (additive; autorun handles Codex separately in run.sh).
+# Surface stale-tags warning (dynamic-roster-per-gate Slice 4): the resolver
+# writes a one-line "[stale-tags] WARNING ..." to stderr when persona tag
+# manifests look out of date relative to the on-disk roster. Mirror it in the
+# autorun log so overnight runs leave a breadcrumb.
+if [ -s "$RESOLVER_ERR" ]; then
+  STALE_LINE="$(grep -m1 '^\[stale-tags\] WARNING' "$RESOLVER_ERR" 2>/dev/null || true)"
+  if [ -n "$STALE_LINE" ]; then
+    echo "[autorun] spec-review: $STALE_LINE"
+  fi
+fi
+# Parse "<persona>:<tier>" lines from resolver stdout. Tier-aware dispatch
+# (dynamic-roster-per-gate Slice 4): each line is either
+#   <persona>:opus            → claude -p --model claude-opus-4-5
+#   <persona>:sonnet          → claude -p --model claude-sonnet-4-6
+#   codex-adversary           → bare (skipped here; run.sh handles Codex)
+# A bare non-codex-adversary line is a resolver contract violation; halt.
 SELECTED_PERSONAS=()
+SELECTED_TIERS=()
 while IFS= read -r line; do
   [ -z "$line" ] && continue
-  [ "$line" = "codex-adversary" ] && continue
-  SELECTED_PERSONAS+=("$line")
+  if [ "$line" = "codex-adversary" ]; then
+    continue
+  fi
+  case "$line" in
+    *:*)
+      persona_name="${line%%:*}"
+      tier_name="${line#*:}"
+      SELECTED_PERSONAS+=("$persona_name")
+      SELECTED_TIERS+=("$tier_name")
+      ;;
+    *)
+      echo "[autorun:spec-review] resolver emitted bare persona '$line'; expected '<persona>:<tier>' — refusing to dispatch" >&2
+      exit 1
+      ;;
+  esac
 done <<< "$SELECTED_RAW"
 
 if [ "${#SELECTED_PERSONAS[@]}" -eq 0 ]; then
@@ -83,10 +111,14 @@ fi
 # missing (resolver should not produce these; defensive). spec-review uses
 # personas/review/ on disk per CLAUDE.md gate→dir mapping.
 PERSONA_FILES=()
-for name in "${SELECTED_PERSONAS[@]}"; do
+PERSONA_TIERS=()
+for idx in "${!SELECTED_PERSONAS[@]}"; do
+  name="${SELECTED_PERSONAS[$idx]}"
+  tier="${SELECTED_TIERS[$idx]}"
   pf="$REPO_DIR/personas/review/$name.md"
   if [ -f "$pf" ]; then
     PERSONA_FILES+=("$pf")
+    PERSONA_TIERS+=("$tier")
   else
     echo "[autorun] spec-review: WARN — persona file missing: $pf" >&2
   fi
@@ -116,9 +148,21 @@ echo "[autorun] spec-review: launching ${#PERSONA_FILES[@]} personas in parallel
 PIDS=()
 NAMES=()
 
-for persona_file in "${PERSONA_FILES[@]}"; do
+for idx in "${!PERSONA_FILES[@]}"; do
+  persona_file="${PERSONA_FILES[$idx]}"
+  tier="${PERSONA_TIERS[$idx]}"
   persona="$(basename "$persona_file" .md)"
   NAMES+=("$persona")
+
+  # Tier → model translation (dynamic-roster-per-gate Slice 4 canonical table).
+  case "$tier" in
+    opus)    model="claude-opus-4-5" ;;
+    sonnet)  model="claude-sonnet-4-6" ;;
+    *)
+      echo "[autorun:spec-review] unknown tier '$tier' for persona '$persona'; expected 'opus' or 'sonnet'" >&2
+      exit 1
+      ;;
+  esac
 
   USER_PROMPT="$(cat "$persona_file")
 
@@ -132,12 +176,14 @@ $SPEC_CONTENT"
 
   printf '%s' "$USER_PROMPT" | timeout "$TIMEOUT_PERSONA" claude -p \
     --dangerously-skip-permissions \
+    --model "$model" \
     --system-prompt "$AUTONOMY_DIRECTIVE" \
     > "$RAW_DIR/$persona.md" \
     2>"$RAW_DIR/$persona.err" &
 
-  PIDS+=($!)
-  echo "[autorun] spec-review: launched $persona (pid=$!)"
+  pid=$!
+  PIDS+=("$pid")
+  echo "[autorun] spec-review: launched $persona [$tier→$model] (pid=$pid)"
 done
 
 # ---------------------------------------------------------------------------
