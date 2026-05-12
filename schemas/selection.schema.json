@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Jstottlemyer/MonsterFlow/schemas/selection.schema.json",
+  "title": "Dynamic Roster — selection.json (v2, tier-aware)",
+  "description": "One file per gate write at docs/specs/<feature>/<gate>/selection.json. Captures content-aware resolver output: which personas were selected per gate, their assigned tier (opus|sonnet), fit_score (tag-intersection cardinality), combined_score (fit_score × load_bearing_rate), and the tier_policy audit trail (override source + actual counts). v2 supersedes the v1 string-array shape shipped in account-type-agent-scaling; v1 selection.json files on disk lack tier/fit_score/combined_score and will fail v2 validation by design. Codex is tracked separately from the Claude panel (`codex` top-level key), not as a row in `selected[]`, because Codex runs additively and is not counted against `opus_count_actual` / panel size budget.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "prompt_version",
+    "feature",
+    "gate",
+    "selected",
+    "dropped",
+    "codex",
+    "tier_policy_applied"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2,
+      "description": "Bumped on any breaking schema change. v2 adds tier/fit_score/combined_score per row, separates Codex to its own key, and adds tier_policy_applied audit block."
+    },
+    "prompt_version": {
+      "type": "string",
+      "pattern": "^selection-emit@[0-9]+\\.[0-9]+$",
+      "description": "Identifier of the resolver/emit prompt revision that produced this file. v2 rows use selection-emit@2.0 or higher."
+    },
+    "feature": {
+      "type": "string",
+      "description": "Feature slug (matches docs/specs/<feature>/ directory name)."
+    },
+    "gate": {
+      "type": "string",
+      "enum": ["spec-review", "plan", "check"],
+      "description": "Which pipeline gate produced this selection."
+    },
+    "selected": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/persona_row" },
+      "description": "Personas dispatched at this gate (Claude lineage only — Codex is tracked separately). Order is implementation-defined; consumers should not rely on it."
+    },
+    "dropped": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/persona_row" },
+      "description": "Eligible personas the resolver considered but did not dispatch (budget cap, lower combined_score, or empty tag intersection). MUST be sorted by combined_score DESC for deterministic diffs and dashboard render."
+    },
+    "codex": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["persona", "policy"],
+          "properties": {
+            "persona": {
+              "type": "string",
+              "const": "codex-adversary",
+              "description": "Fixed persona name for the Codex adversarial reviewer."
+            },
+            "policy": {
+              "type": "string",
+              "enum": ["additive", "disabled"],
+              "description": "Effective Codex policy resolved from constitution/spec/CLI layers. additive = runs when authenticated; disabled = never runs (for adopters without Codex set up)."
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "description": "Separate from selected[] per spec: Codex runs additively and is not counted against panel size or opus_count_actual. null when Codex is not wired at this gate (e.g., /plan in v1)."
+    },
+    "tier_policy_applied": {
+      "type": "object",
+      "required": [
+        "source",
+        "opus_min",
+        "opus_count_actual",
+        "sonnet_count_actual"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["constitution", "spec", "cli"],
+          "description": "Highest-precedence override layer that contributed to the effective tier_policy for this dispatch. CLI > spec > constitution; key-level merge per v0.9.0 gate_mode pattern."
+        },
+        "opus_min": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Effective opus_min after override merge."
+        },
+        "opus_count_actual": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Actual count of Opus seats in selected[] (excludes Codex)."
+        },
+        "sonnet_count_actual": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Actual count of Sonnet seats in selected[] (excludes Codex)."
+        },
+        "security_floor": {
+          "type": "string",
+          "description": "SEC-01 — minimum tier any fit_tags:[security] persona must run at. Typically 'opus'. Optional; absent means no floor was applied (no security personas selected, or constitution did not declare one)."
+        },
+        "tier_pins": {
+          "type": "object",
+          "description": "Effective tier_pins after override merge. Map of <gate>.<persona> → tier, or flat persona → tier (resolver's choice; consumer-tolerant). Optional; absent means no pins were applied.",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false,
+      "description": "Audit block: which override layer won, the effective floors, and the actual tier counts. Used by dashboard 'Panel Tier Mix' column and by stale-tag/drift diagnostics."
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "persona_row": {
+      "type": "object",
+      "required": ["persona", "tier", "fit_score", "combined_score"],
+      "properties": {
+        "persona": {
+          "type": "string",
+          "description": "Persona slug; matches personas/<gate-dir>/<persona>.md filename stem."
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["opus", "sonnet"],
+          "description": "Assigned model tier for this dispatch. Haiku is reserved and not part of the panel in v1."
+        },
+        "fit_score": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Cardinality of spec.tags ∩ persona.fit_tags. 0 = no tag match (eligible only via cold-start / ranking fallback)."
+        },
+        "combined_score": {
+          "type": "number",
+          "minimum": 0,
+          "description": "fit_score × load_bearing_rate. The single ranking key used to claim Opus seats and to sort dropped[]."
+        },
+        "lineage": {
+          "type": "string",
+          "enum": ["claude", "codex"],
+          "description": "Optional. Defaults to 'claude' at read time per D9 (one-line guard in _persona_score.py). 'codex' rows do not appear in selected[]/dropped[] — Codex is tracked at the top-level `codex` key — but the enum is kept here for forward-compat if that changes."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

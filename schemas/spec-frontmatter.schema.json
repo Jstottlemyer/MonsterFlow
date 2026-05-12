@@ -1,15 +1,124 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monsterflow.dev/schemas/v1/spec-frontmatter.schema.json",
-  "title": "MonsterFlow spec.md frontmatter (v1, slice-1 stub)",
-  "description": "Slice 1 stub. Only validates the optional tags: field. additionalProperties: true is intentional in v1; tightened in slice-2 (`dynamic-roster-2-baseline`) when /spec Phase 3 LLM-propose-user-confirm wires up.",
+  "title": "MonsterFlow spec.md frontmatter (v1, slice-2)",
+  "description": "Slice 2 of dynamic-roster-per-gate. Adds tier_policy and tags_provenance blocks alongside the slice-1 tags: field. All three top-level fields (tags, tier_policy, tags_provenance) are OPTIONAL — pre-feature specs are grandfathered. additionalProperties: true is intentional (constitution-style metadata: name, description, status, gate_mode, etc. pass through untouched). The tag-enum is shared with persona-frontmatter.schema.json via the external tag-enum.schema.json file.",
   "type": "object",
   "properties": {
     "tags": {
+      "description": "Closed-enum content tags for the spec. Drives resolver fit_score = |spec.tags ∩ persona.fit_tags|. Optional in v1 (grandfathered specs); /spec Phase 3 offers inference on next revision for specs without this field.",
       "type": "array",
       "items": { "$ref": "tag-enum.schema.json" },
+      "minItems": 0,
       "uniqueItems": true,
       "default": []
+    },
+    "tier_policy": {
+      "description": "Optional per-spec override of constitution-level tier_policy. Spec.md may RAISE quality (bump opus_min, add Opus pins) but cannot RETARGET security personas downward — SEC-01 floor enforcement lives in _tier_assign.py. Key-level merge with constitution (spec wins on conflict for whitelisted keys).",
+      "type": "object",
+      "properties": {
+        "orchestrator": {
+          "type": "string",
+          "enum": ["opus"]
+        },
+        "opus_min": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sonnet_min": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remainder_split": {
+          "type": "string",
+          "enum": ["even", "opus-heavy", "sonnet-heavy"]
+        },
+        "remainder_tiebreak": {
+          "type": "string",
+          "enum": ["opus", "sonnet"]
+        },
+        "codex": {
+          "type": "string",
+          "enum": ["additive", "disabled"]
+        },
+        "security_floor": {
+          "type": "string",
+          "enum": ["opus", "sonnet"]
+        },
+        "panel": {
+          "description": "Nested panel sub-block (alternative to flat shape; matches constitution example in pipeline-config.md).",
+          "type": "object",
+          "properties": {
+            "opus_min": { "type": "integer", "minimum": 0 },
+            "sonnet_min": { "type": "integer", "minimum": 0 },
+            "remainder_split": {
+              "type": "string",
+              "enum": ["even", "opus-heavy", "sonnet-heavy"]
+            },
+            "remainder_tiebreak": {
+              "type": "string",
+              "enum": ["opus", "sonnet"]
+            },
+            "codex": {
+              "type": "string",
+              "enum": ["additive", "disabled"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "tier_pins": {
+          "description": "Gate-scoped persona→tier pins. Outer key is the gate (spec-review|plan|check); inner key is the persona slug; inner value is the tier. Security-class personas (fit_tags includes 'security') cannot be pinned below security_floor — enforced at _tier_assign.py validate_tier_pins().",
+          "type": "object",
+          "patternProperties": {
+            "^(spec-review|plan|check)$": {
+              "type": "object",
+              "patternProperties": {
+                "^[a-z][a-z0-9-]{0,63}$": {
+                  "type": "string",
+                  "enum": ["opus", "sonnet"]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "spec_overridable_keys": {
+          "description": "Constitution-only key in practice (spec.md should not set this — but schema does not forbid it for forward compatibility).",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "tags_provenance": {
+      "description": "Optional informational record of how tags: was populated. Author-writable but resolver-recomputed — _tag_baseline.py re-runs at every dispatch and asserts recorded_baseline ⊆ recomputed_baseline (SEC-04 / Edge Case 23). Used by /spec Phase 3 to render the provenance comment.",
+      "type": "object",
+      "properties": {
+        "baseline": {
+          "description": "Tags detected by _tag_baseline.py regex pass (deterministic floor).",
+          "type": "array",
+          "items": { "$ref": "tag-enum.schema.json" },
+          "uniqueItems": true,
+          "default": []
+        },
+        "llm_added": {
+          "description": "Tags added by LLM inference on top of baseline.",
+          "type": "array",
+          "items": { "$ref": "tag-enum.schema.json" },
+          "uniqueItems": true,
+          "default": []
+        },
+        "user_overrides": {
+          "description": "Tags added or kept by explicit user action in /spec Phase 3 confirmation.",
+          "type": "array",
+          "items": { "$ref": "tag-enum.schema.json" },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": true

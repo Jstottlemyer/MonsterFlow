@@ -1,27 +1,76 @@
 {
   "schema_version": 2,
   "prompt_version": "check-verdict@2.0",
-  "verdict": "NO_GO",
+  "verdict": "GO_WITH_FIXES",
   "blocking_findings": [
-    {"persona": "scope-discipline", "finding_id": "ck-3a7f2c1d9b", "summary": "MVP bundles 3 ship-units (dispatch + escape hatches + constitution rename); carve rename to sibling spec, defer hatches/--explain"},
-    {"persona": "sequencing", "finding_id": "ck-8e4d5a2f10", "summary": "Codex lineage backfill (task 46) sequenced after resolver (task 12) consumes it; v0.10.0 MVP ships content-blind"},
-    {"persona": "sequencing", "finding_id": "ck-2b9c7d6e08", "summary": "Autorun gate-shell deps off-by-one: tasks 23/24/25 must depend on 14/15/16 respectively, not all 16"},
-    {"persona": "risk", "finding_id": "ck-1f6a4e8c5d", "summary": "Task 7 (Agent-tool model precedence empirical) is plan-blocking but sequenced parallel in W2; move to pre-W2 gate"},
-    {"persona": "risk", "finding_id": "ck-9d3b0a7c4e", "summary": "Orchestrator rate-limit path undefined; tier_policy.orchestrator=opus has no 429 fallback documented"},
-    {"persona": "risk", "finding_id": "ck-5c8e1f2a6b", "summary": "Constitution rename 'both files exist' halt has no recovery recipe; ship migrate helper or carve to sibling spec"}
+    {
+      "persona": "sequencing",
+      "finding_id": "ck-a1b2c3d4e5",
+      "summary": "PRE-W2 gate over-blocks W2 (plan.md L78 contradicts Open Q#1 branched policy)"
+    },
+    {
+      "persona": "sequencing",
+      "finding_id": "ck-f6a7b8c9d0",
+      "summary": "W4 command-file tasks 9/11/13 missing task 0 (PRE-W2) as explicit dep"
+    },
+    {
+      "persona": "risk",
+      "finding_id": "ck-1a2b3c4d5e",
+      "summary": "PRE-W2 probe is single-context; needs 3-cell verdict matrix (Opus || Sonnet || claude -p)"
+    },
+    {
+      "persona": "security-architect",
+      "finding_id": "ck-6f7a8b9c0d",
+      "summary": "SEC-04 baseline-recompute drift-halt has no dedicated test file",
+      "tag": "sev:security"
+    },
+    {
+      "persona": "security-architect",
+      "finding_id": "ck-2e3f4a5b6c",
+      "summary": "PRE-W2 wrapper-pivot fail-fast assertion under-specified",
+      "tag": "sev:security"
+    },
+    {
+      "persona": "security-architect",
+      "finding_id": "ck-7d8e9f0a1b",
+      "summary": "fit_tags enum rejection path not asserted in any task",
+      "tag": "sev:security"
+    }
   ],
   "security_findings": [
-    {"persona": "security-architect", "finding_id": "ck-7a2d4f9e10", "summary": "D7 fallback writes per-dispatch wrapper subagents to ~/.claude/agents/ — persistent prompt injection on SIGKILL, concurrent collision, path traversal at write site", "tag": "sev:security"},
-    {"persona": "security-architect", "finding_id": "ck-4b6e8c1d3a", "summary": "_tag_baseline.py lacks NFKC normalization; Cyrillic homoglyphs (аuth) bypass SEC-02 baseline floor", "tag": "sev:security"},
-    {"persona": "security-architect", "finding_id": "ck-0c5a9e2f7b", "summary": "Code-fence exclusion grammar unspecified in _tag_baseline.py; bidirectional hide/show keyword attacks possible", "tag": "sev:security"},
-    {"persona": "security-architect", "finding_id": "ck-6d8f3b1c0a", "summary": "tags_provenance.baseline is author-writable; resolver must recompute and assert recorded ⊆ recomputed at every dispatch, not trust recorded value", "tag": "sev:security"}
+    {
+      "persona": "security-architect",
+      "finding_id": "ck-6f7a8b9c0d",
+      "summary": "SEC-04 baseline-recompute drift-halt has no dedicated test file",
+      "tag": "sev:security"
+    },
+    {
+      "persona": "security-architect",
+      "finding_id": "ck-2e3f4a5b6c",
+      "summary": "PRE-W2 wrapper-pivot fail-fast assertion under-specified",
+      "tag": "sev:security"
+    },
+    {
+      "persona": "security-architect",
+      "finding_id": "ck-7d8e9f0a1b",
+      "summary": "fit_tags enum rejection path not asserted in any task",
+      "tag": "sev:security"
+    }
   ],
-  "generated_at": "2026-05-06T00:00:00Z",
+  "generated_at": "2026-05-12T18:50:00Z",
   "iteration": 1,
-  "iteration_max": 2,
+  "iteration_max": 3,
   "mode": "permissive",
-  "mode_source": "default",
-  "class_breakdown": {"architectural": 5, "security": 4, "contract": 0, "documentation": 0, "tests": 0, "scope-cuts": 1, "unclassified": 0},
+  "mode_source": "frontmatter",
+  "class_breakdown": {
+    "architectural": 3,
+    "security": 3,
+    "contract": 5,
+    "documentation": 2,
+    "tests": 12,
+    "scope-cuts": 5,
+    "unclassified": 0
+  },
   "class_inferred_count": 0,
   "followups_file": null,
   "cap_reached": false,
