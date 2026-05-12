@@ -35,21 +35,50 @@ Before reviewer agents dispatch, run the snapshot directive at `commands/_prompt
 
 If snapshot refuses, halt the phase — do not dispatch reviewers.
 
-## Phase 0b: Resolve persona budget (account-type-agent-scaling)
+## Phase 0b: Resolve persona budget + tier (account-type-agent-scaling + dynamic-roster-per-gate)
 
-Before dispatching reviewers, run the resolver to determine which personas to dispatch:
+Before dispatching reviewers, run the resolver to determine which personas to dispatch AND at which model tier (`opus` or `sonnet`). As of Slice 3 of `dynamic-roster-per-gate`, the resolver supports a `--with-tier` flag that switches its stdout grammar from bare persona names to `<persona>:<tier>` colon-delimited lines. Phase 0b now REQUIRES this tier-aware grammar so each persona can be dispatched at the correct model. The resolver still accepts the legacy bare-name invocation for other callers, but `/spec-review` always opts in.
 
 ```bash
 SELECTED=$(bash <REPO_DIR>/scripts/resolve-personas.sh spec-review \
-             --feature "<feature-slug>" --emit-selection-json)
+             --feature "<feature-slug>" --with-tier --emit-selection-json \
+             2> >(tee /tmp/resolve-personas.stderr >&2))
 RESOLVER_EXIT=$?
 ```
 
 - If `RESOLVER_EXIT != 0` or stdout is empty: apply `commands/_prompts/_resolver-recovery.md` (canonical recovery fragment — interactive sessions get a 3-option prompt; non-tty/autorun aborts the gate). Do **not** silently fall back to a hardcoded list — that would defeat the budget.
-- Otherwise, dispatch one subagent per line of `$SELECTED` (skipping `codex-adversary`, which is handled by Phase 2b).
-- The resolver writes `docs/specs/<feature>/spec-review/selection.json` with the audit row.
-- If `~/.config/monsterflow/config.json` is absent or has no `agent_budget`, the resolver emits the full roster — existing behavior preserved.
-- Print one line to gate stdout: `Selected: <names> | Dropped: <names>` (read these from `selection.json`).
+- Otherwise, dispatch one subagent per line of `$SELECTED` using the parsing + dispatch contract below.
+- The resolver writes `docs/specs/<feature>/spec-review/selection.json` with the audit row (schema v2 includes the `tier` field per persona).
+- If `~/.config/monsterflow/config.json` is absent or has no `agent_budget`, the resolver emits the full roster — existing behavior preserved (every line still carries a `:<tier>` suffix).
+- Print one line to gate stdout: `Selected: <names with tiers> | Dropped: <names>` (read these from `selection.json`).
+
+**Stale-tags surfacing (D8):** when `--with-tier` is set, the resolver recomputes the tier-baseline from current persona frontmatter and compares it to the recorded `tags:` field. If they diverge, the resolver writes one line `[stale-tags] WARNING: ...` to stderr (it does NOT halt; the recomputed baseline wins). Before dispatching reviewers, scan `/tmp/resolve-personas.stderr` (or the captured stderr stream above) for any line starting with `[stale-tags]` and surface it verbatim to the user as a one-line note so they know a persona's recorded `tags:` is out of date. Do not block on this — proceed with dispatch.
+
+**Stdout grammar (new, Slice 3):** one line per persona. Two shapes:
+
+```
+requirements:opus
+gaps:sonnet
+ambiguity:opus
+feasibility:sonnet
+scope:sonnet
+stakeholders:opus
+codex-adversary
+```
+
+- `<persona-slug>:<tier>` — colon-delimited, `<tier>` ∈ `{opus, sonnet}`. Dispatch via the Agent tool with the matching `model:` parameter (see below).
+- `codex-adversary` — appears BARE (no colon, no tier) when Codex is present in the roster. Dispatch via the existing Codex integration at Phase 2b — do NOT pass it to the Agent tool.
+
+**Dispatch parsing + contract:** for each line of `$SELECTED`:
+
+1. Strip whitespace. If the line is exactly `codex-adversary` (no colon), skip it here — it is handled by Phase 2b.
+2. Otherwise, partition on the FIRST `:` — the prefix is the persona slug, the suffix is the tier.
+3. If `:` is absent AND the line is NOT `codex-adversary`, the resolver violated its contract. Halt the gate with:
+   ```
+   [dispatch] resolver emitted bare persona '<line>'; expected '<persona>:<tier>' — refusing to dispatch
+   ```
+4. If the tier is not one of `opus` or `sonnet`, halt with an analogous error.
+5. Otherwise, invoke the Agent tool with `model: "opus"` or `model: "sonnet"` matching the parsed tier, and the persona's role/checklist loaded from `<REPO_DIR>/personas/review/<persona>.md`. No wrapper script — pass `model:` to the Agent tool directly (per plan D4).
 
 ## Phase 0c: Gate Mode Resolution (pipeline-gate-permissiveness)
 
@@ -95,7 +124,9 @@ If `gate_mode_resolve` exits non-zero, surface its stderr verbatim to the user a
 
 ## Phase 1: Dispatch PRD Reviewer Agents
 
-Read each persona file in `<REPO_DIR>/personas/review/` corresponding to a name in `$SELECTED`, then dispatch one parallel subagent per name using the Agent tool. The legacy hardcoded list (requirements, gaps, ambiguity, feasibility, scope, stakeholders) is the resolver's full-roster fallback — when the user has no budget configured, all six dispatch as before.
+For each `<persona>:<tier>` line surfaced by Phase 0b, read the persona file at `<REPO_DIR>/personas/review/<persona>.md`, then dispatch one parallel subagent using the Agent tool with `model: "<tier>"` (`opus` or `sonnet`). The legacy hardcoded list (requirements, gaps, ambiguity, feasibility, scope, stakeholders) is the resolver's full-roster fallback — when the user has no budget configured, all six dispatch as before, each at the tier the resolver assigned.
+
+`codex-adversary` (the bare line, if present) is NOT dispatched here — Phase 2b owns it.
 
 Each agent receives:
 - The full spec content

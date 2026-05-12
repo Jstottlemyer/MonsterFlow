@@ -13,18 +13,26 @@
 # All other logic lives in scripts/_resolve_personas.py (the heavy lifting:
 # JSON, ranking sort, lock file, selection.json, --why, --print-schema).
 #
-# Stdout grammar (locked):
-#   <persona-name>\n+ <codex-adversary>?
-#   - persona names: [a-z][a-z0-9-]*
-#   - codex-adversary: only as the last line, only when authenticated
-#   - empty stdout = contract violation (caller MUST exit non-zero)
+# Stdout grammar (depends on --with-tier flag):
+#
+#   Legacy mode (no --with-tier — backward-compat for pre-tier callers):
+#     <persona-name>\n+ <codex-adversary>?
+#     - persona names: [a-z][a-z0-9-]*
+#     - codex-adversary: only as the last line, only when authenticated
+#
+#   Tier-aware mode (--with-tier — Slice 3 of dynamic-roster-per-gate):
+#     <persona-name>:<tier>\n+ <codex-adversary>?
+#     - tier: literal "opus" or literal "sonnet"
+#     - codex-adversary still appears BARE (no colon, no tier) per D3
+#     - empty stdout = contract violation (caller MUST exit non-zero)
 #
 # Exit codes (mirrored from python helper):
 #   0 — ≥1 Claude persona emitted
 #   2 — config malformed
 #   3 — degenerate state (no personas selectable)
-#   4 — --feature arg missing or feature dir absent
+#   4 — --feature arg missing or feature dir absent / SEC-01 tier_pin violation
 #   5 — internal/unexpected
+#   6 — SEC-04 tags_provenance.baseline drift halt (--with-tier only)
 #
 # AUTORUN/non-tty: caller must check $? AND verify wc -l > 0. No silent fallback.
 #
@@ -88,6 +96,18 @@ codex_probe
 
 export MONSTERFLOW_REPO_DIR="$REPO_DIR"
 
-# Hand off to the Python helper. We use exec so the helper's exit code becomes
-# our exit code without a fork/wait round-trip.
-exec python3 "$HELPER" "$@"
+# SEC-09: internal temp dir (cleaned on exit). Helpers must not leak temp state.
+# The Python helper does not write temp files yet in Slice 3, but the env var
+# is exported so future callers can rely on a per-invocation scratch path.
+# A trap cleans up on natural exit (EXIT), Ctrl-C (INT), TERM, and HUP.
+MF_RESOLVE_TMPDIR="$(mktemp -d -t monsterflow-resolve.XXXXXX)" || {
+    echo "resolve-personas: mktemp failed" >&2; exit 5;
+}
+trap 'rm -rf "$MF_RESOLVE_TMPDIR"' EXIT INT TERM HUP
+export MF_RESOLVE_TMPDIR
+
+# Hand off to the Python helper. With the trap in place we can't `exec` (that
+# would replace this shell and skip the cleanup trap), so we run + propagate
+# the helper's exit code.
+python3 "$HELPER" "$@"
+exit $?

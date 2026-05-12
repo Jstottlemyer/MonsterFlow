@@ -96,6 +96,109 @@
 <script src="./judge-bundle.js" onerror="window.__JUDGE_BUNDLE_MISSING=true"></script>
 <script src="./dashboard.js"></script>
 <script src="./judge.js"></script>
+<script>
+  // Dynamic-roster Slice 4 / Task 15 — augment the Judge "Recent gates · verdict"
+  // table with a "Panel Tier Mix" column rendered from each feature's
+  // `tier_policy_applied` block (surfaced by scripts/judge-dashboard-bundle.py
+  // per Task 16). Defensive: missing/legacy selection.json renders "N/A".
+  // Implemented in index.html (not judge.js) per Wave 4a file-ownership split.
+  (function () {
+    function formatTierMix(tpa) {
+      if (!tpa || typeof tpa !== "object") return "N/A";
+      if (tpa === "N/A") return "N/A";
+      const opus = tpa.opus_count_actual;
+      const sonnet = tpa.sonnet_count_actual;
+      if (typeof opus !== "number" || typeof sonnet !== "number") return "N/A";
+      let label = opus + " Opus / " + sonnet + " Sonnet";
+      const codex = tpa.codex;
+      if (codex && typeof codex === "object" && codex.policy && codex.policy !== "disabled") {
+        label += " + Codex";
+      }
+      return label;
+    }
+    function lookupTierMix(project, feature, stage) {
+      const bundle = window.__JUDGE_DATA;
+      if (!bundle || !bundle.projects) return "N/A";
+      const p = bundle.projects[project];
+      if (!p || !p.features) return "N/A";
+      const f = p.features[feature];
+      if (!f) return "N/A";
+      // tier_policy_applied lives per-feature (gate-scoped selection.json is
+      // resolved at /spec time but the bundle surfaces it at the feature root,
+      // with optional per-stage override). Fall back: feature-root → stage blob.
+      const stageBlob = (f.stages || {})[stage] || {};
+      const tpa = stageBlob.tier_policy_applied
+        || f.tier_policy_applied
+        || (stageBlob.tier_mix === "N/A" ? "N/A" : null)
+        || (f.tier_mix === "N/A" ? "N/A" : null);
+      return formatTierMix(tpa);
+    }
+    function augmentVerdictTable() {
+      // Find the "Recent gates · verdict" card. Match by header text so we
+      // stay decoupled from class-name churn.
+      const cards = document.querySelectorAll("#main .card");
+      let target = null;
+      for (const c of cards) {
+        const h = c.querySelector("h2");
+        if (h && h.textContent && h.textContent.indexOf("Recent gates") !== -1) {
+          target = c; break;
+        }
+      }
+      if (!target) return;
+      const table = target.querySelector("table");
+      if (!table || table.dataset.tierMixAugmented === "1") return;
+      // Header: insert before the trailing "Open" column.
+      const headRow = table.querySelector("thead tr");
+      if (headRow) {
+        const th = document.createElement("th");
+        th.textContent = "Panel Tier Mix";
+        // Insert before the last <th> ("Open").
+        const lastTh = headRow.lastElementChild;
+        if (lastTh) headRow.insertBefore(th, lastTh);
+        else headRow.appendChild(th);
+      }
+      // Body rows: project=td[0], feature=td[1], stage=td[2]. Insert cell
+      // before the trailing "Open" td so column alignment stays correct.
+      const bodyRows = table.querySelectorAll("tbody tr");
+      bodyRows.forEach(function (tr) {
+        const tds = tr.children;
+        if (tds.length < 4) return;
+        const project = (tds[0].textContent || "").trim();
+        const feature = (tds[1].textContent || "").trim();
+        const stage   = (tds[2].textContent || "").trim();
+        const td = document.createElement("td");
+        td.textContent = lookupTierMix(project, feature, stage);
+        const lastTd = tr.lastElementChild;
+        if (lastTd) tr.insertBefore(td, lastTd);
+        else tr.appendChild(td);
+      });
+      table.dataset.tierMixAugmented = "1";
+    }
+    // Wrap __renderJudgeView so the column appears on every Judge re-render
+    // (tab switch, mode toggle). Use a microtask defer so the table exists
+    // in DOM before we walk it.
+    function installHook() {
+      const orig = window.__renderJudgeView;
+      if (typeof orig !== "function") return false;
+      if (orig.__tierMixHooked) return true;
+      const wrapped = function () {
+        const r = orig.apply(this, arguments);
+        // Defer to next tick: judge.js builds the table synchronously, but
+        // future async paths (e.g., chart settles) shouldn't break us.
+        Promise.resolve().then(augmentVerdictTable);
+        return r;
+      };
+      wrapped.__tierMixHooked = true;
+      window.__renderJudgeView = wrapped;
+      return true;
+    }
+    if (!installHook()) {
+      // judge.js may not have evaluated yet under some load orders; retry once
+      // after DOMContentLoaded.
+      window.addEventListener("DOMContentLoaded", installHook);
+    }
+  })();
+</script>
 <!-- Persona Insights bundle (Phase 2 of token-economics). All three are optional —
      a missing file flips __PERSONA_BUNDLES_LOADED=false so persona-insights.js can
      render the empty-state banner gracefully (e.g., adopter on a fresh install). -->

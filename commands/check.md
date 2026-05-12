@@ -43,21 +43,31 @@ Before reviewer agents dispatch, run `commands/_prompts/snapshot.md`:
 - Rotate prior `findings.jsonl` to `findings-<UTC-ts>.jsonl` if present.
 - Echo one-line user feedback.
 
-## Phase 0b: Resolve persona budget (account-type-agent-scaling)
+## Phase 0b: Resolve persona budget + tier (account-type-agent-scaling + dynamic-roster-per-gate)
 
-Before dispatching reviewer agents, run the resolver:
+Before dispatching reviewer agents, run the resolver with the Slice 3 `--with-tier` opt-in. The resolver emits one line per selected persona in the form `<persona-slug>:<tier>` (tier ∈ `opus | sonnet`), except `codex-adversary` which (when authenticated) is emitted **bare** and dispatched via the Codex path at Phase 2b. Codex is additive at /check — its presence does NOT displace a Claude persona.
 
 ```bash
 SELECTED=$(bash <REPO_DIR>/scripts/resolve-personas.sh check \
-             --feature "<feature-slug>" --emit-selection-json)
+             --feature "<feature-slug>" --with-tier --emit-selection-json)
 RESOLVER_EXIT=$?
 ```
 
 - If `RESOLVER_EXIT != 0` or stdout empty: apply `commands/_prompts/_resolver-recovery.md` (canonical recovery fragment — interactive: 3-option prompt; non-tty/autorun: abort). No silent seed fallback in headless mode.
-- Dispatch one subagent per line of `$SELECTED` (skipping `codex-adversary`; Codex runs separately at Phase 2b).
-- Resolver writes `docs/specs/<feature>/check/selection.json`.
+- Resolver writes `docs/specs/<feature>/check/selection.json` (v2 schema — includes `tier` per persona).
 - No `agent_budget` in config → full roster (existing behavior).
 - Print one line: `Selected: <names> | Dropped: <names>`.
+
+**Dispatch parsing** — for each line in `$SELECTED`:
+
+1. If the line is exactly `codex-adversary` (bare), route to the Codex path at Phase 2b. Do NOT dispatch as a Claude subagent.
+2. If the line matches `<persona>:<tier>` where `<tier>` ∈ `{opus, sonnet}`, dispatch one Agent-tool subagent with `model: "opus"` or `model: "sonnet"` respectively, e.g.:
+   - `completeness:opus` → Agent(persona=completeness, model: "opus")
+   - `testability:sonnet` → Agent(persona=testability, model: "sonnet")
+3. If the line is bare (no colon) and is NOT `codex-adversary`, halt with:
+   `[dispatch] resolver emitted bare persona '<line>'; expected '<persona>:<tier>' — refusing to dispatch`
+
+This contract is identical to /spec-review's Phase 0b except that no `tags`-frontmatter staleness warning is surfaced at /check — only /spec-review explicitly reports stale frontmatter to the operator.
 
 ## Phase 0c: Gate Mode Resolution (pipeline-gate-permissiveness)
 
@@ -105,7 +115,7 @@ The active mode flows downstream: Phase 2 Synthesis routes findings via the `arc
 
 ## Phase 1: Dispatch Plan Reviewer Agents
 
-Read each persona file in `<REPO_DIR>/personas/check/` corresponding to a name in `$SELECTED`, then dispatch one parallel subagent per name using the Agent tool. The legacy 5-reviewer roster (completeness, sequencing, risk, scope-discipline, testability) is the resolver's full-roster fallback. Each agent receives:
+For each line in `$SELECTED`, strip the `:<tier>` suffix to get the persona slug, read the persona file in `<REPO_DIR>/personas/check/<persona>.md`, then dispatch one parallel subagent using the Agent tool with the `model:` field set per the tier (see Phase 0b dispatch parsing). The legacy 5-reviewer roster (completeness, sequencing, risk, scope-discipline, testability) is the resolver's full-roster fallback. Each agent receives:
 - The spec, review findings, and plan
 - The constitution (if exists)
 - Their persona's role, checklist, and key questions
