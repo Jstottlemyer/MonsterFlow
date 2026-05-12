@@ -121,7 +121,7 @@ flowchart LR
 | `/kickoff` | One-time project init — scans repo, drafts constitution, selects agent roster | - |
 | `/spec` | Confidence-tracked Q&A — writes `spec.md` (falls back to session roster if no constitution) | Interactive |
 | `/spec-review` | Parallel PRD review — gaps, risks, ambiguity; + Codex adversarial pass (optional) | 6 reviewers |
-| `/design` | Architecture + implementation design (renamed from `/plan` 2026-05-12; `/plan` still works as deprecation alias) | 7 designers |
+| `/design` | Architecture + implementation design (renamed from `/plan` 2026-05-12 — `/plan` belongs to Claude Code's built-in plan-mode now, not to MonsterFlow) | 7 designers |
 | `/check` | Last gate before code — validates the plan; + Codex adversarial pass (optional) | 5 validators |
 | `/build` | Parallel execution with verification discipline; + Codex implementation review (optional) | Superpowers |
 | `/autorun` | Headless overnight pipeline — queues a spec and drives all 8 stages unattended via `autorun start` | Shell |

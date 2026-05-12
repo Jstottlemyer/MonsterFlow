@@ -128,7 +128,7 @@ Work scales to size: bug fix (no spec) → small change (spec + build) → featu
 **Artifacts:** `docs/specs/constitution.md` + `docs/specs/<feature>/{spec,review,plan,check}.md`
 
 **Two-tier system:**
-- **Pipeline commands**: `/spec` → `/spec-review` → `/design` → `/check` → `/build` with 27 parallel agent personas (`/plan` still works as a deprecation alias for one release cycle)
+- **Pipeline commands**: `/spec` → `/spec-review` → `/design` → `/check` → `/build` with 27 parallel agent personas (`/plan` is Claude Code's built-in plan-mode, not MonsterFlow's design gate — use `/design`)
 - **Superpowers**: in-session execution discipline — debugging, verification, code review
 - **Plugins**: specialized capabilities — firecrawl (research), context7 (docs), code-review (PR), playwright (browser)
 

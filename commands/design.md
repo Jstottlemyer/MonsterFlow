@@ -6,11 +6,14 @@ description: Design and implementation planning — 7 specialist agents explore 
 
 You are the design step in the pipeline: `/spec → /spec-review → /design → /check → /build`
 
-(Renamed from `/plan` on 2026-05-12 to avoid collision with Claude Code's
-built-in plan-mode tooling. `/plan` still works as a deprecation alias and
-delegates here; expect the alias to be removed in a future release. The
-internal gate identifier remains `plan` so on-disk selection.json files,
-gate-mode keys, and persona directory paths stay backward-compatible.)
+(MonsterFlow's design gate is `/design`. The slash command was previously
+named `/plan` but we ceded that name back to Claude Code on 2026-05-12 —
+`/plan` belongs to Claude Code's built-in plan-mode tooling
+(`EnterPlanMode` / `ExitPlanMode`), not to this pipeline. The internal
+gate identifier remains `plan` so on-disk selection.json files, gate-mode
+keys, persona directory paths, the artifact filename `plan.md`, and the
+autorun shell `scripts/autorun/plan.sh` stay backward-compatible — only
+the user-facing slash command moved.)
 
 Your job is to dispatch 7 parallel design agents, synthesize their analysis into an implementation plan, and present it for approval.
 

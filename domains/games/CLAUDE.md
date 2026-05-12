@@ -95,7 +95,7 @@ Agent discovery from `Games/CosmicExplorer/` finds 8 of 9 agents (both `.claude/
 
 ## Workflow (Games)
 
-Uses the standard pipeline: `/kickoff` → `/spec` → `/spec-review` → `/design` → `/check` → `/build` (`/plan` still works as a deprecation alias for one release cycle)
+Uses the standard pipeline: `/kickoff` → `/spec` → `/spec-review` → `/design` → `/check` → `/build` (`/plan` is Claude Code's built-in plan-mode, not MonsterFlow's design gate — use `/design` for the pipeline)
 
 Game-specific agents (selected at `/kickoff`):
 - **game-state-reviewer** — game logic, state machines, scoring
