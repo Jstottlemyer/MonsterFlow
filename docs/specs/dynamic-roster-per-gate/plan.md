@@ -4,11 +4,11 @@ stage: plan
 created: 2026-05-06
 revised: 2026-05-12
 gate_mode: permissive
-revision: 4
-revision_reason: "Revision 4 applies the 3 plan-revision followups consumed at /build pre-flight: D8 mid-pipeline-edit clause (ck-0011223344), cut task 22 explain mutation-zero (ck-0123456789 — --explain carved to sibling), trim task 23 legacy-fixture sub-bullet (ck-1122334455 — no in-the-wild legacy selection.json files). Revision 3 applied 6 must-fix from /check Rev 2 GO_WITH_FIXES."
+revision: 5
+revision_reason: "Revision 5 is a post-build docs cleanup (no implementation change): (a) D8 SEC-04 prose direction inverted to match implementation + attack model — ck-implicit, see commit body for the inversion that was caught at Slice 3 build time; (b) D2 NFKC + Cyrillic-Latin confusables map clarified — earlier prose overstated NFKC's coverage; (c) Task 8 'Drop A20' wording corrected — A20 is the unrelated pipeline-cycle-dogfood AC, not the tag-inference placeholder (ck-b8a20a20a2); (d) Open Q#1 wrapper pre-design collapsed since PRE-W2 verdict was YES (ck-1234567890); (e) D14 --tier-pin semantics simplified to last-wins for v1 (ck-2233445566); (f) Open Q#5 added noting PRE-W2 evidence-file persistence is heavier than needed (ck-2345678901). Revision 4 applied 3 plan-revision followups at /build pre-flight; Revision 3 applied 6 must-fix from /check Rev 2."
 ---
 
-# Plan — dynamic-roster-per-gate (Revision 4)
+# Plan — dynamic-roster-per-gate (Revision 5)
 
 **Revised:** 2026-05-12 (Rev 2 → Rev 3 → Rev 4, same day)
 **Spec:** `docs/specs/dynamic-roster-per-gate/spec.md`
@@ -49,19 +49,19 @@ Constitution rename stays in `docs/specs/constitution.md` for all W1-W5 code. Th
 | # | Decision | Rationale |
 |---|----------|-----------|
 | D1 | `fit_score = len(spec.tags ∩ persona.fit_tags)`, `combined_score = fit_score × load_bearing_rate` | Resolves G1 ambiguity; `fit_score` used everywhere (schema JSON, resolver stdout, selection.json, code) |
-| D2 | `_tag_baseline.py` pre-processing: NFKC normalize → strip YAML frontmatter → strip balanced fences (3+ tick) → lowercase → regex | Frontmatter strip before fences prevents `tags: [security]` self-triggering (G7 fix). NFKC before all else (SEC-02, Edge Case 22) |
+| D2 | `_tag_baseline.py` pre-processing: NFKC normalize → Cyrillic-Latin confusables map (`_CYRILLIC_TO_LATIN`, ~30 entries) → strip YAML frontmatter → strip balanced fences (3+ tick) → lowercase → regex | Frontmatter strip before fences prevents `tags: [security]` self-triggering (G7 fix). NFKC alone is canonical/compatibility decomposition — it does NOT fold homoglyphs (e.g., U+0430 Cyrillic а ≢ U+0061 Latin a under NFKC); the confusables map closes that bypass for SEC-02. Earlier revisions overstated NFKC's coverage; Rev 5 corrects the pre-processing description to match the implementation. |
 | D3 | `<persona>:<tier>` colon-delimited stdout; `codex-adversary` bare | grep-friendly; no jq dependency; backward-breaking change patched at all 6 call sites simultaneously |
 | D4 | No wrapper files (D7 / Edge Case 20): model tier via Agent tool `model:` param (interactive) and `--model` flag (headless) only. Halt if model param fails — no disk fallback | Trust boundary; persistent injection risk on SIGKILL outweighs any convenience |
 | D5 | PRE-W2 empirical gate: empirically verify `model: "opus"` controls dispatch before any dispatch code ships | MF-1 from check.md; D4 architecture depends entirely on this being true |
 | D6 | Tier-mix algorithm: `base_opus = max(opus_min, floor(N/2))`; tiebreak → sonnet; highest `combined_score` claims Opus seats | Deterministic; cost-conscious; matches spec panel-size table |
 | D7 | SEC-01 enforced at 2 sites: `_tier_assign.py validate_tier_pins` AND CLI `--tier-pin` parse site (G3 fix) | CLI cannot be a downgrade escape hatch |
-| D8 | SEC-04 resolver recompute: `_tag_baseline.py` runs at every gate dispatch; asserts `recorded_baseline ⊆ recomputed_baseline`; drift halts. **Mid-pipeline edit clause (Rev 4):** when `recomputed ⊊ recorded` (author legitimately removed content that previously baselined as a security keyword), warn-and-proceed with `[stale-tags] WARNING: tags_provenance.baseline drifted from current spec body; consider updating frontmatter` (Edge Case 4 pattern). Only `recorded ⊊ recomputed` (post-write shrinking attack) halts. | `tags_provenance.baseline` is author-writable; resolver owns ground truth (S4 / Edge Case 23). Recomputed-shrunk case treats as benign drift to avoid forcing security-evasive behavior (keeping stale keywords just to pass the check). |
+| D8 | SEC-04 resolver recompute: `_tag_baseline.py` runs at every gate dispatch; asserts `recomputed ⊆ recorded` (every keyword the resolver re-discovers must already appear in the recorded baseline); drift halts when `recomputed ⊋ recorded` (recomputed has a keyword recorded doesn't = post-write shrinking attack). **Mid-pipeline edit clause (Rev 4 / Rev 5 prose fix):** the inverse direction `recorded ⊋ recomputed` (recorded list claims keywords the body no longer contains because the author legitimately removed content) does NOT halt — it emits `[stale-tags] WARNING: tags_provenance.baseline drifted from current spec body; consider updating frontmatter` (Edge Case 4 pattern) and proceeds. Grandfathered specs with no `tags_provenance` block (recorded set empty) are exempt — there's nothing to drift against. | `tags_provenance.baseline` is author-writable; resolver owns ground truth (S4 / Edge Case 23). Recorded-shrunk-relative-to-recomputed (the attack) is what we defend against; recomputed-shrunk-relative-to-recorded (author cleanup) is benign and warned to avoid forcing security-evasive behavior (keeping stale keywords just to pass the check). Earlier revisions of this row stated the assertion as `recorded ⊆ recomputed` and the halt as `recorded ⊊ recomputed` — those are internally inconsistent (a strict subset still satisfies the assertion); the implementation went with attack-model intent and Rev 5 syncs the prose to match the code. |
 | D9 | `lineage` default to `"claude"` at read time in `_persona_score.py` when field absent from rankings row | M1 fix; no backfill required for MVP; one-line guard |
 | D10 | M2 corrected dep graph: each autorun gate shell depends on its own command file, not a shared final task | spec-review.sh → resolver + commands/spec-review.md; plan.sh → resolver + commands/plan.md; check.sh → resolver + commands/check.md |
 | D11 | Constitution rename OUT of W1-W5: all code reads `docs/specs/constitution.md` as-is. **A15 verification deferred:** spec AC A15 (`pipeline-config.md` works, symlink, install.sh banner) is **not verified by this spec's /check**; it is verified at sibling-spec `monsterflow-pipeline-config-rename` /check. This spec leaves all `constitution.md` references unchanged. | Sibling spec `monsterflow-pipeline-config-rename` owns the rename |
 | D12 | Test target: ≥33 fixtures, <15s wall-clock (single normative number) | Resolves contradiction between "50-70" and "40-60" from spec; testability MF-1 from check |
 | D13 | Three separate Python helpers (not one batched script) | Testability + AST-banlist isolation per helper; resolver calls them in sequence (one shell process, not per-persona subprocess) |
-| D14 | `--tier-pin` flag accumulates across multiple invocations (not last-wins); promotes unselected persona, drops lowest `combined_score` non-pinned non-security selection | I6/G6 fix |
+| D14 | `--tier-pin` flag is **last-wins** in v1 (later flag with same persona-key overwrites earlier). Multiple flags for DIFFERENT personas all apply. The accumulate-promote-drop-lowest behavior originally proposed here was over-spec; carved to BACKLOG via post-build followup `ck-2233445566`. | I6/G6 fix; promote/drop-lowest deferred until a user actually hits the limitation |
 
 ---
 
@@ -109,7 +109,7 @@ Tasks 4+5+6 parallel; task 7 sequential after all three.
 
 | # | Task | Deps | Size | Parallel? |
 |---|------|------|------|-----------|
-| 8 | Extend `commands/spec.md` Phase 3. After spec draft: call `_tag_baseline.py`; LLM proposes additions; prompt: `Tags: [security*, data*, api] — Enter to accept, type list to override, or empty to skip:` (`*` = baseline-locked). Baseline-locked tag removal restores with: `[security] is baseline-detected and cannot be removed.` Write `tags: [...]  # baseline: [...]; llm-added: [...]` to frontmatter. Autorun: auto-accept full inferred set. Grandfathered specs (absent `tags:` key): offer inference on next revision. Drop A20 from spec's AC list. | 4 | M | Yes (w/ W4, W5) |
+| 8 | Extend `commands/spec.md` Phase 3. After spec draft: call `_tag_baseline.py`; LLM proposes additions; prompt: `Tags: [security*, data*, api] — Enter to accept, type list to override, or empty to skip:` (`*` = baseline-locked). Baseline-locked tag removal restores with: `[security] is baseline-detected and cannot be removed.` Write `tags: [...]  # baseline: [...]; llm-added: [...]` to frontmatter. Autorun: auto-accept full inferred set. Grandfathered specs (absent `tags:` key): offer inference on next revision. (Earlier revisions of this row said "Drop A20 from spec's AC list"; that was a wording error — A20 is the unrelated pipeline-cycle-dogfood AC; the tag-inference AC is A12. A12 stays in spec.md, A20 stays in spec.md, no AC drops here. See followup `ck-b8a20a20a2`.) | 4 | M | Yes (w/ W4, W5) |
 
 ### Wave W4: Gate Dispatch Wiring (depends on task 7; 3 sub-trees fully parallel)
 
@@ -161,23 +161,15 @@ All test files parallel; orchestrator wiring sequential after.
 
 ## Open Questions
 
-1. ~~**PRE-W2 empirical gate failure path:**~~ **Resolved 2026-05-12.** Branched policy by probe outcome:
-   - **Both probes YES** → D4 architecture (Agent calls), no pivot.
-   - **(a) Agent `model:` NO, (b) `claude -p --model` YES** → Block W4 and pivot to **wrapper-script tier-dispatch**: `scripts/dispatch-persona.sh <persona> <tier> <prompt-file>` thinly wraps `claude -p --model <tier>`. Requirements on the pivot:
-     - Wrapper is ≤30 lines, arg-passthrough only (no routing logic); permanent header comment block cites PRE-W2 evidence so the D4 deviation reason cannot rot.
-     - Runtime model assertion (**sev:security MF#5** — fail-fast contract pinned):
-       - **Absent `model` field in response** → halt with `[dispatch-precedence] response missing model field; cannot verify tier`, exit code 5. (Silent-pass default = downgrade bypass; not acceptable.)
-       - **Match semantics:** exact-string match on the response `model` field against the `--model` arg, OR documented alias table loaded from the same constitution loader as `security_floor`. Initial alias table: `{"opus": "claude-opus-4-5", "sonnet": "claude-sonnet-4-6"}` (extend as needed). Partial / substring matches are **not** acceptable.
-       - **Output format:** wrapper pins `--output-format json` and reads the `model` field at a documented JSON path (recorded in `dispatch-precedence-evidence.md` at PRE-W2 time; locked thereafter for the spec's lifetime).
-       - **Every outcome** (pass / mismatch-halt exit 6 / missing-halt exit 5) appends one row to `plan/dispatch-precedence-evidence.md` so a flaky regression would be noticed.
-     - W1/W2/W3/W5/W6 unaffected; only W4-SR/W4-PL/W4-CK rewrite.
-     - Re-probe TODO: when CLI major version bumps, re-run PRE-W2; if (a) now YES, retire wrapper.
-   - **Both probes NO** → carve W4 to a separate spec; ship W1+W2+W3+W5+W6 with selection.json producing tier metadata that no consumer dispatches on (dashboard renders advisory-only).
-   - **Flaky** → halt and escalate; do not ship runtime detection logic.
+1. ~~**PRE-W2 empirical gate failure path:**~~ **Resolved 2026-05-12.** PRE-W2 verdict was **YES across all 3 cells** (Opus parent, Sonnet parent, `claude -p` headless) — no pivot needed. **Post-build trim (ck-1234567890):** the wrapper-script pre-design that lived here in earlier revisions was over-specified for an outcome that didn't happen; Rev 5 collapses it. If a future re-probe flips to mixed/NO outcome, halt the build and file a follow-up spec for the wrapper pivot rather than re-inlining a multi-requirement design here. (The 5-requirement contract — ≤30 line wrapper, exit-5/6 fail-fast, exact-string + alias match, `--output-format json`, evidence-file append — remains in git history at plan rev4 if needed.)
 
 2. **`--tier-pin` validate-at-parse-time overhead (~50ms):** Acceptable latency vs. lazy validation at dispatch time? **Recommend eager** — fail-fast is better UX.
 
 3. ~~**`/wrap-insights` + dashboard compat:**~~ **Resolved 2026-05-12.** W5-B (`scripts/judge-dashboard-bundle.py`) reads `selection.json` defensively: missing `tier` field → render dash/blank for that row, do not crash, do not auto-migrate older `selection.json` files. Add same guard to `/wrap-insights` if it reads the field. Test fixture: legacy `selection.json` (no tier) loads without error. No file-mutation pass.
+
+4. **Post-build trim (ck-2233445566) — `--tier-pin` accumulate semantics:** D14 originally specified accumulating-multi-flag with promote + drop-lowest. Spec.md L89 only shows single-flag usage. The promote-drop-lowest interaction with SEC-01 floor adds non-trivial branching for a feature no observed user has hit. **Recommendation:** v1 ships **last-wins** semantics for `--tier-pin`; revisit accumulating only if a user demonstrates the limitation. (BACKLOG.md candidate.) Implementation note: as of `2a8c3cf`, the resolver's `cli_tier_pins` dict assignment IS effectively last-wins (later `--tier-pin` flag overwrites earlier same-key); accumulating across-flag was never wired. The Rev 5 prose simplification matches what the code does.
+
+5. **Post-build trim (ck-2345678901) — PRE-W2 evidence file persistence:** Task 0 wrote `plan/dispatch-precedence-evidence.md` as a persistent append-only artifact. For a one-shot probe (PRE-W2 ran once, verdict YES, never re-runs unless a CLI major-version bump), the persistent file is heavier than needed. **Recommendation:** future probes inline-assert the verdict in PR description / commit message rather than persisting a `.md` artifact; only persist when a wrapper pivot fires (the wrapper's runtime mismatch-halt rows are the actual load-bearing evidence, not the one-time probe). The Rev 4 file at `docs/specs/dynamic-roster-per-gate/plan/dispatch-precedence-evidence.md` stays in git history for the audit trail.
 
 ---
 

@@ -159,6 +159,37 @@ def count_raw(stage_dir: Path) -> tuple[int, int]:
     return (bullets, len(files))
 
 
+def extract_tier_mix(stage_dir: Path):
+    """Read gate-scoped selection.json and return tier_mix dict, or the
+    string sentinel "N/A" when the file is absent / unreadable / malformed
+    / legacy-schema / missing required fields.
+
+    Plan D8 (dynamic-roster-per-gate task 16): defensive read — legacy
+    selection.json files from account-type-agent-scaling (v1 shape, no
+    tier_policy_applied) MUST load without error. Render N/A for those.
+    """
+    sel = read_json(stage_dir / "selection.json")
+    if not isinstance(sel, dict):
+        return "N/A"
+    if sel.get("schema_version") != 2:
+        return "N/A"
+    tier = sel.get("tier_policy_applied")
+    if not isinstance(tier, dict):
+        return "N/A"
+    opus = tier.get("opus_count_actual")
+    sonnet = tier.get("sonnet_count_actual")
+    if not isinstance(opus, int) or not isinstance(sonnet, int):
+        return "N/A"
+    if opus < 0 or sonnet < 0:
+        return "N/A"
+    codex_block = sel.get("codex")
+    codex_active = (
+        isinstance(codex_block, dict)
+        and codex_block.get("policy") == "additive"
+    )
+    return {"opus": opus, "sonnet": sonnet, "codex": codex_active}
+
+
 def stage_blob(feature_dir: Path, stage: str) -> dict | None:
     stage_dir = feature_dir / stage
     if not stage_dir.is_dir():
@@ -167,6 +198,7 @@ def stage_blob(feature_dir: Path, stage: str) -> dict | None:
     participation = read_jsonl(stage_dir / "participation.jsonl")
     survival = read_jsonl(stage_dir / "survival.jsonl")
     run = read_json(stage_dir / "run.json") or {}
+    tier_mix = extract_tier_mix(stage_dir)
     synth_md = feature_dir / f"{stage}.md"
     verdict, disagreements = parse_synth_md(synth_md)
     raw_count, raw_files = count_raw(stage_dir)
@@ -213,6 +245,7 @@ def stage_blob(feature_dir: Path, stage: str) -> dict | None:
         ),
         "synth_path": str(synth_md) if synth_md.is_file() else None,
         "stage_dir": str(stage_dir),
+        "tier_mix": tier_mix,
     }
 
 

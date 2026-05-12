@@ -313,7 +313,49 @@ When the gate is met (manual approval or auto-run criteria — see below):
    - **Flag if unresolved after one loop**: record in "Open Questions" and proceed.
    - **Scope-drift check**: if the spec has grown beyond what the Q&A supports, cut the additions.
 
-3. **Write the file.**
+3. **Tag inference** (dynamic-roster-per-gate, Slice 4):
+
+   Tags route the spec to the right personas at every gate (see `docs/specs/dynamic-roster-per-gate/spec.md`). Closed enum (10 values from `schemas/tag-enum.schema.json`):
+
+   `api, data, docs, integration, migration, pipeline, refactor, scalability, security, ux`
+
+   Do NOT invent additional tag names. If the spec doesn't match any of the 10, write `tags: []` and skip the prompt.
+
+   1. **Baseline computation.** Run `python3 scripts/_tag_baseline.py <spec_file>` against the freshly-drafted spec. Parse the stdout JSON `{"baseline": [...]}`. These are baseline-locked: deterministic regex matches the resolver re-computes at dispatch (SEC-04) and asserts `recorded_baseline ⊆ recomputed_baseline`. Author cannot remove them via this flow — only by editing spec content.
+
+   2. **LLM proposes additions.** Read the drafted spec and propose any of the 10 enum values that fit the spec's content but did NOT appear in `baseline`. You may ADD; you cannot REMOVE baseline tags. Typical signals: API surface changes → `api`; data model / persistence → `data`; user flow → `ux`; cross-spec coupling → `integration`; throughput / cost → `scalability`. If unsure, propose nothing — the user can add tags at the prompt.
+
+   3. **User confirmation prompt.** Render in the form:
+      ```
+      Tags: [security*, data*, api] — Enter to accept, type list to override, or empty to skip:
+      ```
+      `*` marks baseline-locked tags (deterministic; cannot be removed). Comma-separated list overrides the LLM additions but baseline-locked tags must remain. Empty input → skip (write `tags: []` and no provenance).
+
+   4. **Baseline-locked tag removal guard.** If the user's override list omits a baseline-locked tag, restore it and re-prompt **once** with:
+      ```
+      [security] is baseline-detected and cannot be removed.
+      ```
+      After the re-prompt, accept whatever the user types verbatim (baseline tags still force-restored if missing again — silent floor).
+
+   5. **Autorun mode.** When `AUTORUN=1` is set in the environment, auto-accept the full inferred set (`baseline ∪ llm_added`) without prompting. Write tags + `tags_provenance` unchanged. This matches the `--auto` flag convention from the Auto-Run section: skip user-confirmation gates when the operator has opted into hands-off mode.
+
+   6. **Frontmatter write.** Add to the spec.md YAML frontmatter (must match `schemas/spec-frontmatter.schema.json` exactly):
+      ```yaml
+      tags: [security, data, api]
+      tags_provenance:
+        baseline: [security, data]
+        llm_added: [api]
+        user_overrides: []
+      ```
+      Where `tags = baseline ∪ llm_added ∪ user_overrides` (no duplicates; closed-enum subset). `user_overrides` records tags the user added at the prompt that were not in `baseline ∪ llm_added`. The provenance block is author-visible / informational; the resolver re-runs `_tag_baseline.py` at every dispatch and trusts the recompute (SEC-04).
+
+   7. **Grandfathered specs.** If this is a **revision pass** on a spec that pre-dates this feature (no `tags:` key in existing frontmatter), offer inference on this revision — do NOT retroactively walk every existing spec. On the first revision where tags are inferred, write a one-line note in the spec footer or Open Questions section:
+      ```
+      [tags-inference] this spec predates the tag-routing feature; tags will be inferred on next /spec revision
+      ```
+      (only emitted on the revision where inference first runs — once written, the tags field exists and the note is no longer needed).
+
+4. **Write the file.**
 
 ## Phase 4: Present / Auto-Run
 

@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Jstottlemyer/MonsterFlow/schemas/selection.schema.json",
+  "$comment": "v1.1 lockstep marker (2026-05-12): co-touched with persona-frontmatter, spec-frontmatter, tag-enum schemas to satisfy tests/test-schema-lockstep.sh case2 after commit 0208d8a's partial bump.",
   "title": "Dynamic Roster — selection.json (v2, tier-aware)",
   "description": "One file per gate write at docs/specs/<feature>/<gate>/selection.json. Captures content-aware resolver output: which personas were selected per gate, their assigned tier (opus|sonnet), fit_score (tag-intersection cardinality), combined_score (fit_score × load_bearing_rate), and the tier_policy audit trail (override source + actual counts). v2 supersedes the v1 string-array shape shipped in account-type-agent-scaling; v1 selection.json files on disk lack tier/fit_score/combined_score and will fail v2 validation by design. Codex is tracked separately from the Claude panel (`codex` top-level key), not as a row in `selected[]`, because Codex runs additively and is not counted against `opus_count_actual` / panel size budget.",
   "type": "object",

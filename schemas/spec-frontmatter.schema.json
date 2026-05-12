@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monsterflow.dev/schemas/v1/spec-frontmatter.schema.json",
+  "$comment": "v1.1 lockstep marker (2026-05-12): co-touched with tag-enum, persona-frontmatter, selection schemas to satisfy tests/test-schema-lockstep.sh case2 after commit 0208d8a's partial bump.",
   "title": "MonsterFlow spec.md frontmatter (v1, slice-2)",
   "description": "Slice 2 of dynamic-roster-per-gate. Adds tier_policy and tags_provenance blocks alongside the slice-1 tags: field. All three top-level fields (tags, tier_policy, tags_provenance) are OPTIONAL — pre-feature specs are grandfathered. additionalProperties: true is intentional (constitution-style metadata: name, description, status, gate_mode, etc. pass through untouched). The tag-enum is shared with persona-frontmatter.schema.json via the external tag-enum.schema.json file.",
   "type": "object",

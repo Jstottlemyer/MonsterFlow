@@ -16,20 +16,83 @@ source "$REPO_DIR/scripts/autorun/defaults.sh"
 mkdir -p "$ARTIFACT_DIR"
 
 # ---------------------------------------------------------------------------
-# Resolver pre-flight (account-type-agent-scaling)
+# Resolver pre-flight (account-type-agent-scaling + dynamic-roster-per-gate)
 # plan.sh runs as a single synthesis call (no parallel persona dispatch),
-# but we still call the resolver to write selection.json for the audit
-# trail (persona-metrics validator + /wrap-insights drift baseline).
-# Failure here is non-fatal — synthesis can proceed without selection.json.
+# but the resolver still emits the full selected roster so we can:
+#   (a) write selection.json for the audit trail (persona-metrics validator
+#       + /wrap-insights drift baseline)
+#   (b) derive a synthesis tier (dynamic-roster-per-gate Slice 4): if ANY
+#       selected persona is `opus`, the synthesis call uses opus; otherwise
+#       sonnet. Rationale: planning synthesis benefits from the strongest
+#       model whenever any design axis was opus-tier.
+#
+# Per spec AC #8: AUTORUN aborts on resolver non-zero. No silent fallback.
 # ---------------------------------------------------------------------------
+SYNTHESIS_TIER=""
+SYNTHESIS_MODEL=""
 if [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
-  if ! bash "$REPO_DIR/scripts/resolve-personas.sh" plan \
-        --feature "$SLUG" --emit-selection-json >/dev/null 2>/tmp/autorun-plan-resolver.err; then
-    echo "[autorun] plan: WARN — resolver pre-flight failed; continuing without selection.json"
-    if [ -s /tmp/autorun-plan-resolver.err ]; then
-      sed 's/^/  /' /tmp/autorun-plan-resolver.err >&2
+  RESOLVER_ERR="$(mktemp "${TMPDIR:-/tmp}/autorun-plan-resolver-XXXXXX.err")"
+  trap 'rm -f "$RESOLVER_ERR"' EXIT
+  RESOLVER_EXIT=0
+  SELECTED_RAW="$(bash "$REPO_DIR/scripts/resolve-personas.sh" plan \
+                    --feature "$SLUG" --with-tier --emit-selection-json 2>"$RESOLVER_ERR")" \
+    || RESOLVER_EXIT=$?
+  if [ "$RESOLVER_EXIT" -ne 0 ]; then
+    echo "[autorun] plan: ERROR — resolver exited $RESOLVER_EXIT" >&2
+    if [ -s "$RESOLVER_ERR" ]; then
+      sed 's/^/  /' "$RESOLVER_ERR" >&2
     fi
+    exit 1
   fi
+
+  # Parse "<persona>:<tier>" lines from resolver stdout. Tier-aware dispatch
+  # (dynamic-roster-per-gate Slice 4). Bare lines:
+  #   codex-adversary  → skip (Codex at /plan currently disabled; run.sh
+  #                      handles any Codex dispatch separately)
+  #   anything else    → resolver contract violation; halt.
+  SELECTED_PERSONAS=()
+  SELECTED_TIERS=()
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    if [ "$line" = "codex-adversary" ]; then
+      continue
+    fi
+    case "$line" in
+      *:*)
+        persona_name="${line%%:*}"
+        tier_name="${line#*:}"
+        SELECTED_PERSONAS+=("$persona_name")
+        SELECTED_TIERS+=("$tier_name")
+        ;;
+      *)
+        echo "[autorun:plan] resolver emitted bare persona '$line'; expected '<persona>:<tier>' — refusing to dispatch" >&2
+        exit 1
+        ;;
+    esac
+  done <<< "$SELECTED_RAW"
+
+  if [ "${#SELECTED_TIERS[@]}" -eq 0 ]; then
+    echo "[autorun] plan: ERROR — resolver emitted zero Claude personas" >&2
+    exit 1
+  fi
+
+  # Validate every tier + derive synthesis tier (opus dominates).
+  SYNTHESIS_TIER="sonnet"
+  for t in "${SELECTED_TIERS[@]}"; do
+    case "$t" in
+      opus)   SYNTHESIS_TIER="opus" ;;
+      sonnet) : ;;
+      *)
+        echo "[autorun:plan] unknown tier '$t'; expected 'opus' or 'sonnet'" >&2
+        exit 1
+        ;;
+    esac
+  done
+  case "$SYNTHESIS_TIER" in
+    opus)   SYNTHESIS_MODEL="claude-opus-4-5" ;;
+    sonnet) SYNTHESIS_MODEL="claude-sonnet-4-6" ;;
+  esac
+  echo "[autorun] plan: resolver selected: ${SELECTED_PERSONAS[*]} | synthesis tier=$SYNTHESIS_TIER → $SYNTHESIS_MODEL"
 fi
 
 # ---------------------------------------------------------------------------
@@ -85,14 +148,19 @@ $(cat "$ARTIFACT_DIR/review-findings.md")"
 # ---------------------------------------------------------------------------
 STDERR_LOG="$(mktemp "${TMPDIR:-/tmp}/autorun-plan-XXXXXX.log")"
 STDOUT_LOG="$(mktemp "${TMPDIR:-/tmp}/autorun-plan-stdout-XXXXXX.log")"
-trap 'rm -f "$STDERR_LOG" "$STDOUT_LOG"' EXIT
+# Extend the early RESOLVER_ERR trap to also clean the synthesis logs. The
+# resolver-block trap was set at line ~34 and would otherwise be replaced
+# (bash traps are last-wins). Re-include "$RESOLVER_ERR" so its cleanup
+# survives. Empty variable in DRY-RUN mode is harmless to `rm -f`.
+trap 'rm -f "$RESOLVER_ERR" "$STDERR_LOG" "$STDOUT_LOG"' EXIT
 
-echo "[autorun] plan: starting claude -p (timeout=${TIMEOUT_STAGE}s, slug=$SLUG)"
+echo "[autorun] plan: starting claude -p (timeout=${TIMEOUT_STAGE}s, slug=$SLUG, model=$SYNTHESIS_MODEL)"
 # No --add-dir: spec + review-findings are passed inline; removing 400-file context load
 
 CLAUDE_EXIT=0
 printf '%s' "$PROMPT" | timeout "$TIMEOUT_STAGE" claude -p \
     --dangerously-skip-permissions \
+    --model "$SYNTHESIS_MODEL" \
     --system-prompt "$AUTONOMY_DIRECTIVE" \
     >"$STDOUT_LOG" \
     2>"$STDERR_LOG" || CLAUDE_EXIT=$?
