@@ -4,16 +4,22 @@ stage: plan
 created: 2026-05-06
 revised: 2026-05-12
 gate_mode: permissive
-revision: 3
-revision_reason: "Revision 2 reached /check GO_WITH_FIXES (permissive, 6 must-fix). Revision 3 applies the 6 must-fix items inline: PRE-W2 3-cell probe matrix (risk MF#3), W2 gate decoupled from PRE-W2 (sequencing MF#1), W4 tasks 9/11/13 add task 0 dep (sequencing MF#2), NEW task 21a SEC-04 drift test (sec MF#4), Open Q#1 wrapper-pivot fail-fast contract pinned (sec MF#5), task 3 fit_tags enum rejection coverage (sec MF#6)."
+revision: 4
+revision_reason: "Revision 4 applies the 3 plan-revision followups consumed at /build pre-flight: D8 mid-pipeline-edit clause (ck-0011223344), cut task 22 explain mutation-zero (ck-0123456789 — --explain carved to sibling), trim task 23 legacy-fixture sub-bullet (ck-1122334455 — no in-the-wild legacy selection.json files). Revision 3 applied 6 must-fix from /check Rev 2 GO_WITH_FIXES."
 ---
 
-# Plan — dynamic-roster-per-gate (Revision 3)
+# Plan — dynamic-roster-per-gate (Revision 4)
 
-**Revised:** 2026-05-12 (Rev 2 → Rev 3, same day)
+**Revised:** 2026-05-12 (Rev 2 → Rev 3 → Rev 4, same day)
 **Spec:** `docs/specs/dynamic-roster-per-gate/spec.md`
 **Prior check verdict (Rev 2):** GO_WITH_FIXES (permissive) — 3 architectural + 3 sev:security must-fix, all inline-tractable
-**This revision addresses:** 6 must-fix items inline — see Revision Log below; 24 should-fix items deferred to `docs/specs/dynamic-roster-per-gate/followups.jsonl`
+**This revision addresses:** Rev 3 closed 6 must-fix; Rev 4 closes 3 plan-revision followups consumed at /build pre-flight. 14 should-fix items remain in `followups.jsonl` (build-inline + docs-only + post-build).
+
+## Revision Log (Rev 3 → Rev 4, 2026-05-12)
+
+- **`ck-0011223344` [contract] D8 mid-pipeline edit clause** — added explicit "`recomputed ⊊ recorded` → warn-and-proceed (Edge Case 4 pattern); only `recorded ⊊ recomputed` halts" clause to D8. Prevents forcing security-evasive behavior when authors legitimately remove content.
+- **`ck-0123456789` [scope-cuts] Task 22 cut** — `tests/test-explain-mutation-zero.sh` removed from W6. `--explain` flag is carved to sibling spec `pipeline-resolver-debugging`; mutation-zero test moves there. Task 24 orchestrator wiring updated.
+- **`ck-1122334455` [scope-cuts] Task 23 legacy-fixture trim** — sub-bullet asserting "legacy `selection.json` missing tier field loads" removed. No in-the-wild pre-tier files exist; defensive read in task 16 stays.
 
 ## Revision Log (Rev 2 → Rev 3, 2026-05-12)
 
@@ -49,7 +55,7 @@ Constitution rename stays in `docs/specs/constitution.md` for all W1-W5 code. Th
 | D5 | PRE-W2 empirical gate: empirically verify `model: "opus"` controls dispatch before any dispatch code ships | MF-1 from check.md; D4 architecture depends entirely on this being true |
 | D6 | Tier-mix algorithm: `base_opus = max(opus_min, floor(N/2))`; tiebreak → sonnet; highest `combined_score` claims Opus seats | Deterministic; cost-conscious; matches spec panel-size table |
 | D7 | SEC-01 enforced at 2 sites: `_tier_assign.py validate_tier_pins` AND CLI `--tier-pin` parse site (G3 fix) | CLI cannot be a downgrade escape hatch |
-| D8 | SEC-04 resolver recompute: `_tag_baseline.py` runs at every gate dispatch; asserts `recorded_baseline ⊆ recomputed_baseline`; drift halts | `tags_provenance.baseline` is author-writable; resolver owns ground truth (S4 / Edge Case 23) |
+| D8 | SEC-04 resolver recompute: `_tag_baseline.py` runs at every gate dispatch; asserts `recorded_baseline ⊆ recomputed_baseline`; drift halts. **Mid-pipeline edit clause (Rev 4):** when `recomputed ⊊ recorded` (author legitimately removed content that previously baselined as a security keyword), warn-and-proceed with `[stale-tags] WARNING: tags_provenance.baseline drifted from current spec body; consider updating frontmatter` (Edge Case 4 pattern). Only `recorded ⊊ recomputed` (post-write shrinking attack) halts. | `tags_provenance.baseline` is author-writable; resolver owns ground truth (S4 / Edge Case 23). Recomputed-shrunk case treats as benign drift to avoid forcing security-evasive behavior (keeping stale keywords just to pass the check). |
 | D9 | `lineage` default to `"claude"` at read time in `_persona_score.py` when field absent from rankings row | M1 fix; no backfill required for MVP; one-line guard |
 | D10 | M2 corrected dep graph: each autorun gate shell depends on its own command file, not a shared final task | spec-review.sh → resolver + commands/spec-review.md; plan.sh → resolver + commands/plan.md; check.sh → resolver + commands/check.md |
 | D11 | Constitution rename OUT of W1-W5: all code reads `docs/specs/constitution.md` as-is | Sibling spec `monsterflow-pipeline-config-rename` owns the rename |
@@ -147,9 +153,9 @@ All test files parallel; orchestrator wiring sequential after.
 | 20 | NEW `tests/test-security-floor.sh`: SEC-01 A21. Adversarial `tier_pins: {security-architect: sonnet}` → rejected at config-load. CLI `--tier-pin` path also rejected (G3 fix). | task 6 | S | Yes |
 | 21 | NEW `tests/test-tag-baseline.sh`: SEC-02 A22. (a) NFKC Cyrillic `аuth` → `security` detected. (b) 3-tick fence keyword → NOT detected. (c) 4-tick fence keyword → NOT detected. (d) Unbalanced fence → full scan. (e) Inline single-tick → not excluded. (f) YAML frontmatter `tags: [security]` → NOT self-triggered. (g) AST-banlist: `ast` parse asserts no eval/exec/subprocess/socket. (h) Adversarial injection spec → `security` in baseline. | task 4 | M | Yes |
 | 21a | NEW `tests/test-baseline-drift.sh` (**sev:security MF#4**): SEC-04 drift-halt path. Fixture pair: (1) spec.md with `security` keyword in body + frontmatter `tags_provenance.baseline: []` → resolver exits with documented distinct drift-halt exit code (non-zero, distinct from schema-error codes), stderr contains canonical error string `[tier-policy] SEC-04: tags_provenance.baseline drift detected; refusing to dispatch`; (2) equality case (recorded == recomputed) → exits 0. Asserts the resolver-side `assert_baseline_subset` enforcement that defends against post-write `tags_provenance.baseline` shrinking. | task 7 | S | Yes |
-| 22 | NEW `tests/test-explain-mutation-zero.sh`: SEC-03 A23. tmpdir + fixed file tree. `find <tmpdir> -newer <marker>` → zero output after resolver invocation. | task 7 | S | Yes |
-| 23 | Extend `tests/test-resolve-personas.sh`: tier output assertions (`<persona>:<tier>` format). Cold-start. 7 concurrent-read fixtures (parallel autorun `&`-dispatch). **Legacy fixture (Open Q#3 resolution):** `selection.json` missing `tier` field loads without error in `judge-dashboard-bundle.py`. | task 7 | S | Yes |
-| 24 | Extend `tests/run-tests.sh`: wire tasks 17-23 + 21a. **Orchestrator wiring** (per `feedback_test_orchestrator_wiring_gap` memory): verify test count matches `ls tests/test-*.sh` after wiring. | tasks 17-23, 21a | S | No |
+| ~~22~~ | ~~`tests/test-explain-mutation-zero.sh`~~ **CUT (Rev 4)**: `--explain` is carved to sibling spec `pipeline-resolver-debugging`; mutation-zero test moves there. | — | — | — |
+| 23 | Extend `tests/test-resolve-personas.sh`: tier output assertions (`<persona>:<tier>` format). Cold-start. 7 concurrent-read fixtures (parallel autorun `&`-dispatch). | task 7 | S | Yes |
+| 24 | Extend `tests/run-tests.sh`: wire tasks 17-21, 21a, 23. **Orchestrator wiring** (per `feedback_test_orchestrator_wiring_gap` memory): verify test count matches `ls tests/test-*.sh` after wiring. | tasks 17-21, 21a, 23 | S | No |
 
 ---
 
