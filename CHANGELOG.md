@@ -4,6 +4,27 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+### Renamed
+
+- **`/plan` slash command renamed to `/design`** to avoid collision with
+  Claude Code's built-in plan-mode tooling (`EnterPlanMode` / `ExitPlanMode`
+  and the `superpowers:writing-plans` skill). The pipeline reads as
+  `/spec → /spec-review → /design → /check → /build`.
+- **Backwards-compatible:** `/plan` still works as a deprecation alias for
+  one release cycle; the file at `commands/plan.md` is now a redirect stub
+  that delegates to `commands/design.md`. Plan to remove the alias in a
+  future release once adopters have migrated.
+- **Internal gate identifier unchanged:** schemas, persona directory paths
+  (`personas/plan/`), `gate_mode` keys, `selection.json` `gate` field,
+  autorun shell name (`scripts/autorun/plan.sh`), and the artifact filename
+  (`docs/specs/<feature>/plan.md`) all keep `plan` as the internal name.
+  Only the user-facing slash command renamed.
+- Updated: root CLAUDE.md, README.md, docs/index.html, sibling commands/*.md
+  (build, check, spec, spec-review, wrap, kickoff, autorun). Historical
+  `docs/specs/*/` artifacts retain `/plan` references as audit trail.
+- Captured rationale: `feedback_slashcmd_collision_with_claude_builtins`
+  memory.
+
 ## [0.11.0] - 2026-05-08
 
 Autorun merge-policy default flip — autorun now opens a PR by default;

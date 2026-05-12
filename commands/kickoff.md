@@ -81,7 +81,7 @@ If `$ARGUMENTS` is provided, use that as the description and skip the question. 
 
 **Run this phase if** Phase 0.5 flagged `product_count >= 2`, or Justin's Phase 1 description names multiple independent products, or the artifact has repeated "Product Brief" / "Module" / "System N" headers.
 
-A single constitution for N unrelated products produces a bloated roster and fights itself during `/spec-review` and `/plan`. Surface the decomposition before drafting.
+A single constitution for N unrelated products produces a bloated roster and fights itself during `/spec-review` and `/design`. Surface the decomposition before drafting.
 
 Present:
 
@@ -141,7 +141,7 @@ Present the roster:
 ```
 === Agent Roster ===
 
-Default (28): Always active across /spec-review, /plan, /check, code-review
+Default (28): Always active across /spec-review, /design, /check, code-review
 
 Proposed additions (from repo signals):
 - [agent-name] ([source path]) — [one-line why] — [stage]
@@ -162,7 +162,7 @@ Record selected agents in the constitution under "Agent Roster" with their sourc
 
 2. Write the finalized constitution to `docs/specs/constitution.md`.
 
-3. **Install selected domain agents** into the project. For each agent in the roster, copy it from `~/.claude/domain-agents/<domain>/<agent>.md` into `<project>/.claude/agents/` so `/plan` and `/code-review` can invoke it as a subagent. Skip if already present.
+3. **Install selected domain agents** into the project. For each agent in the roster, copy it from `~/.claude/domain-agents/<domain>/<agent>.md` into `<project>/.claude/agents/` so `/design` and `/code-review` can invoke it as a subagent. Skip if already present.
 
 ## Completion
 

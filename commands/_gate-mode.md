@@ -1,7 +1,7 @@
 # Gate Mode — Shared Reference (v0.9.0+)
 
 Canonical reference for CLI flag parsing, mode resolution, banner emission, and
-audit-log row format. The interactive gate commands (`/spec-review`, `/plan`,
+audit-log row format. The interactive gate commands (`/spec-review`, `/design`,
 `/check`) reference this file in their prose so Claude reads it once and applies
 the rules consistently.
 
@@ -46,7 +46,7 @@ field carries no runtime effect.
 
 ---
 
-## 2. CLI flags accepted by `/spec-review`, `/plan`, `/check`
+## 2. CLI flags accepted by `/spec-review`, `/design`, `/check`
 
 | flag | effect |
 |---|---|

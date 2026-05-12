@@ -4,7 +4,7 @@ description: Execute the implementation plan with parallel agents
 
 **IMPORTANT: Do NOT invoke superpowers planning skills from this command. Superpowers execution skills (debugging, verification) ARE used during build.**
 
-You are the build step in the pipeline: `/spec → /spec-review → /plan → /check → /build`
+You are the build step in the pipeline: `/spec → /spec-review → /design → /check → /build`
 
 Your job is to execute the implementation plan using parallel agents where possible, with superpowers discipline skills active.
 
@@ -12,9 +12,9 @@ Your job is to execute the implementation plan using parallel agents where possi
 
 1. **Find artifacts**: Load `docs/specs/<feature>/plan.md` and optionally `docs/specs/<feature>/check.md`.
    - If `$ARGUMENTS` names a feature, use that.
-   - If plan doesn't exist: "No plan found. Run /plan first."
+   - If plan doesn't exist: "No plan found. Run /design first."
    - If check doesn't exist: "Plan not checked. Run /check first, or proceed without checkpoint? (Skipping /check increases rework risk.)"
-   - If check exists and verdict was NO-GO: "Checkpoint failed. Fix the plan with /plan first."
+   - If check exists and verdict was NO-GO: "Checkpoint failed. Fix the plan with /design first."
 
 2. **Load constitution** (if exists) and spec for context.
 
@@ -81,9 +81,9 @@ For each open followup:
 - **`build-inline`** — prepend to wave-1 task list as a regular implementation task.
 - **`docs-only`** — prepend to wave-1 task list as a docs/comments-only task.
 - **`plan-revision`** — STOP wave 1. Emit:
-  > `/plan re-run required for <count> finding(s)`
+  > `/design re-run required for <count> finding(s)`
 
-  Then abort `/build`. The user must re-run `/plan` to address structural findings before `/build` can proceed.
+  Then abort `/build`. The user must re-run `/design` to address structural findings before `/build` can proceed.
 - **`post-build`** — hold for the PR-body annotation phase. Do **NOT** add to wave 1.
 
 ## Phase 1: Present Execution Plan

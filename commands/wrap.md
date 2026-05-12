@@ -151,7 +151,7 @@ For each persona, compute:
 
 - **Full table** (`insights personas` — i.e., `/wrap-insights personas`) — sorted by `load_bearing_rate` descending, with `load_bearing_rate` AND `survival_rate` columns side-by-side. Distinguishes a high-survival/low-uniqueness "frequent corroborator" from a low-survival/high-uniqueness "lone wolf."
 
-**Cold-start handling:** features with <3 runs in the current window render as `(insufficient data — N runs)` and are excluded from drift arrows. Empty rollup renders: `Persona drift: no measured features yet — run 1+ feature through /spec-review and /plan to seed.`
+**Cold-start handling:** features with <3 runs in the current window render as `(insufficient data — N runs)` and are excluded from drift arrows. Empty rollup renders: `Persona drift: no measured features yet — run 1+ feature through /spec-review and /design to seed.`
 
 **Stale-survival warning:** for each feature, compare current `sha256(<artifact>.md)` against the `artifact_hash` recorded in its `survival.jsonl`. Mismatch → render a one-line warning naming the feature.
 

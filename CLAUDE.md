@@ -1,14 +1,21 @@
 # MonsterFlow — Repo-level Instructions for Claude
 
 Personal-tooling repo. Holds commands, personas, templates, and cross-project
-reference docs for Justin's 8-command pipeline (`/kickoff → /spec → /review
-→ /plan → /check → /build`, plus `/flow` and `/wrap`).
+reference docs for Justin's 8-command pipeline (`/kickoff → /spec → /spec-review
+→ /design → /check → /build`, plus `/flow` and `/wrap`).
+
+(`/design` was renamed from `/plan` on 2026-05-12 to avoid collision with
+Claude Code's built-in plan-mode tooling. `/plan` continues to work as a
+deprecation alias for one release cycle. The internal gate identifier
+remains `plan` — schemas, persona dir paths, gate_mode keys, on-disk
+selection.json files all stay backward-compatible. Only the user-facing
+slash command renamed.)
 
 Apply in addition to user-level `~/CLAUDE.md`.
 
 ## Built-in Claude Code commands
 
-`/plan` is the canonical planner — it stays in the terminal and writes `docs/specs/<feature>/plan.md`. Avoid `/ultraplan` for pipeline work; it dispatches a remote browser session and produces no local artifact. `/insights` is opt-in via `/wrap-insights` (measurement mode); `/powerup` is ad-hoc educational and not wired into any flow.
+`/design` is the canonical planner (renamed from `/plan` 2026-05-12). It stays in the terminal and writes `docs/specs/<feature>/plan.md` (the artifact filename keeps the historical name). Avoid `/ultraplan` for pipeline work; it dispatches a remote browser session and produces no local artifact. `/insights` is opt-in via `/wrap-insights` (measurement mode); `/powerup` is ad-hoc educational and not wired into any flow. `/plan` still works as a deprecation alias and routes to `/design`.
 
 `/wrap` has three tab-completable variants: `/wrap-quick` (fast triage only), `/wrap-insights` (adds Phase 1b `/insights`), `/wrap-full` (insights + force-run conditional phases). Bare-word args (`quick`, `insights`, `full`) still work for direct invocation; the subcommands exist so the variants show up in tab completion.
 
