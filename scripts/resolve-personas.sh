@@ -88,6 +88,18 @@ codex_probe
 
 export MONSTERFLOW_REPO_DIR="$REPO_DIR"
 
-# Hand off to the Python helper. We use exec so the helper's exit code becomes
-# our exit code without a fork/wait round-trip.
-exec python3 "$HELPER" "$@"
+# SEC-09: internal temp dir (cleaned on exit). Helpers must not leak temp state.
+# The Python helper does not write temp files yet in Slice 3, but the env var
+# is exported so future callers can rely on a per-invocation scratch path.
+# A trap cleans up on natural exit (EXIT), Ctrl-C (INT), TERM, and HUP.
+MF_RESOLVE_TMPDIR="$(mktemp -d -t monsterflow-resolve.XXXXXX)" || {
+    echo "resolve-personas: mktemp failed" >&2; exit 5;
+}
+trap 'rm -rf "$MF_RESOLVE_TMPDIR"' EXIT INT TERM HUP
+export MF_RESOLVE_TMPDIR
+
+# Hand off to the Python helper. With the trap in place we can't `exec` (that
+# would replace this shell and skip the cleanup trap), so we run + propagate
+# the helper's exit code.
+python3 "$HELPER" "$@"
+exit $?
