@@ -564,8 +564,8 @@ echo "--- A14 dispatch wiring grep (commands/*.md + autorun/*.sh) ---"
 a14_wiring_grep "commands/spec-review.md carries model: tier param" \
     "$REPO_DIR/commands/spec-review.md" \
     'model: ?"opus"|model: ?"sonnet"'
-a14_wiring_grep "commands/plan.md carries model: tier param" \
-    "$REPO_DIR/commands/plan.md" \
+a14_wiring_grep "commands/design.md carries model: tier param" \
+    "$REPO_DIR/commands/design.md" \
     'model: ?"opus"|model: ?"sonnet"'
 a14_wiring_grep "commands/check.md carries model: tier param" \
     "$REPO_DIR/commands/check.md" \
