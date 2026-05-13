@@ -14,7 +14,10 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
 
 # 1. doctor.sh — verify wiring (failure printed but non-fatal)
-if [ -x "$REPO_DIR/scripts/doctor.sh" ]; then
+# Skip under MONSTERFLOW_INSTALL_TEST=1: tests spawn install.sh ≥20 times and
+# doctor.sh's --version probes (claude, gh, git, python3) add up. The CI signal
+# from doctor.sh is redundant with the assertions test-install.sh already makes.
+if [ "${MONSTERFLOW_INSTALL_TEST:-0}" != "1" ] && [ -x "$REPO_DIR/scripts/doctor.sh" ]; then
     bash "$REPO_DIR/scripts/doctor.sh" || true
 fi
 
@@ -45,15 +48,39 @@ NON_INTERACTIVE="${MONSTERFLOW_NON_INTERACTIVE:-0}"
 
 # Helper: bash trap-alarm 5s timeout for `gh auth status`
 # (per plan D9 — corporate-proxy hang protection; macOS lacks GNU `timeout`).
+#
+# Two prior bugs fixed inline:
+#   1. Orphan-sleep leak: `( sleep 5 && kill ) &` followed by `kill $watchdog`
+#      sent SIGTERM to the subshell only; the `sleep` child got reparented to
+#      launchd and ran to completion. Replaced with an explicit pkill on the
+#      sleep PID so no orphan survives.
+#   2. Test-env redundancy: under MONSTERFLOW_INSTALL_TEST=1 the stub gh
+#      returns exit 0 (always "authenticated"), so the watchdog is wasted
+#      work. Short-circuit returns 0 immediately.
 gh_auth_check_with_timeout() {
-    local pid result watchdog
+    if [ "${MONSTERFLOW_INSTALL_TEST:-0}" = "1" ]; then
+        return 0
+    fi
+    local pid result sleep_pid
     ( gh auth status >/dev/null 2>&1 ) &
     pid=$!
-    ( sleep 5 && kill -INT "$pid" 2>/dev/null ) &
-    watchdog=$!
+    ( sleep 5 ) &
+    sleep_pid=$!
+    # Race: whichever finishes first wins. If gh finished, kill the sleep.
+    # If sleep finished first, kill gh.
+    while kill -0 "$pid" 2>/dev/null && kill -0 "$sleep_pid" 2>/dev/null; do
+        sleep 0.1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        # sleep won — gh is hung; kill it
+        kill "$pid" 2>/dev/null
+        wait "$pid" 2>/dev/null
+        return 124  # standard timeout exit code
+    fi
     wait "$pid" 2>/dev/null
     result=$?
-    kill "$watchdog" 2>/dev/null || true
+    kill "$sleep_pid" 2>/dev/null
+    wait "$sleep_pid" 2>/dev/null
     return "$result"
 }
 

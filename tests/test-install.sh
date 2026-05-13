@@ -172,8 +172,11 @@ stage_recommended_present() {
 
 # Pre-stage symlinks under $HOME/.claude as if a prior install ran.
 # Used by case 1 (idempotency) and case 2 (fast no-op).
+# </dev/null: force install.sh to non-interactive even when the test harness
+# is run from a TTY (e.g., `./install.sh` triggering tests/run-tests.sh).
+# Without it, the CLAUDE.md baseline prompt blocks on stdin forever.
 stage_symlinks_present() {
-    bash "$INSTALL_SH" >/dev/null 2>&1 || true
+    bash "$INSTALL_SH" </dev/null >/dev/null 2>&1 || true
 }
 
 ##############################################################################
@@ -270,10 +273,51 @@ assert_exit_code() {
 ##############################################################################
 # Run wrapper — invokes install.sh, captures stdout+stderr+exit, never bails
 ##############################################################################
+# Bound on a single install.sh invocation. Tests are not expected to need
+# more than ~10s per run; anything past this is a hang we should surface
+# clearly instead of waiting on. Override per-call by setting RUN_TIMEOUT
+# before invoking run_install (e.g., RUN_TIMEOUT=60 run_install ...).
+INSTALL_RUN_TIMEOUT_DEFAULT=30
+
 run_install() {
     # Args are passed through to install.sh. Output goes to $CASE_OUT.
-    local rc=0
-    bash "$INSTALL_SH" "$@" >"$CASE_OUT" 2>&1 || rc=$?
+    # Watchdog: kill bash + its child sleep cleanly if budget is exceeded.
+    # Detection uses a sentinel file (watchdog touches it BEFORE killing) so
+    # we don't have to race against the watchdog's own kill follow-up.
+    # On timeout returns rc=124 (standard `timeout` exit code) and appends a
+    # marker line to $CASE_OUT so case-level failure dumps explain what happened.
+    local rc=0 pid watchdog_pid budget sentinel
+    budget="${RUN_TIMEOUT:-$INSTALL_RUN_TIMEOUT_DEFAULT}"
+    sentinel="$BATS_TMPDIR/run-install.timed-out.$$"
+    rm -f "$sentinel"
+
+    # Explicit </dev/null on stdin: when the test suite is invoked from a TTY
+    # (e.g., `./install.sh` triggering tests/run-tests.sh interactively),
+    # install.sh's `[ -t 0 ]` autodetect would otherwise see the TTY and go
+    # interactive, then block on the first read -rp (CLAUDE.md baseline,
+    # plugin install, etc.). Tests that want interactive behavior use
+    # run_install_with_input — bare run_install is always non-interactive.
+    bash "$INSTALL_SH" "$@" >"$CASE_OUT" 2>&1 </dev/null &
+    pid=$!
+    ( sleep "$budget" ; touch "$sentinel" ; kill -TERM "$pid" 2>/dev/null ; sleep 1 ; kill -KILL "$pid" 2>/dev/null ) 2>/dev/null &
+    watchdog_pid=$!
+    disown "$watchdog_pid" 2>/dev/null || true
+
+    wait "$pid" 2>/dev/null
+    rc=$?
+
+    # Kill the watchdog and its sleep child (avoids leaking the "sleep 1" tail).
+    pkill -P "$watchdog_pid" 2>/dev/null
+    kill "$watchdog_pid" 2>/dev/null
+    wait "$watchdog_pid" 2>/dev/null
+
+    if [ -f "$sentinel" ]; then
+        echo "" >> "$CASE_OUT"
+        echo "*** TIMEOUT: install.sh exceeded ${budget}s budget (killed by run_install watchdog) ***" >> "$CASE_OUT"
+        rc=124
+        rm -f "$sentinel"
+    fi
+
     echo "$rc"
 }
 
@@ -283,11 +327,48 @@ run_install_with_input() {
     # NOTE: input is fed via printf with %b so embedded \n is interpreted
     # as a real newline (otherwise `read -rp` blocks waiting for newline,
     # then errors out under set -e when stdin closes).
+    #
+    # DEFENSIVE PADDING: append 20 trailing newlines after the explicit input.
+    # If install.sh hits more `read -rp` prompts than the test anticipated
+    # (migration banner + brew prompt + CLAUDE.md baseline + ...), each
+    # unexpected read consumes one empty line — which `[Y/n]` / `[y/N]`
+    # patterns treat as "accept default" instead of blocking on a dry pipe.
+    # The dry-pipe behavior on some macOS bash builds is to wait indefinitely
+    # on the read syscall rather than return EOF, even though stdin should
+    # be closed. Padding sidesteps the platform variance entirely.
+    #
+    # Same watchdog + sentinel semantics as run_install — see comments there.
     local input="$1"
     shift
-    local rc=0
-    printf '%b' "$input" | MONSTERFLOW_FORCE_INTERACTIVE=1 \
-        bash "$INSTALL_SH" "$@" >"$CASE_OUT" 2>&1 || rc=$?
+    local rc=0 pid watchdog_pid budget sentinel
+    budget="${RUN_TIMEOUT:-$INSTALL_RUN_TIMEOUT_DEFAULT}"
+    sentinel="$BATS_TMPDIR/run-install-input.timed-out.$$"
+    rm -f "$sentinel"
+
+    # Pad with 20 trailing newlines (each = empty answer = accept-default
+    # for any unexpected `[Y/n]` or `[y/N]` prompt).
+    local padding=$'\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+    { printf '%b' "$input"; printf '%s' "$padding"; } | MONSTERFLOW_FORCE_INTERACTIVE=1 \
+        bash "$INSTALL_SH" "$@" >"$CASE_OUT" 2>&1 &
+    pid=$!
+    ( sleep "$budget" ; touch "$sentinel" ; kill -TERM "$pid" 2>/dev/null ; sleep 1 ; kill -KILL "$pid" 2>/dev/null ) 2>/dev/null &
+    watchdog_pid=$!
+    disown "$watchdog_pid" 2>/dev/null || true
+
+    wait "$pid" 2>/dev/null
+    rc=$?
+
+    pkill -P "$watchdog_pid" 2>/dev/null
+    kill "$watchdog_pid" 2>/dev/null
+    wait "$watchdog_pid" 2>/dev/null
+
+    if [ -f "$sentinel" ]; then
+        echo "" >> "$CASE_OUT"
+        echo "*** TIMEOUT: install.sh exceeded ${budget}s budget (killed by run_install_with_input watchdog) ***" >> "$CASE_OUT"
+        rc=124
+        rm -f "$sentinel"
+    fi
+
     echo "$rc"
 }
 
@@ -341,8 +422,9 @@ case_2() {
     stage_recommended_present
     export MONSTERFLOW_OWNER=0
 
-    # First run to stage symlinks
-    bash "$INSTALL_SH" --no-onboard --no-theme >/dev/null 2>&1 || true
+    # First run to stage symlinks (</dev/null: force non-interactive — see
+    # stage_symlinks_present for rationale).
+    bash "$INSTALL_SH" --no-onboard --no-theme </dev/null >/dev/null 2>&1 || true
 
     local start_ns end_ns elapsed_s
     if date +%s%N 2>/dev/null | grep -q 'N$'; then
@@ -365,6 +447,9 @@ case_2() {
 
     if [ "$elapsed_s" -gt 5 ]; then
         echo "ASSERT FAIL: no-op run took ${elapsed_s}s (budget <5s, target <3s)" >&2
+        echo "  --- last 40 lines of install.sh output (where it spent time) ---" >&2
+        tail -40 "$CASE_OUT" >&2 2>/dev/null || true
+        echo "  --- end install.sh output ---" >&2
         return 1
     fi
 
@@ -744,7 +829,9 @@ case_N1() {
     setup_test
 
     local rc=0
-    bash "$INSTALL_SH" --bogus-flag >"$CASE_OUT" 2>&1 || rc=$?
+    # </dev/null: defense-in-depth — bogus-flag exits before any read, but the
+    # rule across this file is "no bare install.sh invocation that could see a TTY".
+    bash "$INSTALL_SH" --bogus-flag </dev/null >"$CASE_OUT" 2>&1 || rc=$?
     assert_exit_code "unknown flag exit 2" "2" "$rc" || return 1
     assert_match "Unknown flag in stderr" "Unknown flag" "$CASE_OUT" || return 1
 
@@ -837,6 +924,14 @@ for c in "${CASES[@]}"; do
         echo "[FAIL] $c (rc=$case_rc)"
         SUITE_FAIL=$(( SUITE_FAIL + 1 ))
         FAILED_CASES+=("$c")
+        # Dump install.sh output BEFORE teardown nukes $BATS_TMPDIR. Per-assertion
+        # helpers (assert_match etc.) already dump locally; this catches cases
+        # that fail via non-assert returns (timeout, unexpected exit).
+        if [ -f "$CASE_OUT" ] && [ -s "$CASE_OUT" ]; then
+            echo "  --- install.sh tail (last 40 lines) ---" >&2
+            tail -40 "$CASE_OUT" >&2 2>/dev/null || true
+            echo "  --- end tail ---" >&2
+        fi
         # Best-effort cleanup so subsequent cases still get a fresh dir
         teardown_test 2>/dev/null || true
     fi

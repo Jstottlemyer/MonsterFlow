@@ -463,6 +463,30 @@ link_file() {
     echo "  LINKED: $dst → $src"
 }
 
+# Remove orphaned symlinks under $dir whose target points into a MonsterFlow
+# (or pre-rebrand claude-workflow) repo path that no longer exists. Catches
+# rename drift like commands/plan.md → commands/blueprint.md, where the new
+# link gets created by the loop below but the old link would otherwise linger
+# and return stale content. Only touches symlinks pointing into known repo
+# paths — never deletes user files or symlinks to unrelated targets.
+clean_stale_symlinks() {
+    local dir="$1"
+    [ -d "$dir" ] || return 0
+    local f target
+    for f in "$dir"/*; do
+        [ -L "$f" ] || continue
+        target="$(readlink "$f")"
+        case "$target" in
+            */MonsterFlow/*|*/claude-workflow/*) ;;
+            *) continue ;;
+        esac
+        if [ ! -e "$target" ]; then
+            echo "  REMOVED: $f (stale → $target)"
+            rm -f "$f"
+        fi
+    done
+}
+
 # --- Ensure directories exist ---
 mkdir -p "$CLAUDE_DIR/commands"
 mkdir -p "$CLAUDE_DIR/personas"
@@ -470,6 +494,7 @@ mkdir -p "$CLAUDE_DIR/templates"
 
 # --- Pipeline commands ---
 echo "Installing pipeline commands..."
+clean_stale_symlinks "$CLAUDE_DIR/commands"
 for cmd in "$REPO_DIR"/commands/*.md; do
     link_file "$cmd" "$CLAUDE_DIR/commands/$(basename "$cmd")"
 done
@@ -484,6 +509,7 @@ if [ -d "$REPO_DIR/commands/_prompts" ]; then
     echo ""
     echo "Installing persona-metrics prompts..."
     mkdir -p "$CLAUDE_DIR/commands/_prompts"
+    clean_stale_symlinks "$CLAUDE_DIR/commands/_prompts"
     for prompt in "$REPO_DIR"/commands/_prompts/*.md; do
         [ -e "$prompt" ] || continue
         link_file "$prompt" "$CLAUDE_DIR/commands/_prompts/$(basename "$prompt")"
@@ -493,17 +519,30 @@ fi
 # --- Personas ---
 echo ""
 echo "Installing agent personas..."
-# Top-level personas (judge, synthesis — used by /spec-review, /plan, /check)
+clean_stale_symlinks "$CLAUDE_DIR/personas"
+# Top-level personas (judge, synthesis — used by /spec-review, /blueprint, /check)
 for persona in "$REPO_DIR"/personas/*.md; do
     [ -e "$persona" ] || continue
     link_file "$persona" "$CLAUDE_DIR/personas/$(basename "$persona")"
 done
-# Stage-specific personas
-for stage in check code-review plan review; do
+# Stage-specific personas. Stage dir names mirror personas/<stage>/ on disk:
+# review (for /spec-review gate), design (for /blueprint gate), check, code-review.
+for stage in check code-review design review; do
     mkdir -p "$CLAUDE_DIR/personas/$stage"
+    clean_stale_symlinks "$CLAUDE_DIR/personas/$stage"
     for persona in "$REPO_DIR"/personas/"$stage"/*.md; do
         link_file "$persona" "$CLAUDE_DIR/personas/$stage/$(basename "$persona")"
     done
+done
+# Clean up pre-rename stage dirs (e.g., personas/plan/ after the plan→design rename).
+# Prunes stale symlinks first, then rmdir if the dir is now empty. rmdir refuses
+# non-empty dirs, so .bak files from prior installs are preserved.
+for stale_stage in plan; do
+    if [ -d "$CLAUDE_DIR/personas/$stale_stage" ]; then
+        clean_stale_symlinks "$CLAUDE_DIR/personas/$stale_stage"
+        rmdir "$CLAUDE_DIR/personas/$stale_stage" 2>/dev/null && \
+            echo "  REMOVED: $CLAUDE_DIR/personas/$stale_stage (renamed to design/)" || true
+    fi
 done
 
 # >>> dynamic-roster-1-tags: schemas/ propagation
@@ -513,6 +552,7 @@ done
 mkdir -p "$CLAUDE_DIR/schemas"
 echo ""
 echo "Installing JSON schemas..."
+clean_stale_symlinks "$CLAUDE_DIR/schemas"
 for schema in "$REPO_DIR"/schemas/*.json; do
     [ -f "$schema" ] || continue
     link_file "$schema" "$CLAUDE_DIR/schemas/$(basename "$schema")"
@@ -529,6 +569,7 @@ for domain_dir in "$REPO_DIR"/domains/*/agents; do
     [ -d "$domain_dir" ] || continue
     domain_name=$(basename "$(dirname "$domain_dir")")
     mkdir -p "$CLAUDE_DIR/domain-agents/$domain_name"
+    clean_stale_symlinks "$CLAUDE_DIR/domain-agents/$domain_name"
     for agent in "$domain_dir"/*.md; do
         [ -e "$agent" ] || continue
         link_file "$agent" "$CLAUDE_DIR/domain-agents/$domain_name/$(basename "$agent")"
@@ -538,6 +579,7 @@ done
 # --- Templates ---
 echo ""
 echo "Installing templates..."
+clean_stale_symlinks "$CLAUDE_DIR/templates"
 for tmpl in "$REPO_DIR"/templates/*.md; do
     link_file "$tmpl" "$CLAUDE_DIR/templates/$(basename "$tmpl")"
 done
@@ -551,6 +593,7 @@ link_file "$REPO_DIR/settings/settings.json" "$CLAUDE_DIR/settings.json"
 echo ""
 echo "Installing scripts..."
 mkdir -p "$CLAUDE_DIR/scripts"
+clean_stale_symlinks "$CLAUDE_DIR/scripts"
 for script in "$REPO_DIR"/scripts/*.py "$REPO_DIR"/scripts/*.sh; do
     [ -e "$script" ] || continue
     link_file "$script" "$CLAUDE_DIR/scripts/$(basename "$script")"
@@ -726,7 +769,10 @@ if [ ! -f "$GLOBAL_CLAUDE" ]; then
         echo "  Copied templates/CLAUDE.md → ~/CLAUDE.md"
         echo "  Edit it to add your name, role, and personal context."
     fi
-else
+elif [ "${MONSTERFLOW_INSTALL_TEST:-0}" != "1" ]; then
+    # Skip under MONSTERFLOW_INSTALL_TEST=1: a python3 subprocess per case adds
+    # up across the 20-case suite. The merge logic has its own tests
+    # (test-allowlist*, etc.) that exercise the merger directly.
     python3 "$REPO_DIR/scripts/claude-md-merge.py" --target "$GLOBAL_CLAUDE" --template "$REPO_DIR/templates/CLAUDE.md"
 fi
 
