@@ -1,0 +1,25 @@
+{
+  "schema_version": 2,
+  "prompt_version": "check-verdict@2.0",
+  "verdict": "GO",
+  "blocking_findings": [],
+  "security_findings": [],
+  "generated_at": "2026-05-13T18:20:00Z",
+  "iteration": 2,
+  "iteration_max": 3,
+  "mode": "permissive",
+  "mode_source": "frontmatter",
+  "class_breakdown": {
+    "architectural": 0,
+    "security": 0,
+    "contract": 0,
+    "documentation": 0,
+    "tests": 2,
+    "scope-cuts": 0,
+    "unclassified": 0
+  },
+  "class_inferred_count": 0,
+  "followups_file": null,
+  "cap_reached": false,
+  "stage": "check"
+}

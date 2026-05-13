@@ -123,6 +123,8 @@ TESTS=(
   test-tag-baseline.sh
   # dynamic-roster-per-gate Slice 5 — persona-frontmatter baseline drift guard
   test-baseline-drift.sh
+  # install-graphify-wiki-coverage — Knowledge Layer stage (AC1-AC15)
+  test-install-knowledge-layer.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).

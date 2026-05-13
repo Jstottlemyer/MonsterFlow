@@ -74,6 +74,7 @@ Env vars:
   MONSTERFLOW_FORCE_INTERACTIVE=1 Override [ -t 0 ] auto-detect
   MONSTERFLOW_INSTALL_TEST=1      Short-circuit plugin/test prompts (test harness only)
   PERSONA_METRICS_GITIGNORE=1|0   Gitignore persona-metrics artifacts (1=adopter default)
+  MONSTERFLOW_APPLICATIONS_DIR=<path>  Override /Applications for Obsidian.app detection (test seam; matches MONSTERFLOW_HASCMD_OVERRIDE pattern)
 
 For details: docs/specs/install-rewrite/spec.md
 HELP
@@ -607,6 +608,488 @@ find "$REPO_DIR/scripts/autorun" -type f \( -name "*.sh" -o -name "autorun" \) -
 mkdir -p "$HOME/.local/bin"
 ln -sf "$REPO_DIR/scripts/autorun/autorun" "$HOME/.local/bin/autorun"
 echo "  LINKED: autorun -> $HOME/.local/bin/autorun"
+
+# Top-level helper; used by do_theme_install and install_obsidian_env. Hoisted here so do_knowledge_layer runs cleanly under --no-theme.
+posix_quote() {
+    local s="$1"
+    printf "'%s'" "${s//\'/\'\\\'\'}"
+}
+
+# parse_obsidian_config: read ~/.obsidian-wiki/config and emit the expanded OBSIDIAN_VAULT_PATH.
+# Returns 0 on success (writes path to stdout); 1 on absent/unparseable.
+# SECURITY: never source, never eval — the config file is user-writable; treating
+# its bytes as shell would be arbitrary code execution. This parser uses only
+# grep/sed/parameter substitution.
+#
+# Grammar (narrow, per D3 + Codex iter3):
+#   Accepts: [export ]OBSIDIAN_VAULT_PATH=value
+#            [export ]OBSIDIAN_VAULT_PATH="value"
+#   No single quotes. No escaped quotes inside double quotes.
+#   # introduces a comment ONLY outside double-quoted strings.
+#   Leading whitespace allowed. Trailing whitespace stripped. CRLF tolerated.
+#   Last-wins on duplicate keys. Unknown keys silently ignored.
+#   Malformed lines: silently skipped; one-line notice to stderr if any skipped.
+parse_obsidian_config() {
+    local cfg="${HOME}/.obsidian-wiki/config"
+    [ -f "$cfg" ] || return 1
+    local skipped=0
+    local raw value
+
+    # Extract last line matching OBSIDIAN_VAULT_PATH= (handles `export` prefix + leading space)
+    raw="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OBSIDIAN_VAULT_PATH=' "$cfg" | tr -d '\r' | tail -1)"
+    [ -n "$raw" ] || return 1
+
+    # Strip leading whitespace, optional `export `, and `OBSIDIAN_VAULT_PATH=` prefix
+    value="${raw#*OBSIDIAN_VAULT_PATH=}"
+
+    # If double-quoted, take content between first and last `"`; # inside quotes is literal
+    if [[ "$value" =~ ^\".*\"[[:space:]]*(#.*)?$ ]]; then
+        value="${value%\"*}"
+        value="${value#\"}"
+    else
+        # Detect obviously malformed: starts with single-quote or escaped-quote
+        if [[ "$value" =~ ^\' ]] || [[ "$value" =~ ^\\\" ]]; then
+            skipped=$((skipped + 1))
+            [ "$skipped" -gt 0 ] && echo "  ⚠ parse_obsidian_config: skipped ${skipped} malformed line(s)" >&2
+            return 1
+        fi
+        # Unquoted: strip trailing `#...` comment then trailing whitespace
+        value="${value%%#*}"
+        value="${value%%[[:space:]]*}"
+    fi
+
+    # Tilde expansion (bash tilde doesn't expand in variable assignments from external data)
+    value="${value/#\~/$HOME}"
+
+    [ -n "$value" ] || return 1
+    echo "$value"
+    return 0
+}
+
+# --- Wave 2: Detection helpers + renderer ---
+# All helpers are read-only; stdout = status token; always return 0.
+# Status token grammar (D1):
+#   graphify:     "ready" | "can-install"
+#   wiki:         "ready" | "manual:N/6"
+#   obsidian-env: "ready:<path>" | "can-install" | "warn:<path>"
+#   obsidian-app: "ready" | "can-install"
+#   cmux:         "ready" | "drift" | "na"
+
+# Task 2.1 — detect_graphify_cli
+# Per EC1: any working graphify on PATH counts (brew tap, pipx, manual install, or our venv).
+# Uses has_cmd (MF3) — handles MONSTERFLOW_HASCMD_OVERRIDE + Homebrew paths.
+detect_graphify_cli() {
+    if has_cmd graphify; then
+        echo "ready"
+    else
+        echo "can-install"
+    fi
+    return 0
+}
+
+# Task 2.2 — detect_wiki_skills
+# Explicit name array (NOT a glob count) per Completeness OB3.
+# If upstream ships a 7th skill, this array is the ONE place to update.
+detect_wiki_skills() {
+    local names=(wiki-ingest wiki-update wiki-query wiki-export wiki-lint wiki-capture)
+    local present=0 n
+    for n in "${names[@]}"; do
+        [ -f "$HOME/.claude/skills/$n/SKILL.md" ] && present=$(( present + 1 ))
+    done
+    if [ "$present" -eq 6 ]; then
+        echo "ready"
+    else
+        echo "manual:$present/6"
+    fi
+    return 0
+}
+
+# Task 2.3 — detect_obsidian_env
+# Depends on parse_obsidian_config (Wave 1 task 1.3).
+# ready    — config parses, vault dir exists
+# warn     — config parses, vault path configured but directory doesn't exist (EC4)
+# can-install — no config or config is unparseable
+detect_obsidian_env() {
+    local path
+    if path="$(parse_obsidian_config)"; then
+        if [ -d "$path" ]; then
+            echo "ready:$path"
+        else
+            echo "warn:$path"
+        fi
+    else
+        echo "can-install"
+    fi
+    return 0
+}
+
+# Task 2.4 — detect_obsidian_app
+# Status token: "ready" | "can-install"  (no "manual" token — D11/MF1; brew is REQUIRED-tier).
+# Uses ${MONSTERFLOW_APPLICATIONS_DIR:-/Applications} test seam (D6/MF6).
+detect_obsidian_app() {
+    local dir="${MONSTERFLOW_APPLICATIONS_DIR:-/Applications}"
+    if [ -d "$dir/Obsidian.app" ]; then
+        echo "ready"
+    else
+        echo "can-install"
+    fi
+    return 0
+}
+
+# Task 2.5 — detect_cmux_drift
+# Uses has_cmd (MF3).
+# ready — both config symlink and binary present
+# drift — config symlink present but binary absent (the case this spec catches)
+# na    — no config symlink (theme stage didn't run; nothing to report)
+detect_cmux_drift() {
+    local cfg="$HOME/.config/cmux/cmux.json"
+    local has_cfg=0
+    [ -L "$cfg" ] && has_cfg=1
+    if [ "$has_cfg" -eq 0 ]; then
+        echo "na"
+    elif has_cmd cmux; then
+        echo "ready"
+    else
+        echo "drift"
+    fi
+    return 0
+}
+
+# Task 2.6 — render_knowledge_summary
+# Args: <graphify-status> <wiki-status> <obsidian-env-status> <obsidian-app-status> <cmux-status>
+# Row order matches spec.md UX exactly so AC1 positional greps work.
+# Column width ~20 chars to the colon.
+# Closing "all present" line fires ONLY when every row is ready (cmux na counts as ready).
+render_knowledge_summary() {
+    local g="$1" w="$2" e="$3" a="$4" c="$5"
+    echo ""
+    echo "=== Knowledge Layer ==="
+    # graphify
+    case "$g" in
+        ready) echo "graphify CLI:        ✓" ;;
+        *)     echo "graphify CLI:        ✗ (not installed)" ;;
+    esac
+    # wiki
+    case "$w" in
+        ready)      echo "wiki skills:         ✓ (6/6)" ;;
+        manual:0/6) echo "wiki skills:         ✗ (0/6)" ;;
+        manual:*)   echo "wiki skills:         ✗ (${w#manual:})" ;;
+    esac
+    # obsidian-env
+    case "$e" in
+        ready:*)     echo "OBSIDIAN_VAULT_PATH: ✓ → ${e#ready:}" ;;
+        warn:*)      echo "OBSIDIAN_VAULT_PATH: ⚠ configured but missing: ${e#warn:}" ;;
+        can-install) echo "OBSIDIAN_VAULT_PATH: ✗ (~/.obsidian-wiki/config absent)" ;;
+    esac
+    # obsidian-app
+    case "$a" in
+        ready) echo "Obsidian.app:        ✓ (${MONSTERFLOW_APPLICATIONS_DIR:-/Applications}/Obsidian.app)" ;;
+        *)     echo "Obsidian.app:        ✗ (not in ${MONSTERFLOW_APPLICATIONS_DIR:-/Applications})" ;;
+    esac
+    # cmux
+    case "$c" in
+        ready) echo "cmux drift:          ✓ (config + binary both present)" ;;
+        drift) echo "cmux drift:          ⚠ config present but binary absent" ;;
+        na)    echo "cmux drift:          ○ N/A (no theme config present)" ;;
+    esac
+    # closing "all present" line (cmux ready or na both count as no-action)
+    if [ "$g" = "ready" ] && [ "$w" = "ready" ] && [[ "$e" == ready:* ]] && [ "$a" = "ready" ] && { [ "$c" = "ready" ] || [ "$c" = "na" ]; }; then
+        echo ""
+        echo "Knowledge Layer: all present ✓"
+    fi
+    return 0
+}
+
+# --- Wave 3: Action helpers + orchestrator ---
+
+# Task 3.1a — install_graphify_cli_binary
+# Per D12: installs the venv + pip + symlink ONLY. Does NOT run `graphify claude install`
+# (that is install_graphify_skill_via_cli, wired AFTER the CLAUDE.md baseline merger).
+# No helper-level short-circuit — PATH stubs handle isolation under MONSTERFLOW_INSTALL_TEST=1 (D8).
+install_graphify_cli_binary() {
+    local venv="$HOME/.local/venvs/graphify"
+    local symlink="$HOME/.local/bin/graphify"
+
+    # EC2: venv exists + symlink missing → re-create only the symlink
+    if [ -d "$venv/bin" ] && [ ! -L "$symlink" ]; then
+        echo "  RUNNING: ln -sf $venv/bin/graphify $symlink"
+        ln -sf "$venv/bin/graphify" "$symlink"
+        echo "  LINKED:  $symlink → $venv/bin/graphify"
+        echo "  ✓ graphify CLI symlink restored"
+        return 0
+    fi
+
+    # EC3: venv dir exists with non-empty contents — refuse-and-notice
+    if [ -d "$venv" ] && [ -n "$(ls -A "$venv" 2>/dev/null)" ]; then
+        echo "  ⚠ graphify venv already exists at $venv — remove it manually if you want a clean reinstall"
+        return 0
+    fi
+
+    # mkdir parent for symlink (defense-in-depth per Codex iter3)
+    mkdir -p "$HOME/.local/bin"
+
+    # Step 1: create venv (uses system python3)
+    echo "  RUNNING: python3 -m venv $venv"
+    if ! python3 -m venv "$venv"; then
+        echo "  ✗ python3 -m venv failed; skipping graphify install"
+        return 1
+    fi
+
+    # Step 2: install graphifyy[mcp] via the venv's pip3 (NOT system pip3 — Codex iter2 MF1)
+    echo "  RUNNING: $venv/bin/pip3 install \"graphifyy[mcp]\""
+    if ! "$venv/bin/pip3" install "graphifyy[mcp]" >/dev/null 2>&1; then
+        echo "  ✗ pip3 install failed; venv left in place at $venv for inspection"
+        return 1
+    fi
+
+    # Step 3: symlink venv's graphify binary into ~/.local/bin/
+    echo "  RUNNING: ln -sf $venv/bin/graphify $symlink"
+    ln -sf "$venv/bin/graphify" "$symlink"
+    echo "  LINKED:  $symlink → $venv/bin/graphify"
+
+    echo "  ✓ graphify CLI installed (skill + hook installed by install_graphify_skill_via_cli AFTER CLAUDE.md merger)"
+    return 0
+}
+
+# Task 3.1b — install_graphify_skill_via_cli
+# Per D12: runs AFTER the CLAUDE.md baseline merger at install.sh:~760.
+# Per Codex iter2 MF3 + iter3: gate on BOTH has_cmd graphify AND skill-missing.
+# The call-site at install.sh:~760 also gates on the same condition (defense-in-depth).
+install_graphify_skill_via_cli() {
+    if ! has_cmd graphify; then
+        # graphify CLI install at 3.1a may have failed silently (EC3 refuse-and-notice)
+        # or never ran (user said no to the prompt). Skip cleanly — no error.
+        return 0
+    fi
+    if [ -f "$HOME/.claude/skills/graphify/SKILL.md" ]; then
+        # Already installed by a prior run (or by another path); idempotent skip.
+        return 0
+    fi
+    echo "  RUNNING: graphify claude install"
+    if ! graphify claude install >/dev/null 2>&1; then
+        echo "  ✗ graphify claude install failed (CLAUDE.md + PreToolUse hook not installed)"
+        return 1
+    fi
+    echo "  ✓ graphify skill installed (~/.claude/skills/graphify/SKILL.md + PreToolUse hook)"
+    return 0
+}
+
+# Task 3.2 — install_obsidian_env
+# Atomic write to ~/.obsidian-wiki/config (same-dir temp per D7/MF8 — INSTALL_SCRATCH
+# would cross filesystems and lose atomicity on macOS where mktemp is in /var/folders).
+# Also appends sentinel-bracketed export to ~/.zshrc (theme-stage pattern).
+install_obsidian_env() {
+    local config_dir="$HOME/.obsidian-wiki"
+    local config="$config_dir/config"
+    mkdir -p "$config_dir"
+
+    # If config already exists, don't clobber
+    if [ -f "$config" ]; then
+        echo "  ⚠ $config already exists; not overwriting"
+    else
+        # Determine default vault path (D9: shell env if set, else hardcoded)
+        local default_path="${OBSIDIAN_VAULT_PATH:-$HOME/Documents/Obsidian/wiki}"
+        local vault_path
+        if [ "$NON_INTERACTIVE" = "1" ]; then
+            # EC19: non-interactive — only proceed if default resolves to an existing dir
+            if [ -d "$default_path" ]; then
+                vault_path="$default_path"
+            else
+                echo "  ⚠ vault path not configured — set OBSIDIAN_VAULT_PATH manually and re-run install.sh" >&2
+                return 0
+            fi
+        else
+            read -rp "  Vault path [$default_path]: " vault_path
+            vault_path="${vault_path:-$default_path}"
+        fi
+
+        # Tilde-expand AFTER read (the user may have typed ~/foo)
+        vault_path="${vault_path/#\~/$HOME}"
+        # Validate
+        if [ ! -d "$vault_path" ]; then
+            echo "  ⚠ $vault_path does not exist; not writing config" >&2
+            return 0
+        fi
+        # Soft-warn on missing .obsidian/ subdir but proceed
+        if [ ! -d "$vault_path/.obsidian" ]; then
+            echo "  ⚠ $vault_path/.obsidian/ not found — open Obsidian.app and create the vault to finish setup"
+        fi
+
+        # Same-dir atomic write.
+        # Write OBSIDIAN_VAULT_PATH in double-quoted format so parse_obsidian_config can read it.
+        # posix_quote is for shell embedding (eval-safe), not for the config file format
+        # (which parse_obsidian_config reads with grep/sed, never source/eval).
+        local tmp="$config_dir/.config.tmp.$$"
+        printf 'OBSIDIAN_VAULT_PATH="%s"\n' "$vault_path" > "$tmp"
+        chmod 600 "$tmp"
+        mv -f "$tmp" "$config"
+        echo "  WROTE:    $config"
+    fi
+
+    # Append sentinel-bracketed export to ~/.zshrc (EC5: skip if non-sentinel export exists)
+    local zshrc="$HOME/.zshrc"
+    local begin="# BEGIN MonsterFlow obsidian-wiki"
+    local end="# END MonsterFlow obsidian-wiki"
+    [ -f "$zshrc" ] || touch "$zshrc"
+    if grep -qF "$begin" "$zshrc"; then
+        :   # Already appended; idempotent
+    elif grep -qE '^[[:space:]]*(export[[:space:]]+)?OBSIDIAN_VAULT_PATH=' "$zshrc"; then
+        echo "  ~/.zshrc already exports OBSIDIAN_VAULT_PATH — leaving your line alone"
+    else
+        # Re-read the resolved path from the config we just wrote (or pre-existing)
+        local resolved_path
+        resolved_path="$(parse_obsidian_config 2>/dev/null)" || resolved_path=""
+        if [ -n "$resolved_path" ]; then
+            {
+                echo ""
+                echo "$begin"
+                echo "export OBSIDIAN_VAULT_PATH=$(posix_quote "$resolved_path")"
+                echo "$end"
+            } >> "$zshrc"
+            echo "  APPENDED: $zshrc (sentinel-bracketed OBSIDIAN_VAULT_PATH export)"
+        fi
+    fi
+    echo "  ✓ Obsidian env configured"
+    return 0
+}
+
+# Task 3.3 — install_obsidian_app
+# brew is REQUIRED-tier (install.sh:342, 399); install.sh exits before we reach
+# do_knowledge_layer if absent. No defensive no-brew branch here (D11/MF1).
+# EC17 success-oracle: re-check after brew, treat as ✓ regardless of brew exit code.
+install_obsidian_app() {
+    local app_dir="${MONSTERFLOW_APPLICATIONS_DIR:-/Applications}/Obsidian.app"
+    echo "  RUNNING: brew install --cask obsidian"
+    local rc=0
+    brew install --cask obsidian >/dev/null 2>&1 || rc=$?
+    # EC17 success-oracle: re-check after, treat as ✓ regardless of brew exit code
+    if [ -d "$app_dir" ]; then
+        if [ "$rc" -ne 0 ]; then
+            echo "  ⚠ brew exited $rc but Obsidian.app is present; treating as success" >&2
+        fi
+        echo "  ✓ Obsidian.app installed"
+        return 0
+    else
+        echo "  ✗ Obsidian.app install failed (brew exit=$rc, $app_dir not present)"
+        return 1
+    fi
+}
+
+# Task 3.4 — print_manual_instructions
+# Single helper for both wiki and cmux print-only paths (per SD-01).
+# No exec — just emits the recommended command + fallback.
+print_manual_instructions() {
+    local piece="$1"
+    case "$piece" in
+        wiki)
+            echo "  wiki skills (install upstream — install.sh does not auto-exec npx):"
+            if has_cmd npx; then
+                echo "    npx skills add Ar9av/obsidian-wiki"
+            else
+                echo "    (npx not on PATH — manual git-clone fallback)"
+                echo "    git clone https://github.com/Ar9av/obsidian-wiki ~/Projects/obsidian-wiki"
+                echo "    cp -r ~/Projects/obsidian-wiki/.skills/* ~/.claude/skills/"
+            fi
+            ;;
+        cmux)
+            echo "  cmux config present but binary missing — re-install via:"
+            echo "    brew install --cask cmux"
+            ;;
+        *)
+            echo "  ⚠ print_manual_instructions: unknown piece '$piece'" >&2
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+# Task 3.7 — do_knowledge_layer (orchestrator)
+# classify_knowledge_layer: pure — echoes 5 status tokens (one per line) for testability.
+classify_knowledge_layer() {
+    detect_graphify_cli
+    detect_wiki_skills
+    detect_obsidian_env
+    detect_obsidian_app
+    detect_cmux_drift
+}
+
+do_knowledge_layer() {
+    # Orchestrator: detect → render → classify into buckets → prompt (when needed) → dispatch → print manual.
+    # Sets the global KL_GRAPHIFY_NEWLY_INSTALLED=1 if 3.1a fired, for the post-merger gate at install.sh:~760.
+    KL_GRAPHIFY_NEWLY_INSTALLED=0
+    export KL_GRAPHIFY_NEWLY_INSTALLED
+
+    # Capture all 5 status tokens
+    local g w e a c
+    g="$(detect_graphify_cli)"
+    w="$(detect_wiki_skills)"
+    e="$(detect_obsidian_env)"
+    a="$(detect_obsidian_app)"
+    c="$(detect_cmux_drift)"
+
+    # Render the summary block
+    render_knowledge_summary "$g" "$w" "$e" "$a" "$c"
+
+    # Build buckets
+    local can_install=()
+    local manual_pieces=()
+    [ "$g" = "can-install" ] && can_install+=("graphify CLI")
+    [ "$e" = "can-install" ] && can_install+=("OBSIDIAN_VAULT_PATH")
+    [ "$a" = "can-install" ] && can_install+=("Obsidian.app")
+    [[ "$w" == manual:* ]] && [ "$w" != "manual:6/6" ] && manual_pieces+=("wiki")
+    [ "$c" = "drift" ] && manual_pieces+=("cmux")
+
+    # Only prompt when can-install bucket is non-empty
+    if [ ${#can_install[@]} -gt 0 ]; then
+        local do_install=0
+        # Codex review P2: honor the computed OWNER (set by detect_owner) — NOT just
+        # the MONSTERFLOW_OWNER env override. detect_owner sets OWNER=1 when running
+        # from the repo root; the env override only flips the result for tests.
+        if [ "${OWNER:-0}" = "1" ]; then
+            do_install=1   # owner: auto-yes
+        elif [ "$NON_INTERACTIVE" = "1" ]; then
+            do_install=0   # adopter non-interactive: default-N
+        else
+            local pieces_str
+            pieces_str=$(IFS=,; echo "${can_install[*]}")
+            local confirm
+            read -rp "Install the ${#can_install[@]} pieces install.sh can handle (${pieces_str})? [y/N]: " confirm
+            [[ "$confirm" =~ ^[Yy]$ ]] && do_install=1
+        fi
+        # Codex review P2: --no-install is the documented CI escape hatch; the
+        # prerequisite installer honors it (do_install_missing returns early).
+        # Knowledge Layer must too — otherwise an owner-mode --no-install run
+        # would still pip-install graphifyy and brew-install Obsidian.app.
+        if [ "$do_install" = "1" ] && [ "${NO_INSTALL:-0}" = "1" ]; then
+            echo "  Knowledge Layer installs skipped per --no-install"
+            do_install=0
+        fi
+        if [ "$do_install" = "1" ]; then
+            if [ "$g" = "can-install" ]; then
+                install_graphify_cli_binary && KL_GRAPHIFY_NEWLY_INSTALLED=1
+            fi
+            if [ "$e" = "can-install" ]; then
+                install_obsidian_env
+            fi
+            if [ "$a" = "can-install" ]; then
+                install_obsidian_app
+            fi
+        fi
+    fi
+
+    # Print manual-action instructions for the pieces install.sh can't handle
+    if [ ${#manual_pieces[@]} -gt 0 ]; then
+        echo ""
+        echo "Manual action required:"
+        local p
+        for p in "${manual_pieces[@]}"; do
+            print_manual_instructions "$p"
+        done
+    fi
+
+    return 0
+}
+
 # Owner vs adopter detection (D4 augmented helper, W2 task 2.5):
 # Env override > PWD primary check > script_dir == git_root secondary confirmation.
 # Preserves existing defensive `PWD == REPO_DIR` semantics; secondary check
@@ -731,13 +1214,9 @@ do_theme_install() {
     link_file "$REPO_DIR/config/cmux.json" "$HOME/.config/cmux/cmux.json"
     link_file "$REPO_DIR/config/tmux.conf" "$HOME/.tmux.conf"
 
-    # POSIX single-quote escaping for safe .zshrc append (D6/B4 fix).
+    # POSIX single-quote escaping via top-level posix_quote (hoisted above detect_owner).
     # posix_quote returns a fully-quoted string (incl. surrounding '…');
     # use it bare in the heredoc — do NOT add more quotes.
-    posix_quote() {
-        local s="$1"
-        printf "'%s'" "${s//\'/\'\\\'\'}"
-    }
     local ZSHRC_PATH ZSHRC THEME_BLOCK_BEGIN THEME_BLOCK_END
     ZSHRC_PATH="$(posix_quote "$REPO_DIR/config/zsh-prompt-colors.zsh")"
     ZSHRC="$HOME/.zshrc"
@@ -755,6 +1234,10 @@ do_theme_install() {
     fi
 }
 do_theme_install
+
+# Knowledge Layer: runs AFTER theme stage (depends on theme's cmux.json symlink for drift detection)
+# and BEFORE the CLAUDE.md baseline merger (graphify skill install runs after the merger per D12).
+do_knowledge_layer
 
 # --- CLAUDE.md baseline ---
 echo ""
@@ -774,6 +1257,22 @@ elif [ "${MONSTERFLOW_INSTALL_TEST:-0}" != "1" ]; then
     # up across the 20-case suite. The merge logic has its own tests
     # (test-allowlist*, etc.) that exercise the merger directly.
     python3 "$REPO_DIR/scripts/claude-md-merge.py" --target "$GLOBAL_CLAUDE" --template "$REPO_DIR/templates/CLAUDE.md"
+fi
+
+# Per D12: graphify claude install runs AFTER the baseline merger so its CLAUDE.md additions are
+# the last write and survive. Gated on (has_cmd graphify OR direct ~/.local/bin/graphify exists)
+# AND skill-missing. Codex review P2: first-run users may not have ~/.local/bin on PATH yet
+# (RECOMMENDED-tier warning already covers this); has_cmd alone would miss the symlink we just
+# created. Direct stat is a fallback for that first-run case.
+if { has_cmd graphify || [ -x "$HOME/.local/bin/graphify" ]; } \
+       && [ ! -f "$HOME/.claude/skills/graphify/SKILL.md" ]; then
+    # Add ~/.local/bin to PATH for this invocation so install_graphify_skill_via_cli's
+    # internal `has_cmd graphify` gate also passes when first-run PATH hadn't picked it up.
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) PATH="$HOME/.local/bin:$PATH" ;;
+    esac
+    install_graphify_skill_via_cli
 fi
 
 # --- Git hooks (auto-bump VERSION + tag) ---
