@@ -49,19 +49,30 @@ from _tier_assign import assign_tiers, validate_tier_pins, deep_merge_tier_polic
 
 SEED: dict[str, list[str]] = {
     "spec-review": ["requirements", "gaps", "scope", "ambiguity", "feasibility", "stakeholders"],
-    "plan": ["integration", "api", "data-model", "security", "ux", "scalability", "wave-sequencer"],
+    "design": ["integration", "api", "data-model", "security", "ux", "scalability", "wave-sequencer"],
     "check": ["scope-discipline", "risk", "completeness", "sequencing", "testability", "security-architect"],
 }
 
 VALID_GATES = set(SEED.keys())
 
-# Gate name → persona directory name. Per CLAUDE.md: spec-review uses
-# personas/review/; plan and check share their gate name as the directory.
+# Gate name → persona directory name. spec-review uses personas/review/;
+# design and check share their gate name as the directory.
 GATE_TO_DIR: dict[str, str] = {
     "spec-review": "review",
-    "plan": "plan",
+    "design": "design",
     "check": "check",
 }
+
+# Legacy gate-name aliases. Callers passing the old name are normalized at
+# the CLI / function-entry boundary. Emit a one-line deprecation warning on
+# first use so external callers can migrate.
+GATE_ALIASES: dict[str, str] = {
+    "plan": "design",
+}
+
+def _normalize_gate(gate: str) -> str:
+    """Map legacy gate names to canonical. Returns the input unchanged if no alias."""
+    return GATE_ALIASES.get(gate, gate)
 
 CONFIG_SCHEMA: dict[str, Any] = {
     "$schema_version": 1,
@@ -998,20 +1009,28 @@ def main() -> int:
                              "Honored only with --with-tier.")
     args = parser.parse_args()
 
+    # Normalize legacy gate alias (plan → design) before any downstream use.
+    # External callers passing the old name keep working; a deprecation note
+    # is emitted once per invocation so they can migrate.
+    if args.gate and args.gate in GATE_ALIASES:
+        canonical = GATE_ALIASES[args.gate]
+        warn(f"[deprecation] gate '{args.gate}' renamed to '{canonical}'; please migrate caller")
+        args.gate = canonical
+
     if args.print_schema:
         emit_schema()
         return 0
 
     if args.print_seed:
         if not args.gate or args.gate not in VALID_GATES:
-            warn("--print-seed requires gate (one of: spec-review, plan, check)")
+            warn("--print-seed requires gate (one of: spec-review, design, check)")
             return 4
         for name in SEED[args.gate]:
             print(name)
         return 0
 
     if not args.gate:
-        warn("missing gate argument (one of: spec-review, plan, check)")
+        warn("missing gate argument (one of: spec-review, design, check)")
         return 5
 
     repo_dir_env = os.environ.get("MONSTERFLOW_REPO_DIR")

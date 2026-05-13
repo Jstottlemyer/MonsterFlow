@@ -155,7 +155,7 @@ spliced_count=0
 skipped_count=0
 
 # bash 3.2 friendly enumeration; sorted for deterministic output.
-for gate in review plan check; do
+for gate in review design check; do
   dir="$REPO_ROOT/personas/$gate"
   if [ ! -d "$dir" ]; then
     continue

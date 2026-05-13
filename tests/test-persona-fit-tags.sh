@@ -112,7 +112,7 @@ if target:
     paths = sorted(glob.glob(os.path.join(target, "*.md")))
 else:
     paths = []
-    for gate in ["personas/review", "personas/plan", "personas/check"]:
+    for gate in ["personas/review", "personas/design", "personas/check"]:
         paths.extend(sorted(glob.glob(f"{gate}/*.md")))
 
 for path in paths:

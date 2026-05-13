@@ -7,7 +7,7 @@ file:// (no fetch — must be loaded via <script src>).
 
 Gate mapping (CRITICAL):
     personas/review/  -> gate "spec-review"  (review personas run AT the spec-review GATE)
-    personas/plan/    -> gate "plan"
+    personas/design/    -> gate "plan"
     personas/check/   -> gate "check"
 
 Skipped:

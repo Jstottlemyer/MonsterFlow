@@ -4,6 +4,47 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.11.9] - 2026-05-12
+
+### Fixed
+
+- **`auto_merged` false-positive in morning report.** `_merge_policy.sh`
+  previously logged `action=auto_merged` for every `gh pr merge --auto`
+  exit-0, even when the follow-up `gh pr view --json state` returned
+  non-MERGED (queued-behind-branch-protection). `run.sh` then trusted that
+  label to set `MERGED=1`, so the morning report could claim a PR shipped
+  that was still gated. Now: state-gated — MERGED → `auto_merged`,
+  otherwise → `fell_back/auto_queued_unconfirmed`. Action vocabulary
+  unchanged; schema-safe.
+- **PR draft-verdict NO_GO grep false-positive.** `run.sh` fell back to
+  `grep -qi "NO-GO\|NO_GO" check.md` when `check-verdict.json` sidecar was
+  missing, which false-positived on any reviewer prose literally mentioning
+  those strings. Now: sidecar required; missing sidecar fails closed to
+  NO_GO (draft) rather than silently shipping a GO PR.
+- **Diff-truncation false flag at exactly 3000 lines.** `verify.sh`
+  computed `DIFF_LINE_COUNT` AFTER `head -3000`, so an exact-3000-line diff
+  triggered the truncation warning. True line count is now computed
+  separately; warning fires only when the raw diff actually exceeds 3000.
+
+### Added
+
+- **Codex adversarial design critique at `/design` gate.** When
+  `agent_budget` is configured and Codex is authenticated, the resolver
+  emits `codex-adversary` at the design gate. `plan.sh` now runs a
+  post-synthesis Codex critique over `plan.md` + spec + review-findings,
+  appending a labeled `## Adversarial Design Critique (Codex)` section to
+  `plan.md` so `/check` sees it via existing reads. Failure is non-fatal
+  (logs a warning, keeps the Claude-only plan). Sibling artifact
+  `plan-codex-findings.md` is also written for downstream tooling.
+
+Source: `autorun-shell-reviewer` subagent audit (2026-05-12). 4 findings
+graded High/Medium under the 13-pitfall checklist; one High (auto_merged)
++ three Mediums applied this release. Two further Mediums deferred to
+follow-ups: `defaults.sh:71-108` `eval` replacement (not exploitable
+without hostile config) and a separate codex-axis classification gap.
+
+## [0.11.0] - 2026-05-08
+
 ### Renamed
 
 - **`/plan` ceded back to Claude Code; MonsterFlow's design gate is now

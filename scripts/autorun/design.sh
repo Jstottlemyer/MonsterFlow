@@ -17,7 +17,7 @@ mkdir -p "$ARTIFACT_DIR"
 
 # ---------------------------------------------------------------------------
 # Resolver pre-flight (account-type-agent-scaling + dynamic-roster-per-gate)
-# plan.sh runs as a single synthesis call (no parallel persona dispatch),
+# design.sh runs as a single synthesis call (no parallel persona dispatch),
 # but the resolver still emits the full selected roster so we can:
 #   (a) write selection.json for the audit trail (persona-metrics validator
 #       + /wrap-insights drift baseline)
@@ -34,7 +34,7 @@ if [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
   RESOLVER_ERR="$(mktemp "${TMPDIR:-/tmp}/autorun-plan-resolver-XXXXXX.err")"
   trap 'rm -f "$RESOLVER_ERR"' EXIT
   RESOLVER_EXIT=0
-  SELECTED_RAW="$(bash "$REPO_DIR/scripts/resolve-personas.sh" plan \
+  SELECTED_RAW="$(bash "$REPO_DIR/scripts/resolve-personas.sh" design \
                     --feature "$SLUG" --with-tier --emit-selection-json 2>"$RESOLVER_ERR")" \
     || RESOLVER_EXIT=$?
   if [ "$RESOLVER_EXIT" -ne 0 ]; then
@@ -47,14 +47,18 @@ if [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
 
   # Parse "<persona>:<tier>" lines from resolver stdout. Tier-aware dispatch
   # (dynamic-roster-per-gate Slice 4). Bare lines:
-  #   codex-adversary  → skip (Codex at /plan currently disabled; run.sh
-  #                      handles any Codex dispatch separately)
+  #   codex-adversary  → flag CODEX_REQUESTED=1; the Claude synthesis loop
+  #                      still skips this line (Codex runs as a separate
+  #                      post-synthesis adversarial pass below, after
+  #                      plan.md is written).
   #   anything else    → resolver contract violation; halt.
   SELECTED_PERSONAS=()
   SELECTED_TIERS=()
+  CODEX_REQUESTED=0
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     if [ "$line" = "codex-adversary" ]; then
+      CODEX_REQUESTED=1
       continue
     fi
     case "$line" in
@@ -100,7 +104,7 @@ fi
 # ---------------------------------------------------------------------------
 if [ ! -f "$ARTIFACT_DIR/review-findings.md" ]; then
   echo "[autorun] plan: ERROR — $ARTIFACT_DIR/review-findings.md not found"
-  echo "[autorun] plan: run.sh must merge risk-findings.md into review-findings.md before calling plan.sh"
+  echo "[autorun] plan: run.sh must merge risk-findings.md into review-findings.md before calling design.sh"
   exit 1
 fi
 
@@ -201,4 +205,85 @@ if [ ! -f "$ARTIFACT_DIR/plan.md" ]; then
 fi
 
 echo "[autorun] plan: $ARTIFACT_DIR/plan.md written ($(wc -l < "$ARTIFACT_DIR/plan.md") lines)"
+
+# ---------------------------------------------------------------------------
+# Codex adversarial design critique (post-synthesis pass)
+#
+# Activated when the resolver emitted `codex-adversary` for this gate (i.e.
+# `agent_budget` is configured and Codex is authenticated). Runs after the
+# Claude synthesis has produced plan.md so Codex critiques the actual proposed
+# design, not just the inputs.
+#
+# Failure is non-fatal: a probe/timeout/exec failure logs a warning and
+# continues with the Claude-only plan.md. The pipeline never halts here.
+#
+# Output: appends a labeled "## Adversarial Design Critique (Codex)" section
+# to plan.md (so /check sees it via its existing plan.md read) AND writes a
+# sibling `plan-codex-findings.md` for downstream tooling / morning-report use.
+# ---------------------------------------------------------------------------
+if [ "${AUTORUN_DRY_RUN:-0}" != "1" ] && [ "${CODEX_REQUESTED:-0}" = "1" ]; then
+  CODEX_PROBE_BIN="${AUTORUN_CODEX_PROBE_BIN:-$REPO_DIR/scripts/autorun/_codex_probe.sh}"
+  CODEX_PROBE_EXIT=0
+  bash "$CODEX_PROBE_BIN" >/dev/null 2>&1 || CODEX_PROBE_EXIT=$?
+
+  if [ "$CODEX_PROBE_EXIT" -eq 0 ]; then
+    echo "[autorun] plan: running Codex adversarial design critique (timeout=${TIMEOUT_CODEX}s)"
+    CODEX_DESIGN_OUT="$(mktemp -t "autorun-plan-codex.XXXXXX")"
+    CODEX_DESIGN_CTX="$(mktemp -t "autorun-plan-codex-ctx.XXXXXX")"
+    {
+      printf '## Spec\n'
+      cat "$SPEC_FILE"
+      printf '\n## Review Findings\n'
+      cat "$ARTIFACT_DIR/review-findings.md"
+      printf '\n## Proposed Plan (Claude synthesis)\n'
+      cat "$ARTIFACT_DIR/plan.md"
+    } > "$CODEX_DESIGN_CTX"
+
+    CODEX_DESIGN_EXIT=0
+    timeout "$TIMEOUT_CODEX" codex exec \
+        --full-auto --ephemeral \
+        --output-last-message "$CODEX_DESIGN_OUT" \
+        "You are an adversarial design reviewer. The Claude synthesis above produced a Plan to satisfy the Spec. Identify design problems Claude missed.
+
+For each finding, prefix with severity + axis class (same convention as /check):
+  **High [architectural]:** | **High [security]:** | **High [contract]:** | **High [tests]:** | **High [documentation]:** | **High [scope-cuts]:**
+  **Medium [...]:** (same axes)
+  **Low [...]:** (same axes)
+
+Focus on:
+- Design gaps that violate spec invariants
+- Implicit assumptions the plan depends on that are not called out
+- Missing parallelization or wave-sequencing risk
+- Data/schema choices that lock in a hard-to-reverse decision
+- Test/verification coverage gaps before /build
+
+Be terse. Aim for under 500 words total. No preamble; start with the first finding." \
+        < "$CODEX_DESIGN_CTX" \
+        2>/dev/null || CODEX_DESIGN_EXIT=$?
+
+    if [ "$CODEX_DESIGN_EXIT" -eq 0 ] && [ -s "$CODEX_DESIGN_OUT" ]; then
+      {
+        printf '\n\n---\n\n## Adversarial Design Critique (Codex)\n\n'
+        cat "$CODEX_DESIGN_OUT"
+      } >> "$ARTIFACT_DIR/plan.md"
+      cp "$CODEX_DESIGN_OUT" "$ARTIFACT_DIR/plan-codex-findings.md"
+      # Mirror back to the canonical spec dir so re-reads stay consistent.
+      PLAN_CANONICAL_DIR="$PROJECT_DIR/docs/specs/$SLUG"
+      if [ -f "$PLAN_CANONICAL_DIR/plan.md" ]; then
+        cp "$ARTIFACT_DIR/plan.md" "$PLAN_CANONICAL_DIR/plan.md"
+      fi
+      echo "[autorun] plan: Codex critique appended ($(wc -l < "$CODEX_DESIGN_OUT") lines)"
+    else
+      echo "[autorun] plan: WARN — Codex critique skipped/failed (exit $CODEX_DESIGN_EXIT); continuing with Claude-only plan.md" >&2
+    fi
+    rm -f "$CODEX_DESIGN_OUT" "$CODEX_DESIGN_CTX"
+  else
+    case "$CODEX_PROBE_EXIT" in
+      1) echo "[autorun] plan: Codex unavailable (binary not on PATH) — skipping critique" >&2 ;;
+      2) echo "[autorun] plan: Codex unavailable (auth-failed) — skipping critique" >&2 ;;
+      *) echo "[autorun] plan: Codex probe exit=$CODEX_PROBE_EXIT — skipping critique" >&2 ;;
+    esac
+  fi
+fi
+
 echo "[autorun] plan: complete"

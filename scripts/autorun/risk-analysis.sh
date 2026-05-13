@@ -15,7 +15,7 @@ source "$REPO_DIR/scripts/autorun/defaults.sh"
 mkdir -p "$ARTIFACT_DIR"
 
 # ---------------------------------------------------------------------------
-# Verify spec-review output exists — plan.sh depends on it being present
+# Verify spec-review output exists — design.sh depends on it being present
 # for the merge step that run.sh performs.
 # ---------------------------------------------------------------------------
 REVIEW_FINDINGS="$ARTIFACT_DIR/review-findings.md"

@@ -661,15 +661,18 @@ _mp_dispatch_clean_merge() {
     return 0
   fi
 
-  # On success, gh --auto may merge immediately or queue. merge_sha may be null
-  # at this point (R6 — schema honesty). Capture SHA via a follow-up gh pr view
-  # best-effort; tolerate empty result.
+  # On success, gh --auto may merge immediately OR enable auto-merge and leave
+  # the PR open behind branch protection. Distinguish via `gh pr view --json state`:
+  # MERGED → log auto_merged (caller sets MERGED=1 in morning report).
+  # OPEN   → log fell_back/auto_queued_unconfirmed (caller leaves MERGED=0).
+  # This prevents the morning report from claiming merged for a queued PR.
   _mp_state="$("$_mp_gh" pr view "$_mp_pr_url" --json state -q .state 2>/dev/null || true)"
-  _mp_sha=""
   if [ "$_mp_state" = "MERGED" ]; then
     _mp_sha="$("$_mp_gh" pr view "$_mp_pr_url" --json mergeCommit -q .mergeCommit.oid 2>/dev/null || true)"
+    log_merge_action_completed "$_mp_run_log" "$_mp_slug" auto_merged "" "$_mp_pr_num" "$_mp_sha" "$_mp_run_id"
+  else
+    log_merge_action_completed "$_mp_run_log" "$_mp_slug" fell_back auto_queued_unconfirmed "$_mp_pr_num" "" "$_mp_run_id"
   fi
-  log_merge_action_completed "$_mp_run_log" "$_mp_slug" auto_merged "" "$_mp_pr_num" "$_mp_sha" "$_mp_run_id"
   return 0
 }
 

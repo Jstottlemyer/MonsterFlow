@@ -164,7 +164,7 @@ A persona with no Output or Verdict h2.
 ### Some h3 only
 Body text.
 '
-F2="$(mk_fixture_path plan nosentinel-eof)"
+F2="$(mk_fixture_path design nosentinel-eof)"
 write_fixture "$F2" "$EOF_BODY"
 "$SCRIPT" "$F2" >/dev/null 2>&1
 RC6=$?

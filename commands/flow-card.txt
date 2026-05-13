@@ -6,12 +6,15 @@
 ║  /kickoff  →  constitution + agent roster                    ║
 ║                                                              ║
 ║  FEATURE (full pipeline)                                     ║
-║  /spec  →  /spec-review  →  /plan  →  /check  →  /build     ║
-║   define    6 PRD          6 design   5 plan     execute     ║
-║   (Q&A)     agents         agents     agents     (parallel)  ║
+║  /spec → /spec-review → /design → /check → /build           ║
+║   define   N reviewers   synthesis  N reviewers execute      ║
+║   (Q&A)    + Codex       + Codex    + Codex     (parallel)   ║
+║  N = agent_budget (default: full on-disk roster;             ║
+║      set agent_budget=3 in ~/.config/monsterflow/config.json ║
+║      for 3 Claude + 1 Codex per gate — token-cost win)       ║
 ║  + firecrawl (research) · context7 (API docs)                ║
-║  + codex adversarial review at spec-review, check, build     ║
-║    (optional — silent skip if not set up)                    ║
+║  + codex adversarial review at spec-review, design, check,   ║
+║    build (optional — silent skip if not set up)              ║
 ║  + persona metrics: every Judge step records to              ║
 ║    findings.jsonl + survival.jsonl; surfaces in              ║
 ║    /wrap-insights as drift across personas                   ║
@@ -62,13 +65,16 @@
 ║  /wrap-full     insights + force conditional phases          ║
 ║                                                              ║
 ║  BUILT-IN CC COMMANDS                                        ║
-║  /plan       canonical planner - stays in terminal           ║
+║  /plan       Claude Code plan-mode (NOT MonsterFlow's gate)  ║
+║              MonsterFlow's design gate is /design            ║
 ║  /ultraplan  cloud planner - AVOID (browser handoff)         ║
 ║  /insights   cross-session report - opt-in /wrap-insights    ║
 ║  /powerup    interactive feature lessons - ad-hoc            ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
-║  AGENTS: review(6) plan(6) check(5) code-review(9)          ║
+║  AGENTS (on-disk): review(7) plan(7) check(6) cr(9)          ║
+║  Effective count = min(roster, agent_budget). Codex is       ║
+║  additive — not counted against budget.                      ║
 ║  + judge · synthesis · domain agents                         ║
 ║                                                              ║
 ║  PLUGINS                                                     ║

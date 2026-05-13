@@ -36,10 +36,18 @@ Tests for both subagents' frontmatter live at `tests/test-agents.sh`. Run `bash 
 
 - **`spec-review.sh`** and **`check.sh`**: N parallel `claude -p` calls (one per persona, disk-discovered from `personas/<gate>/`). No `--add-dir` — spec/plan content passed inline. `TIMEOUT_PERSONA=600s` per persona; merge step concatenates raw outputs.
 - **`check.sh`**: two-phase — Phase 1 is parallel reviewers, Phase 2 is one synthesis call that reads all reviewer outputs and produces the GO/NO-GO verdict.
-- **`plan.sh`**: single synthesis call (needs all review findings coherently). No `--add-dir`.
+- **`plan.sh`**: single Claude synthesis call (needs all review findings coherently), no `--add-dir`. Followed by a Codex adversarial design critique when the resolver emits `codex-adversary` for the design gate; output is appended to `plan.md` as a labeled section so `/check` sees it via existing reads. Codex failure at the design gate is non-fatal.
 - **Persona directory mapping**: gate name ≠ directory name. `spec-review` → `personas/review/`, `plan` → `personas/plan/`, `check` → `personas/check/`. Never walk `personas/<gate-name>/` directly.
 - **`TIMEOUT_PERSONA`** (default 600s) is per-persona; `TIMEOUT_STAGE` (default 1800s) is for synthesis calls. Both configurable via `queue/autorun.config.json`.
 - Before committing changes to `scripts/autorun/*.sh`, invoke the `autorun-shell-reviewer` subagent.
+
+## Agent budget (token-cost control)
+
+The persona resolver (`scripts/resolve-personas.sh` / `_resolve_personas.py`) reads `~/.config/monsterflow/config.json` for an `agent_budget` integer (range 1–8). When set, the resolver caps the Claude-persona dispatch at that count per gate; `codex-adversary` is appended separately and does NOT count against the budget. Default (no config or no key) = full on-disk roster.
+
+Recommended: `{"agent_budget": 3}` gives 3 Claude + 1 Codex per gate (`/spec-review`, `/design`, `/check`) — roughly 50% Claude-token reduction vs the full 7/7/6 roster, while keeping an independent-model lens via Codex. Selection is data-driven (rankings from persona insights, falling back to seed list, then alphabetical). Once a feature is in flight, its picks are locked at `docs/specs/<feature>/.budget-lock.json` for deterministic reruns.
+
+Kill switch: `MONSTERFLOW_DISABLE_BUDGET=1` bypasses the cap (full roster). Use only in emergencies; the `selection.json` audit trail records `selection_method=kill-switch`.
 
 ## Backlog
 
