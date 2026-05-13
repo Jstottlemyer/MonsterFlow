@@ -87,7 +87,7 @@ TESTS=(
   test-personas-post-splice.sh
   # pipeline-gate-permissiveness W3.5 — commands/spec-review.md gate-mode Phase 0c
   test-spec-review-gate-mode.sh
-  # pipeline-gate-permissiveness W3.6 — commands/design.md gate-mode Phase 0c
+  # pipeline-gate-permissiveness W3.6 — commands/blueprint.md gate-mode Phase 0c
   test-design-gate-mode.sh
   # pipeline-gate-permissiveness W3.7 — commands/check.md gate-mode Phase 0c + cap-reached
   test-check-gate-mode.sh
