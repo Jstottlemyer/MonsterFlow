@@ -1,14 +1,15 @@
 ---
 name: install-graphify-wiki-coverage
-description: Add a Knowledge Layer stage to install.sh that detects graphify CLI, graphify skill, the six obsidian-wiki skills, and OBSIDIAN_VAULT_PATH; offers to install only the missing pieces; and re-runs cleanly when state is already correct.
+description: Add a Knowledge Layer stage to install.sh that detects graphify CLI, graphify skill, the six obsidian-wiki skills, OBSIDIAN_VAULT_PATH, and cmux config-without-binary drift; offers to install only the missing pieces; re-runs cleanly when state is already correct.
 created: 2026-05-13
+revised: 2026-05-13 (folded cmux post-install drift detection — orphaned ~/.config/cmux/cmux.json when brew bundle was declined)
 constitution: none — defaults-only roster (precedent: install-rewrite, pipeline-wiki-integration)
 confidence: 0.85 (Scope 0.90 / UX 0.85 / Data 0.85 / Integration 0.85 / Edge 0.85 / Acceptance 0.85)
 session_roster: defaults only (27 stock personas)
 gate_mode: permissive
-tags: [api, data, docs, integration, migration, security, ux]
+tags: [api, data, docs, integration, migration, scalability, security, ux]
 tags_provenance:
-  baseline: [api, data, integration, migration, security, ux]
+  baseline: [api, data, integration, migration, scalability, security, ux]
   llm_added: [docs]
   user_overrides: []
 ---
@@ -19,7 +20,11 @@ tags_provenance:
 
 ## Summary
 
-`install.sh` today covers pipeline commands, personas, schemas, scripts, theme, brew tools, and plugins, but is silent on the knowledge layer the rest of MonsterFlow depends on: the `graphify` CLI, the `graphify` skill, the six `wiki-*` skills from `github.com/Ar9av/obsidian-wiki`, and the `OBSIDIAN_VAULT_PATH` environment that `/wrap` Phase 2c needs. Adopters who follow the install instructions end with a working pipeline but no knowledge surface; `/wrap` Phase 2c silently no-ops and `/spec` Phase 0.2 never fires. This spec adds one new stage — Knowledge Layer — that detects all four pieces with a single summary banner, prompts once to install only what's missing, and treats already-correct state as a zero-op no-prompt path. Adopter default is **prompt-default-N** (consistent with the existing plugin + theme adopter defaults); owner is **auto-yes**.
+`install.sh` today covers pipeline commands, personas, schemas, scripts, theme, brew tools, and plugins, but is silent on the knowledge layer the rest of MonsterFlow depends on: the `graphify` CLI, the `graphify` skill, the six `wiki-*` skills from `github.com/Ar9av/obsidian-wiki`, and the `OBSIDIAN_VAULT_PATH` environment that `/wrap` Phase 2c needs. Adopters who follow the install instructions end with a working pipeline but no knowledge surface; `/wrap` Phase 2c silently no-ops and `/spec` Phase 0.2 never fires.
+
+A parallel post-install drift case also lands here: `cmux` (a Brewfile cask) only installs when the adopter says Y to the brew bundle prompt, but the theme stage symlinks `~/.config/cmux/cmux.json` unconditionally — so a decline path leaves an orphaned cmux config pointing at a binary that doesn't exist. Same detection-and-report pattern, same idempotent re-run guarantee.
+
+This spec adds one new stage — Knowledge Layer — that detects all five pieces with a single summary banner, prompts once to install only what's missing, and treats already-correct state as a zero-op no-prompt path. Adopter default is **prompt-default-N** (consistent with the existing plugin + theme adopter defaults); owner is **auto-yes**.
 
 ## Backlog Routing
 
@@ -30,17 +35,19 @@ Backlog: empty at time of spec — `BACKLOG.md` has no graphify/wiki items pendi
 ### In scope
 
 - New `do_knowledge_layer()` stage in `install.sh`, placed after `do_theme_install` (install.sh:714) and before the CLAUDE.md baseline merge (install.sh:716).
-- Detects four pieces and prints one summary block:
+- Detects five pieces and prints one summary block:
   - `graphify` CLI — `command -v graphify` AND `~/.local/venvs/graphify/bin/graphify --help` exits 0
   - `graphify` skill — `[ -f ~/.claude/skills/graphify/SKILL.md ]`
   - Wiki skills (×6) — all of `~/.claude/skills/{wiki-ingest,wiki-update,wiki-query,wiki-export,wiki-lint,wiki-capture}/SKILL.md`
   - Obsidian env — `[ -f ~/.obsidian-wiki/config ]` AND grep succeeds for `OBSIDIAN_VAULT_PATH=` AND the resolved path is an existing dir
+  - `cmux` drift — `[ -L ~/.config/cmux/cmux.json ]` (theme stage created it) AND `command -v cmux` fails. Three states: ✓ both present (or both absent — N/A), ⚠ config present + binary absent (drift — the case this spec fixes), ○ neither (no theme, no concern)
 - One batched prompt when at least one piece is missing: `Install missing pieces? [y/N]`. Owner gets auto-yes; adopter default-N (matches plugin / theme adopter defaults).
 - Per-piece install actions, gated on missing-only (no clobber):
   - `graphify` CLI: `python3 -m venv ~/.local/venvs/graphify && ~/.local/venvs/graphify/bin/pip3 install graphifyy && ln -sf ~/.local/venvs/graphify/bin/graphify ~/.local/bin/graphify`. Refuse if `~/.local/venvs/graphify` already exists with non-empty contents. If venv dir exists but symlink is missing, re-create only the symlink.
   - `graphify` skill: print `Install graphify skill via the graphify CLI's own setup (run: graphify install-skill)` or equivalent upstream instruction. install.sh does NOT vendor or symlink the skill (third-party content, no MonsterFlow source rights).
   - Wiki skills: print `Run: npx skills add Ar9av/obsidian-wiki` (upstream installer is idempotent and handles all 6). install.sh does NOT auto-exec npx (long-running, interactive, can prompt for network credentials). Fallback when `command -v npx` fails: print the manual `git clone https://github.com/Ar9av/obsidian-wiki && cp -r .skills/* ~/.claude/skills/` recipe from the upstream README.
   - Obsidian env: prompt for vault path, validate it resolves to an existing directory, write `~/.obsidian-wiki/config` with `OBSIDIAN_VAULT_PATH="<path>"` if missing, and append a sentinel-bracketed block to `~/.zshrc` exporting `OBSIDIAN_VAULT_PATH` (reuses `posix_quote` + sentinel pattern from the theme stage).
+  - cmux drift: print `Run: brew install --cask cmux  # restores the cask the Brewfile already lists`. install.sh does NOT auto-exec brew (adopter already declined the brew bundle prompt earlier in this same install run — re-prompting is annoying). Owner-auto-yes still surfaces the recommendation but doesn't re-attempt the install either, because by the time we're in `do_knowledge_layer` the brew bundle stage is committed. Re-running `install.sh` after the user manually installs cmux clears the warning.
 - Idempotency: re-runs against already-correct state print `Knowledge Layer: all present ✓` and emit zero prompts, zero filesystem writes, zero `.bak` files, zero `.zshrc` mutations.
 - `tests/test-install-knowledge-layer.sh` wired into `tests/run-tests.sh` TESTS array (orchestrator-wiring guard at run-tests.sh:139 enforces this).
 
@@ -51,6 +58,8 @@ Backlog: empty at time of spec — `BACKLOG.md` has no graphify/wiki items pendi
 - Auto-cloning `github.com/Ar9av/obsidian-wiki` to a fixed path. Skill install is upstream's responsibility.
 - Bringing back the wiki-export indexing that `install-rewrite` v1.1 explicitly cut from `onboard.sh`. The skill execution surface stays in `/wrap` Phase 2c where it already lives.
 - Detection of graphify per-project graphs (`graphify-out/`). That's a project-level concern; `bootstrap-graphify.sh` handles it.
+- Re-running brew bundle from inside `do_knowledge_layer` to recover from a declined brew bundle prompt. The user said no once already in the same install run — pestering them is poor UX. We surface the gap, they re-run install.sh (or invoke `brew install --cask cmux` directly) when ready.
+- Removing the orphaned `~/.config/cmux/cmux.json` symlink. It's not harmful (the file just dangles) and removing it would force a re-symlink on next install — more churn than benefit.
 
 ## Approach
 
@@ -72,6 +81,7 @@ graphify CLI:        ✗ (not installed)
 graphify skill:      ✗ (~/.claude/skills/graphify/SKILL.md absent)
 wiki skills:         ✗ (0/6)
 OBSIDIAN_VAULT_PATH: ✗ (~/.obsidian-wiki/config absent)
+cmux drift:          ○ N/A (no theme config present)
 
 Install missing pieces? [y/N]: y
 
@@ -112,11 +122,33 @@ graphify CLI:        ✓
 graphify skill:      ✓
 wiki skills:         ✓ (6/6)
 OBSIDIAN_VAULT_PATH: ✓ → /Users/jstottlemyer/Documents/Obsidian/wiki
+cmux drift:          ✓ (config + binary both present)
 
 Knowledge Layer: all present ✓
 ```
 
 No prompt, no mutations.
+
+**cmux drift case (theme installed, brew bundle declined):**
+
+```
+=== Knowledge Layer ===
+graphify CLI:        ✓
+graphify skill:      ✓
+wiki skills:         ✓ (6/6)
+OBSIDIAN_VAULT_PATH: ✓ → /Users/jstottlemyer/Documents/Obsidian/wiki
+cmux drift:          ⚠ config present but binary absent
+
+The theme stage symlinked ~/.config/cmux/cmux.json, but cmux itself
+isn't installed. The brew bundle prompt was declined earlier in this
+run. To restore the cask:
+
+  brew install --cask cmux
+
+Re-run install.sh after to clear this warning.
+```
+
+Single batched prompt does NOT fire for cmux drift alone (it's a print-only diagnostic, no install action this stage can take).
 
 **Adopter under `--non-interactive`:**
 
@@ -146,6 +178,7 @@ Same summary block. The `Install missing pieces?` prompt is auto-yes — install
 - `~/.claude/skills/wiki-*/` — install.sh never writes to skill dirs (upstream installer's territory)
 - `~/.claude/skills/graphify/` — same
 - Existing non-sentinel `OBSIDIAN_VAULT_PATH=` exports in `~/.zshrc` — skipped with one-line notice
+- `~/.config/cmux/cmux.json` symlink under the drift case — leave it dangling rather than churn the theme stage's output. Theme stage owns that file; do_knowledge_layer only reports on it.
 
 **No new persistent state in MonsterFlow repo.** The new stage is pure addition to `install.sh`; no new config files, no schema bumps.
 
@@ -186,6 +219,10 @@ Same summary block. The `Install missing pieces?` prompt is auto-yes — install
 9. **`--non-interactive` mode** → summary still renders (zero side effects); the install prompt is skipped (default-N); no installs happen. Documented in the output so headless adopters know what to do next.
 10. **`NO_THEME=1` + Knowledge Layer** → unrelated; Knowledge Layer runs regardless of theme flag (different concerns).
 11. **Adopter without `~/.local/bin` in PATH** → already warned in RECOMMENDED tier at install.sh:365-368. The graphify symlink will be created either way; PATH fix is the user's job after install.sh exits.
+12. **cmux drift with `--no-theme`** → if the user passed `--no-theme`, the theme stage never created `~/.config/cmux/cmux.json`, so the cmux check resolves to `○ N/A`. No warning, no recommendation.
+13. **cmux drift when cmux IS installed via some other path** (Homebrew tap, manual install, etc.) → `command -v cmux` succeeds, drift resolves to `✓`. The check is binary-presence, not version-match.
+14. **`brew` binary itself missing during the drift case** → `command -v cmux` fails → ⚠ drift state. The recommendation still prints `brew install --cask cmux`; the adopter resolves the brew prerequisite first (REQUIRED tier already warns about this on the same install run).
+15. **Owner-auto-yes with cmux drift** → still print-only (per scope). Owner sees the same warning text adopter sees; install.sh does not silently re-run brew bundle on their behalf. This is intentional — drift surfacing is the point, not stealth recovery.
 
 ## Acceptance Criteria
 
@@ -207,9 +244,13 @@ Under all-absent state with `MONSTERFLOW_OWNER=1` (auto-yes), assert install.sh 
 **AC6 — Test wired into orchestrator.**
 `tests/test-install-knowledge-layer.sh` exists and is executable; it is listed in the `TESTS` array of `tests/run-tests.sh`; the orchestrator-wiring guard at `run-tests.sh:139-155` does not fire when the suite runs (disk count matches array count).
 
+**AC7 — cmux drift detection.**
+Fixture: pre-stage `~/.config/cmux/cmux.json` as a symlink (matches what the theme stage produces) AND ensure no `cmux` binary on PATH (no stub for cmux in `$STUB_DIR`). Run install.sh under `--non-interactive`. Assert stdout contains: `cmux drift:` followed by `⚠ config present but binary absent`, the literal recommendation `brew install --cask cmux`, and that NO `brew` invocation is logged in `$STUB_LOG` from this stage (drift is print-only). Run install.sh a second time with the same fixture and assert byte-identical drift output — re-runs do not flap the warning.
+
 ## Open Questions
 
-None below the 0.80 small-change gate. Two items worth flagging but not blocking:
+None below the 0.80 small-change gate. Three items worth flagging but not blocking:
 
 - **graphify skill install command.** This spec assumes the graphify CLI has its own `install-skill` subcommand or upstream-documented path for installing `~/.claude/skills/graphify/SKILL.md`. If it doesn't (i.e., the skill on this machine was hand-copied), the install action should fall back to printing the GitHub raw-URL download recipe. Verify against `graphify --help` during `/blueprint`.
 - **Sentinel for obsidian-wiki block in .zshrc.** Pick a sentinel string that won't collide with anything obsidian-wiki itself might write. Current proposal: `# BEGIN MonsterFlow obsidian-wiki` / `# END MonsterFlow obsidian-wiki`, matching the theme block's style.
+- **cmux drift symmetric for other Brewfile casks.** Right now only cmux gets the drift check, because cmux is the only cask the theme stage symlinks user-visible config for. If the theme stage ever symlinks config for another cask (e.g., `iterm2-shell-integration`), the drift check pattern should generalize. Out of scope for this spec; revisit during `/blueprint` if the cmux check ends up as a one-off vs the start of a pattern.
