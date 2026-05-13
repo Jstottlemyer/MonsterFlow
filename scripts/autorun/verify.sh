@@ -107,13 +107,18 @@ else
     exit 1
   fi
 
-  GIT_DIFF="$(git -C "$PROJECT_DIR" diff "$PRE_BUILD_SHA" HEAD -- . 2>/dev/null | head -3000 || echo "(diff unavailable)")"
+  # Compute the true diff line count BEFORE truncating, so an exact-3000-line
+  # diff isn't falsely flagged as truncated. The 3000-line cap still applies to
+  # what we pass to the verifier prompt.
+  GIT_DIFF_RAW="$(git -C "$PROJECT_DIR" diff "$PRE_BUILD_SHA" HEAD -- . 2>/dev/null || echo "(diff unavailable)")"
+  TRUE_DIFF_LINES="$(printf '%s\n' "$GIT_DIFF_RAW" | wc -l | tr -d ' ')"
+  GIT_DIFF="$(printf '%s\n' "$GIT_DIFF_RAW" | head -3000)"
   DIFF_LINE_COUNT="$(printf '%s\n' "$GIT_DIFF" | wc -l | tr -d ' ')"
 
   TRUNCATION_NOTE=""
-  if [ "$DIFF_LINE_COUNT" -ge 3000 ]; then
+  if [ "$TRUE_DIFF_LINES" -gt 3000 ]; then
     TRUNCATION_NOTE="
-WARNING: diff was truncated at 3000 lines. Requirements implemented after line 3000 are NOT visible — mark any requirement without clear diff evidence as [FAIL]."
+WARNING: diff was truncated at 3000 lines (true size: ${TRUE_DIFF_LINES} lines). Requirements implemented after line 3000 are NOT visible — mark any requirement without clear diff evidence as [FAIL]."
   fi
 
   echo "[autorun] verify: checking compliance for $SLUG (diff: ~${DIFF_LINE_COUNT} lines)"

@@ -1040,10 +1040,12 @@ else
   if [ -f "$_PR_SIDECAR" ]; then
     PR_DRAFT_VERDICT="$(python3 "$ENGINE_DIR/scripts/autorun/_policy_json.py" \
       get "$_PR_SIDECAR" "/verdict" --default "GO" 2>/dev/null || echo GO)"
-  elif [ -f "$ARTIFACT_DIR/check.md" ]; then
-    if grep -qi "NO-GO\|NO_GO" "$ARTIFACT_DIR/check.md"; then
-      PR_DRAFT_VERDICT="NO_GO"
-    fi
+  else
+    # Sidecar JSON is the integrity signal for verdict. If it's missing,
+    # fail closed to NO_GO (draft) rather than grepping check.md prose, which
+    # false-positives whenever reviewer text literally mentions "NO_GO".
+    echo "[autorun] $SLUG: WARN — check-verdict.json sidecar missing; defaulting PR_DRAFT_VERDICT=NO_GO (draft)" >&2
+    PR_DRAFT_VERDICT="NO_GO"
   fi
   PR_DRAFT_FLAG=""
   case "$PR_DRAFT_VERDICT" in
