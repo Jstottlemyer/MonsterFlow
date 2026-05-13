@@ -4,6 +4,26 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+### Renamed
+
+- **`/design` slash command renamed to `/blueprint`.** A parallel
+  Claude Code session in the CosmicExplorer repo flagged a real
+  collision between MonsterFlow's `/design` slash command and the
+  `frontend-design` plugin skill. PR #15 renamed `commands/design.md`
+  to `commands/blueprint.md` and updated user-facing slash refs
+  across CLAUDE.md, README.md, docs/index.html, flow-card.txt, and
+  sibling `commands/*.md`. PR #16 catches the `domains/{games,mobile}/CLAUDE.md`
+  stragglers + a stale `tests/run-tests.sh` comment.
+- **Internal gate identifier remains `design`** (intentional —
+  slash-command-only scope). Personas live in `personas/design/`,
+  the autorun script is `scripts/autorun/design.sh`, the artifact is
+  `docs/specs/<feature>/design.md`, JSONL persists `stage: "design"`,
+  selection.json persists `gate: "design"`. Changing those would
+  reverse PR #14's hard cutover for no benefit.
+- Historical CHANGELOG entries (0.11.0, 0.11.9) intentionally still
+  reference `/design` — they describe what was true at the time of
+  those releases.
+
 ## [0.11.9] - 2026-05-12
 
 ### Fixed
