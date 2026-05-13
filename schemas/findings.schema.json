@@ -35,11 +35,11 @@
     "finding_id": {
       "type": "string",
       "pattern": "^(sr|pl|ck)-[0-9a-f]{10,}$",
-      "description": "<stage-prefix>-<10+ hex chars>. Stage prefix: sr=spec-review, pl=plan, ck=check. Hex is the first 10 chars of sha256(normalized_signature). Best-effort stable across re-syntheses given identical raw inputs."
+      "description": "<stage-prefix>-<10+ hex chars>. Stage prefix: sr=spec-review, pl=design, ck=check. Hex is the first 10 chars of sha256(normalized_signature). Best-effort stable across re-syntheses given identical raw inputs."
     },
     "stage": {
       "type": "string",
-      "enum": ["spec-review", "plan", "check"],
+      "enum": ["spec-review", "design", "check"],
       "description": "Which multi-agent gate produced this finding."
     },
     "personas": {

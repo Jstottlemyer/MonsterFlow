@@ -2,7 +2,7 @@
   "schema_version": 1,
   "prompt_version": "findings-emit@1.0",
   "run_id": "7c62b467-ebe6-432f-9f88-003a25e677f0",
-  "stage": "plan",
+  "stage": "design",
   "feature": "install-rewrite",
   "created_at": "2026-05-04T05:01:38Z",
   "status": "ok",

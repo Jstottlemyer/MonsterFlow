@@ -36,7 +36,7 @@ The pipeline writes measurement artifacts under `docs/specs/*/` that should be g
 - `survival.jsonl`
 - `run.json`
 - `raw/` directories
-- `source.spec.md` or `source.plan.md`
+- `source.spec.md` or `source.design.md`
 - `.persona-metrics-warned`
 
 Run: `git ls-files docs/specs/ | grep -E "(findings|participation|survival|run\.json|source\.(spec|plan)\.md|\.persona-metrics-warned)"` to check what's actually tracked by git (untracked files in gitignore don't count).

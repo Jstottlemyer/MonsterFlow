@@ -76,7 +76,7 @@ If one or more new items:
 
 ## Hard constraints
 
-- Do NOT modify `commands/plan.md`, `commands/check.md`, `commands/build.md`, `commands/spec.md`, or any file under `personas/`.
+- Do NOT modify `commands/design.md`, `commands/check.md`, `commands/build.md`, `commands/spec.md`, or any file under `personas/`.
 - Do NOT change existing entries in the flow-card footer or the `CLAUDE.md` policy paragraph — append only.
 - Do NOT break flow-card box alignment.
 - Do NOT merge the PR yourself — leave it open for Justin to review.

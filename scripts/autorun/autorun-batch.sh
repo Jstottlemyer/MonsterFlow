@@ -3,7 +3,7 @@
 # scripts/autorun/autorun-batch.sh — thin queue-loop wrapper (v6 contract)
 #
 # Contract: docs/specs/autorun-overnight-policy/spec.md (v5, AC#24)
-# Plan:     docs/specs/autorun-overnight-policy/plan.md (v6, Task 3.0b)
+# Plan:     docs/specs/autorun-overnight-policy/design.md (v6, Task 3.0b)
 #
 # Iterates `queue/*.spec.md` and invokes scripts/autorun/run.sh once per slug.
 # Aggregates per-slug morning-report.json output into queue/runs/index.md.

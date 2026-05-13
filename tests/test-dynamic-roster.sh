@@ -15,7 +15,7 @@
 #   - A14 dispatch wiring (commands/*.md pass model: param, autorun/*.sh
 #     translate to --model claude-{opus,sonnet}-*).
 #   - PRE-W2 evidence-file existence at
-#     docs/specs/dynamic-roster-per-gate/plan/dispatch-precedence-evidence.md
+#     docs/specs/dynamic-roster-per-gate/design/dispatch-precedence-evidence.md
 #     with a YES/NO/FLAKY verdict line.
 #
 # Bash 3.2 portable: no ${arr[-1]}, no mapfile/readarray; quote everything.
@@ -509,7 +509,7 @@ a14_wiring_grep() {
 ##############################################################################
 pre_w2_evidence() {
     local name1="PRE-W2 evidence file exists"
-    local evid="$REPO_DIR/docs/specs/dynamic-roster-per-gate/plan/dispatch-precedence-evidence.md"
+    local evid="$REPO_DIR/docs/specs/dynamic-roster-per-gate/design/dispatch-precedence-evidence.md"
     if [ ! -f "$evid" ]; then
         _fail "$name1" "missing $evid"
     else

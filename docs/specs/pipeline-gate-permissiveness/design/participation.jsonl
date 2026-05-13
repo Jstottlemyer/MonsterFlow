@@ -1,0 +1,8 @@
+{"schema_version": 1, "stage": "design", "persona": "api", "model": "claude-opus-4-7", "findings_emitted": 4, "status": "ok"}
+{"schema_version": 1, "stage": "design", "persona": "codex-adversary", "model": "codex", "findings_emitted": 9, "status": "ok"}
+{"schema_version": 1, "stage": "design", "persona": "data-model", "model": "claude-opus-4-7", "findings_emitted": 5, "status": "ok"}
+{"schema_version": 1, "stage": "design", "persona": "integration", "model": "claude-opus-4-7", "findings_emitted": 8, "status": "ok"}
+{"schema_version": 1, "stage": "design", "persona": "scalability", "model": "claude-opus-4-7", "findings_emitted": 5, "status": "ok"}
+{"schema_version": 1, "stage": "design", "persona": "security", "model": "claude-opus-4-7", "findings_emitted": 6, "status": "ok"}
+{"schema_version": 1, "stage": "design", "persona": "ux", "model": "claude-opus-4-7", "findings_emitted": 4, "status": "ok"}
+{"schema_version": 1, "stage": "design", "persona": "wave-sequencer", "model": "claude-opus-4-7", "findings_emitted": 5, "status": "ok"}

@@ -16,7 +16,7 @@
 #        WITHOUT --best-effort → exits non-zero. Invoke WITH --best-effort →
 #        exits 0 and emits safe_log("subagent_mismatch_best_effort").
 #   4. A0 content checks (testability tightening #4): assert
-#      docs/specs/token-economics/plan/raw/spike-q1-result.md exists,
+#      docs/specs/token-economics/design/raw/spike-q1-result.md exists,
 #      `wc -l > 10`, contains literal `total_tokens`, `subagents/agent-`,
 #      and a `Verdict:` line. (Overlaps with test-phase-0-artifact.sh by
 #      design — redundancy is OK.)
@@ -263,7 +263,7 @@ fi
 # --------------------------------------------------------------------------
 echo ""
 echo "=== Step 4: A0 spike artifact content ==="
-A0_FILE="$REPO_ROOT/docs/specs/token-economics/plan/raw/spike-q1-result.md"
+A0_FILE="$REPO_ROOT/docs/specs/token-economics/design/raw/spike-q1-result.md"
 
 if [ -f "$A0_FILE" ]; then
   note_pass "A0 spike artifact exists"

@@ -210,7 +210,7 @@ case_7_budget_8_plan_only_7() {
     setup_case
     local name="7: budget=8 plan (only 7 on disk) → 7 lines"
     write_config '{"agent_budget": 8}'
-    local exit_code; exit_code=$(run_resolver plan)
+    local exit_code; exit_code=$(run_resolver design)
     local status=ok
     assert_exit "$name" 0 "$exit_code" || status=fail
     assert_stdout_lines "$name" 7 || status=fail
@@ -249,7 +249,7 @@ case_13_budget_99_clamp() {
     setup_case
     local name="13: agent_budget=99 → clamp to 8"
     write_config '{"agent_budget": 99}'
-    local exit_code; exit_code=$(run_resolver plan)
+    local exit_code; exit_code=$(run_resolver design)
     local status=ok
     assert_exit "$name" 0 "$exit_code" || status=fail
     # plan only has 7 personas, so we get 7 lines (clamp doesn't add nonexistent)
@@ -475,7 +475,7 @@ case_33_print_seed_spec_review() {
 case_34_print_seed_plan() {
     setup_case
     local name="34: --print-seed plan emits 7 names (wave-sequencer present)"
-    local exit_code; exit_code=$(run_resolver plan --print-seed)
+    local exit_code; exit_code=$(run_resolver design --print-seed)
     local status=ok
     assert_exit "$name" 0 "$exit_code" || status=fail
     assert_stdout_lines "$name" 7 || status=fail

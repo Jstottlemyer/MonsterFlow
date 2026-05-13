@@ -39,7 +39,7 @@ from pathlib import Path
 # ----- STAGE / AXIS enums -----------------------------------------------------
 
 STAGE_ENUM = (
-    "spec-review", "plan", "check", "verify", "build",
+    "spec-review", "design", "check", "verify", "build",
     "branch-setup", "codex-review", "pr-creation", "merging",
     "complete", "pr",
 )

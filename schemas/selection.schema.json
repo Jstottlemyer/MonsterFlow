@@ -32,7 +32,7 @@
     },
     "gate": {
       "type": "string",
-      "enum": ["spec-review", "plan", "check"],
+      "enum": ["spec-review", "design", "check"],
       "description": "Which pipeline gate produced this selection."
     },
     "selected": {

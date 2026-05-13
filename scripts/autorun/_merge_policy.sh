@@ -5,7 +5,7 @@
 # Helper library for autorun-merge-policy (v0.11.0).
 #
 # Spec: docs/specs/autorun-merge-policy/spec.md (29 ACs + AC-R1/R2/R3)
-# Plan: docs/specs/autorun-merge-policy/plan.md
+# Plan: docs/specs/autorun-merge-policy/design.md
 #
 # This file is sourced (NOT executed). It declares functions only and does NOT
 # call `set -e` (callers manage their own errexit).

@@ -72,12 +72,12 @@
     },
     "persona_path": {
       "type": "string",
-      "pattern": "^personas/(review|plan|check)/[a-z0-9][a-z0-9-]*\\.md$",
-      "description": "Repo-relative path to the persona file. Persona directories are 'review' (for the spec-review gate), 'plan', and 'check' — note the dir name 'review' deliberately differs from the gate name 'spec-review'. MUST point only inside the public personas/ tree — no absolute paths, no adopter project paths."
+      "pattern": "^personas/(review|design|check)/[a-z0-9][a-z0-9-]*\\.md$",
+      "description": "Repo-relative path to the persona file. Persona directories are 'review' (for the spec-review gate), 'design', and 'check' — note the dir name 'review' deliberately differs from the gate name 'spec-review'. MUST point only inside the public personas/ tree — no absolute paths, no adopter project paths."
     },
     "gate": {
       "type": "string",
-      "enum": ["spec-review", "plan", "check"]
+      "enum": ["spec-review", "design", "check"]
     },
     "timestamp": {
       "type": "string",

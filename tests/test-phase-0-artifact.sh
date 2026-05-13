@@ -8,7 +8,7 @@
 # assert the fixture rows themselves validate.
 #
 # Asserts:
-#   1. docs/specs/token-economics/plan/raw/spike-q1-result.md exists
+#   1. docs/specs/token-economics/design/raw/spike-q1-result.md exists
 #   2. File contains a `## Phase 0 Spike Result` heading (case-sensitive)
 #   3. File contains the literal string `agentId`
 #   4. File contains the literal string `total_tokens`
@@ -27,7 +27,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-ARTIFACT="docs/specs/token-economics/plan/raw/spike-q1-result.md"
+ARTIFACT="docs/specs/token-economics/design/raw/spike-q1-result.md"
 FIXTURE_DIR="tests/fixtures/persona-attribution"
 SCHEMA="schemas/persona-attribution.allowlist.json"
 

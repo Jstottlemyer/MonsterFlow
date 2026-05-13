@@ -588,7 +588,7 @@ If all uncommitted files are `part of session` and already committed or staged, 
 | Files marked `orphan to clean` | "These look like leftovers — delete them? (list files)" |
 | Unpushed branch with commits | "Run `/finish` to create a PR or merge → uses `finishing-a-development-branch` skill" |
 | Open worktrees (besides main) | "You have open worktrees — clean up or leave for next session?" |
-| Specs with partial pipeline (e.g., spec.md but no plan.md) | Note where each feature is in the pipeline for next session |
+| Specs with partial pipeline (e.g., spec.md but no design.md) | Note where each feature is in the pipeline for next session |
 
 Ask once:
 > Handle any of these, or done for today?

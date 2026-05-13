@@ -3,7 +3,7 @@
 # scripts/autorun/run.sh — single-slug autorun orchestrator (v6 contract)
 #
 # Contract: docs/specs/autorun-overnight-policy/spec.md (v5, 26 ACs)
-# Plan:     docs/specs/autorun-overnight-policy/plan.md (v6, Task 3.1)
+# Plan:     docs/specs/autorun-overnight-policy/design.md (v6, Task 3.1)
 # API:      docs/specs/autorun-overnight-policy/API_FREEZE.md
 #
 # Usage:
@@ -35,7 +35,7 @@ Usage: run.sh --mode=overnight|supervised [--dry-run] <slug>
        run.sh --help
 
 Process exactly ONE queue spec slug through the autorun pipeline:
-spec-review → risk-analysis → plan → check → build → PR → codex-review → merge.
+spec-review → risk-analysis → design → check → build → PR → codex-review → merge.
 
 Flags:
   --mode=overnight    Set verdict/branch/codex_probe/verify_infra policies to
@@ -893,16 +893,16 @@ fi
 # Stage 2: plan
 # ---------------------------------------------------------------------------
 check_stop
-if [ -f "$ARTIFACT_DIR/plan.md" ]; then
-  echo "[autorun] $SLUG: plan.md present — resuming"
+if [ -f "$ARTIFACT_DIR/design.md" ]; then
+  echo "[autorun] $SLUG: design.md present — resuming"
 else
-  update_stage "plan"
+  update_stage "design"
   STAGE_EXIT=0
   bash "$ENGINE_DIR/scripts/autorun/design.sh" || STAGE_EXIT=$?
-  log_run "plan" "$STAGE_EXIT"
+  log_run "design" "$STAGE_EXIT"
   if [ "$STAGE_EXIT" -ne 0 ]; then
-    echo "[autorun] $SLUG: plan failed (exit $STAGE_EXIT)" >&2
-    write_failure_item "plan" "exit $STAGE_EXIT"
+    echo "[autorun] $SLUG: design failed (exit $STAGE_EXIT)" >&2
+    write_failure_item "design" "exit $STAGE_EXIT"
     FINAL_STATE="halted-at-stage"
     exit 1
   fi
@@ -1072,7 +1072,7 @@ Automated implementation of \`$SLUG\` via autorun pipeline.
 - **Wave count:** $WAVE_COUNT
 - **Test cmd:** $TEST_CMD_DISPLAY
 - **Timestamp (UTC):** $(date -u +%Y-%m-%dT%H:%M:%SZ)
-- **Artifacts:** queue/$SLUG/{review-findings,plan,check,build-log}.md
+- **Artifacts:** queue/$SLUG/{review-findings,design,check,build-log}.md
 - **Run log:** queue/run.log (audit JSONL)
 PRBODY
 )"
