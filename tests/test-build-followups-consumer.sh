@@ -94,12 +94,12 @@ assert_either "state: open filter present" 'state: open' 'state: "open"'
 assert_contains "build-inline target_phase" "build-inline"
 assert_contains "docs-only target_phase" "docs-only"
 
-# 6. plan-revision routing AND /design re-run abort
+# 6. plan-revision routing AND /blueprint re-run abort
 # (was "/plan re-run" before the 2026-05-12 cede-/plan-back-to-Claude-Code
-# rename; the build error message now uses /design so adopters know to
+# rename; the build error message now uses /blueprint so adopters know to
 # invoke MonsterFlow's design gate, not Claude Code's plan-mode.)
 assert_contains "plan-revision target_phase" "plan-revision"
-assert_contains "/design re-run abort message" "/design re-run"
+assert_contains "/blueprint re-run abort message" "/blueprint re-run"
 
 # 7. Phase 4 + build-mark-addressed.py wiring
 assert_contains "Phase 4 heading present" "Phase 4"

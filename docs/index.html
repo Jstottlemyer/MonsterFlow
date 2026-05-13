@@ -757,7 +757,7 @@
     <h1>Queue features tonight.<br>Wake up to merged PRs.</h1>
     <p class="hero-hook">When I'm asleep or buried in the day job, I want the pipeline to keep moving but not blindly — so autorun runs the same gates I'd step through manually, takes up to three swings at fixing what fails, and leaves a PR or a failure report waiting in the morning.</p>
     <p class="tagline">
-      An 8-command pipeline for <a href="https://claude.com/claude-code">Claude Code</a>: <code>/spec → /spec-review → /design → /check → /build</code>, plus <code>/autorun</code> when you want to queue features and walk away. Specialist reviewer agents — <em>personas</em>, each tuned to one concern like security or scope — run in parallel at every <em>gate</em> (the pause points between phases where work gets reviewed). Their findings get judged and synthesized before the next phase starts.
+      An 8-command pipeline for <a href="https://claude.com/claude-code">Claude Code</a>: <code>/spec → /spec-review → /blueprint → /check → /build</code>, plus <code>/autorun</code> when you want to queue features and walk away. Specialist reviewer agents — <em>personas</em>, each tuned to one concern like security or scope — run in parallel at every <em>gate</em> (the pause points between phases where work gets reviewed). Their findings get judged and synthesized before the next phase starts.
     </p>
     <p class="hero-who">
       <strong>Built for solo developers and small teams</strong> using Claude Code on personal or production projects. MIT-licensed, local install, no hosted service.
@@ -790,7 +790,7 @@
 <section id="autorun" class="narrative">
   <div class="wrap">
     <h2>Autorun — queue tonight, ship tomorrow</h2>
-    <p class="lede">Drop one or more feature briefs into <code>queue/</code>, set a cron, walk away. Each feature runs through the same five gates you'd step through manually — <code>/spec-review</code>, <code>/design</code>, <code>/check</code>, <code>/build</code>, then a PR — except autorun is a little more permissive than I'd be over my own shoulder. It lets clean runs ship and quarantines messy ones for morning triage instead of paging me at 3am.</p>
+    <p class="lede">Drop one or more feature briefs into <code>queue/</code>, set a cron, walk away. Each feature runs through the same five gates you'd step through manually — <code>/spec-review</code>, <code>/blueprint</code>, <code>/check</code>, <code>/build</code>, then a PR — except autorun is a little more permissive than I'd be over my own shoulder. It lets clean runs ship and quarantines messy ones for morning triage instead of paging me at 3am.</p>
 
     <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">What lands when you open your laptop.</strong> The Judge step at every gate dedupes findings across the parallel reviewers, resolves contradictions, and writes one synthesized artifact you can read in two minutes. A real morning artifact looks like this:</p>
 
@@ -893,7 +893,7 @@ flowchart TD
     S["/spec\nQ&A · confidence-tracked"]:::define
     SR["/spec-review\nrequirements · gaps · ambiguity\nfeasibility · scope · stakeholders"]:::review
     JS1["Judge · Dedupe · Synth\ncluster · attribute · compose → review.md"]:::synth
-    P["/design\napi · data-model · ux · scalability\nsecurity · integration · wave-sequencer"]:::plan
+    P["/blueprint\napi · data-model · ux · scalability\nsecurity · integration · wave-sequencer"]:::plan
     JS2["Judge · Dedupe · Synth → design.md"]:::synth
     C["/check\ncompleteness · sequencing · risk\nscope-discipline · testability"]:::gate
     JS3["Judge · Dedupe · Synth → check.md\nthree-tier verdict"]:::synth
@@ -946,7 +946,7 @@ flowchart TD
     classDef verdictBlock fill:#7f1d1d,stroke:#fca5a5,color:#fee2e2,stroke-width:2px
       </pre>
     </div>
-    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Three-tier verdict at /check.</strong> Instead of a binary halt-or-pass, every gate emits one of three verdicts: <code>GO</code> (clean pass), <code>GO_WITH_FIXES</code> (non-architectural findings logged as follow-ups and consumed by <code>/build</code> wave 1 — the common case overnight), and <code>NO_GO</code> (architectural, security, or unclassified findings halt the pipeline). The same verdict shape applies at <code>/spec-review</code> and <code>/design</code>; <code>/check</code> is the last gate before code.</p>
+    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Three-tier verdict at /check.</strong> Instead of a binary halt-or-pass, every gate emits one of three verdicts: <code>GO</code> (clean pass), <code>GO_WITH_FIXES</code> (non-architectural findings logged as follow-ups and consumed by <code>/build</code> wave 1 — the common case overnight), and <code>NO_GO</code> (architectural, security, or unclassified findings halt the pipeline). The same verdict shape applies at <code>/spec-review</code> and <code>/blueprint</code>; <code>/check</code> is the last gate before code.</p>
     <p class="lede" style="margin-top:24px">Each gate runs specialist agents in parallel; a <strong style="color:var(--fg)">Judge</strong> then clusters their raw output, attributes each finding to its source, and composes the synthesized artifact that drives the next phase. <code>spec.md</code> captures intent through Q&amp;A, then feeds 7 PRD reviewers → Judge → <code>review.md</code>; that feeds 7 design agents → Judge → <code>design.md</code>; that feeds 6 check validators → Judge → <code>check.md</code>. <code>/build</code> executes against the design with TDD and verification discipline. <code>/wrap</code> distills what changed back into memory and the wiki. Small work skips the gates it doesn't need — <strong style="color:var(--fg)">same flow scales from a typo fix to a V2</strong>.</p>
     <p class="lede" style="margin-top:16px"><strong style="color:var(--fg)">Codex (optional).</strong> If <a href="#requirements">installed</a>, an OpenAI Codex agent runs an adversarial pass at <code>/spec-review</code>, <code>/check</code>, and <code>/build</code> — independent perspective from a different model family, joining the same Judge synthesis as the in-house personas. Silent skip if not set up.</p>
   </div>
@@ -960,7 +960,7 @@ flowchart TD
       <pre class="mermaid">
 flowchart LR
     R["Roster<br/><sub>39 personas + Codex</sub>"]:::roster
-    G["3 multi-agent gates<br/><sub>/spec-review · /design · /check</sub>"]:::gate
+    G["3 multi-agent gates<br/><sub>/spec-review · /blueprint · /check</sub>"]:::gate
     E["findings.jsonl<br/>participation.jsonl<br/>survival.jsonl"]:::data
     W["/wrap Phase 1c<br/><sub>10-feature window<br/>drift → [TRIAGE]</sub>"]:::metrics
     H["Human reads drift<br/><sub>roster judgment</sub>"]:::human
@@ -1067,7 +1067,7 @@ flowchart TD
         <tr><td><code>/kickoff</code></td><td>One-time project init — scans repo, drafts constitution, picks agent roster</td><td>—</td></tr>
         <tr><td><code>/spec</code></td><td>Confidence-tracked Q&amp;A — writes <code>spec.md</code></td><td>Interactive</td></tr>
         <tr><td><code>/spec-review</code></td><td>Parallel PRD review — gaps, risks, ambiguity; + Codex adversarial pass (optional)</td><td>6 reviewers</td></tr>
-        <tr><td><code>/design</code></td><td>Architecture + implementation design (incl. wave-sequencer for data-contract precedence). Renamed from <code>/plan</code> 2026-05-12 — <code>/plan</code> belongs to Claude Code's built-in plan-mode now, not to MonsterFlow.</td><td>7 designers</td></tr>
+        <tr><td><code>/blueprint</code></td><td>Architecture + implementation design (incl. wave-sequencer for data-contract precedence). Renamed from <code>/plan</code> 2026-05-12 — <code>/plan</code> belongs to Claude Code's built-in plan-mode now, not to MonsterFlow.</td><td>7 designers</td></tr>
         <tr><td><code>/check</code></td><td>Last gate before code — validates the design; + Codex adversarial pass (optional)</td><td>6 validators</td></tr>
         <tr><td><code>/build</code></td><td>Parallel execution with verification discipline; + Codex implementation review (optional)</td><td>Superpowers</td></tr>
         <tr><td><code>/autorun</code></td><td>Queues a spec and drives all 8 stages unattended. One slug per invocation; multi-spec queues use <code>autorun-batch.sh --mode=overnight</code>. Permissive overnight: contract / docs / test findings get logged as follow-ups; architectural and security findings get up to three logged attempts to converge before halting. Works cross-project — engine scripts stay in MonsterFlow, target repo's git/docs/queue live in <code>$PWD</code>. See the <a href="#autorun">Autorun section</a> above.</td><td>Shell</td></tr>
@@ -1154,7 +1154,7 @@ cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh">Copy</button><pre class="inst
         <p>Requirements · Gaps · Ambiguity · Feasibility · Scope · Stakeholders</p>
       </div>
       <div class="card">
-        <h3>Design · <code>/design</code> <span class="count">7</span></h3>
+        <h3>Design · <code>/blueprint</code> <span class="count">7</span></h3>
         <p>API · Data Model · UX · Scalability · Security · Integration · Wave Sequencer</p>
       </div>
       <div class="card">
@@ -1167,7 +1167,7 @@ cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh">Copy</button><pre class="inst
       </div>
       <div class="card">
         <h3>Synthesis layer <span class="count">2</span></h3>
-        <p>Judge (quality scoring) · Synthesis (multi-agent consolidation) — used by <code>/spec-review</code>, <code>/design</code>, <code>/check</code></p>
+        <p>Judge (quality scoring) · Synthesis (multi-agent consolidation) — used by <code>/spec-review</code>, <code>/blueprint</code>, <code>/check</code></p>
       </div>
       <div class="card">
         <h3>Domain agents <span class="count">9</span></h3>
@@ -1189,7 +1189,7 @@ cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh">Copy</button><pre class="inst
 ║  /kickoff  →  constitution + agent roster                    ║
 ║                                                              ║
 ║  FEATURE (full pipeline)                                     ║
-║  /spec  →  /spec-review  →  /design  →  /check  →  /build    ║
+║  /spec  →  /spec-review  →  /blueprint  →  /check  →  /build    ║
 ║   define    7 PRD          7 design   6 check    execute     ║
 ║   (Q&amp;A)     agents         agents     agents     (parallel)  ║
 ║  + firecrawl (research) · context7 (API docs)                ║

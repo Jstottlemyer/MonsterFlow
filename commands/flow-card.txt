@@ -6,7 +6,7 @@
 ║  /kickoff  →  constitution + agent roster                    ║
 ║                                                              ║
 ║  FEATURE (full pipeline)                                     ║
-║  /spec → /spec-review → /design → /check → /build           ║
+║  /spec → /spec-review → /blueprint → /check → /build           ║
 ║   define   N reviewers   synthesis  N reviewers execute      ║
 ║   (Q&A)    + Codex       + Codex    + Codex     (parallel)   ║
 ║  N = agent_budget (default: full on-disk roster;             ║
@@ -42,7 +42,7 @@
 ║  docs/specs/constitution.md     (project principles)         ║
 ║  docs/specs/<feature>/spec.md   (living spec)                ║
 ║  docs/specs/<feature>/review.md (PRD review findings)        ║
-║  docs/specs/<feature>/plan.md   (implementation plan)        ║
+║  docs/specs/<feature>/design.md (implementation design)        ║
 ║  docs/specs/<feature>/check.md  (gap checkpoint)             ║
 ║                                                              ║
 ║  KNOWLEDGE LAYER                   [graphify + obsidian]     ║
@@ -66,13 +66,13 @@
 ║                                                              ║
 ║  BUILT-IN CC COMMANDS                                        ║
 ║  /plan       Claude Code plan-mode (NOT MonsterFlow's gate)  ║
-║              MonsterFlow's design gate is /design            ║
+║              MonsterFlow's design gate is /blueprint            ║
 ║  /ultraplan  cloud planner - AVOID (browser handoff)         ║
 ║  /insights   cross-session report - opt-in /wrap-insights    ║
 ║  /powerup    interactive feature lessons - ad-hoc            ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
-║  AGENTS (on-disk): review(7) plan(7) check(6) cr(9)          ║
+║  AGENTS (on-disk): review(7) design(7) check(6) cr(9)          ║
 ║  Effective count = min(roster, agent_budget). Codex is       ║
 ║  additive — not counted against budget.                      ║
 ║  + judge · synthesis · domain agents                         ║

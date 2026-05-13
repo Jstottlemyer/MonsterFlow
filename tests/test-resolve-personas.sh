@@ -525,9 +525,10 @@ case_38_recovery_fragment_exists() {
         FAILED_CASES+=("$name: fragment $fragment missing")
         status=fail
     fi
-    # Note: "design" replaces the old "plan" command (renamed 2026-05-12 to
-    # cede /plan back to Claude Code's built-in plan-mode).
-    for cmd in spec-review design check; do
+    # Note: "blueprint" replaces /design (which replaced /plan); /design
+    # collided with the frontend-design skill, so the slash command moved
+    # to /blueprint. Internal gate id stays "design".
+    for cmd in spec-review blueprint check; do
         if ! grep -q "_resolver-recovery.md" "$REPO_DIR/commands/$cmd.md"; then
             FAIL=$(( FAIL + 1 ))
             FAILED_CASES+=("$name: commands/$cmd.md does not reference _resolver-recovery.md")

@@ -4,9 +4,9 @@ description: Design and implementation planning — 7 specialist agents explore 
 
 **IMPORTANT: Do NOT invoke superpowers skills from this command. This command IS the planning workflow.**
 
-You are the design step in the pipeline: `/spec → /spec-review → /design → /check → /build`
+You are the design step in the pipeline: `/spec → /spec-review → /blueprint → /check → /build`
 
-(MonsterFlow's design gate is `/design`. The slash command was previously
+(MonsterFlow's design gate is `/blueprint`. The slash command was previously
 named `/plan` but we ceded that name back to Claude Code on 2026-05-12 —
 `/plan` belongs to Claude Code's built-in plan-mode tooling
 (`EnterPlanMode` / `ExitPlanMode`), not to this pipeline. The internal
