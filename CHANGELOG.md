@@ -4,6 +4,58 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.11.10] - 2026-05-13
+
+### Fixed
+
+- **install.sh now refreshes stale symlinks.** New `clean_stale_symlinks()`
+  helper removes orphaned `~/.claude/*` symlinks pointing into the repo
+  whose targets no longer exist. Catches rename drift — adopters were
+  left with a dead `/plan` slash command after PR #15 renamed
+  `commands/design.md` → `commands/blueprint.md`. Wired into every link
+  pass (commands, _prompts, personas, schemas, scripts, domain-agents,
+  templates). Also fixes the stage-loop walk from `personas/plan/`
+  (gone) to `personas/design/` after the R2 hard cutover.
+- **onboard.sh watchdog leak.** `gh_auth_check_with_timeout` killed the
+  watchdog subshell but its `sleep` child was orphaned to launchd and
+  ran to completion. Rewrote with explicit `sleep_pid` tracking so no
+  zombie sleep survives.
+
+### Performance
+
+- **test-install.sh diagnostics + bounded hangs.** `run_install` and
+  `run_install_with_input` gained a 30s watchdog (`RUN_TIMEOUT=N` to
+  override) with sentinel-file TIMEOUT detection. A hung install.sh
+  dies at 30s with `rc=124` and a `*** TIMEOUT ***` marker appended
+  to `$CASE_OUT`, instead of waiting indefinitely (the 220s case_2
+  scenario reported on a second machine).
+- **Input-pipe-runs-dry guard.** `run_install_with_input` now appends
+  20 trailing newlines to the explicit input. Unexpected `read -rp`
+  prompts get an empty answer (accept default) instead of blocking
+  on a closed pipe — addresses the documented "input may be consumed
+  too early" failure mode.
+- **TTY inheritance guard.** `run_install` + 4 other bare
+  `bash $INSTALL_SH` sites now redirect stdin from `/dev/null`. Forces
+  install.sh to non-interactive even when the test suite is invoked
+  from a TTY-attached shell (e.g., `./install.sh` triggering
+  `tests/run-tests.sh`); previously `[ -t 0 ]` autodetected the
+  inherited TTY and prompts blocked.
+- **Auto-dump install.sh tail on `[FAIL]`.** Suite runner emits the last
+  40 lines of `$CASE_OUT` before teardown on every failed case, so the
+  next failure surfaces WHICH prompt or stage stalled.
+- Test-env short-circuits under `MONSTERFLOW_INSTALL_TEST=1`:
+  `claude-md-merge.py` (install.sh) + `doctor.sh` (onboard.sh) +
+  `gh_auth_check_with_timeout` (onboard.sh) skipped, saving several
+  subprocesses per case. Healthy suite: 13.6s → 12.3s (~10%).
+
+### Added
+
+- **Spec: `install-graphify-wiki-coverage`.** Captures the future
+  Knowledge Layer stage for install.sh — detect graphify CLI, graphify
+  skill, the 6 obsidian-wiki skills, and `OBSIDIAN_VAULT_PATH`; offer
+  to install only missing pieces; re-run cleanly when state is already
+  correct. Ready for `/spec-review`.
+
 ### Renamed
 
 - **`/design` slash command renamed to `/blueprint`.** A parallel
