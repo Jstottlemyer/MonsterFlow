@@ -83,14 +83,17 @@ def check_target_eligibility(target_path):
     rel = os.path.relpath(abspath, REPO_ROOT)
     parts = rel.split(os.sep)
 
-    # Must be under personas/{review,plan,check}/
+    # Must be under personas/{review,design,check}/
+    # `plan` is accepted as a legacy alias for `design` (pre-rename
+    # back-compat); other names refused.
     if len(parts) < 3 or parts[0] != "personas" or parts[1] not in (
         "review",
-        "plan",
+        "design",
+        "plan",  # legacy alias
         "check",
     ):
         sys.stderr.write(
-            "error: ineligible path (must be under personas/{review,plan,check}/): "
+            "error: ineligible path (must be under personas/{review,design,check}/): "
             "%s\n" % target_path
         )
         sys.exit(3)

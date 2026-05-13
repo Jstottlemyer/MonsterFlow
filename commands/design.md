@@ -12,7 +12,7 @@ named `/plan` but we ceded that name back to Claude Code on 2026-05-12 —
 (`EnterPlanMode` / `ExitPlanMode`), not to this pipeline. The internal
 gate identifier remains `plan` so on-disk selection.json files, gate-mode
 keys, persona directory paths, the artifact filename `plan.md`, and the
-autorun shell `scripts/autorun/plan.sh` stay backward-compatible — only
+autorun shell `scripts/autorun/design.sh` stay backward-compatible — only
 the user-facing slash command moved.)
 
 Your job is to dispatch 7 parallel design agents, synthesize their analysis into an implementation plan, and present it for approval.
@@ -47,7 +47,7 @@ If `<feature>/spec-review/findings.jsonl` does not exist (legacy spec or `/spec-
 Before dispatching design agents, run the resolver in **tier-aware** mode:
 
 ```bash
-SELECTED=$(bash <REPO_DIR>/scripts/resolve-personas.sh plan \
+SELECTED=$(bash <REPO_DIR>/scripts/resolve-personas.sh design \
              --feature "<feature-slug>" \
              --with-tier \
              --emit-selection-json)
@@ -55,7 +55,7 @@ RESOLVER_EXIT=$?
 ```
 
 - `--with-tier` switches resolver stdout to colon-delimited `<persona>:<tier>` grammar (one line per selected persona; `tier ∈ {opus, sonnet}`). `codex-adversary` continues to be emitted bare (no tier suffix) when Codex is authed.
-- `--emit-selection-json` persists `docs/specs/<feature>/plan/selection.json` (records `tier_policy_applied`, dropped personas, and recovery state).
+- `--emit-selection-json` persists `docs/specs/<feature>/design/selection.json` (records `tier_policy_applied`, dropped personas, and recovery state).
 - If `RESOLVER_EXIT != 0` or stdout empty: apply `commands/_prompts/_resolver-recovery.md` (canonical recovery fragment — interactive: 3-option prompt; non-tty/autorun: abort). No silent seed fallback in headless mode.
 - No `agent_budget` in config → full roster (existing behavior).
 - Print one line: `Selected: <names> | Dropped: <names>` (strip `:<tier>` suffix for the display).
@@ -63,7 +63,7 @@ RESOLVER_EXIT=$?
 **Dispatch parsing.** Iterate each line of `$SELECTED`:
 
 1. **`codex-adversary`** (bare, no colon) → Codex path (Codex runs separately; do not dispatch via Agent tool). Per /plan policy, Codex is disabled at this gate by default — pass through unchanged.
-2. **`<persona>:<tier>`** (e.g. `api:opus`, `data-model:sonnet`) → split on `:`; load `personas/plan/<persona>.md`; invoke the Agent tool with `model: "opus"` (when tier is `opus`) or `model: "sonnet"` (when tier is `sonnet`). The model tier is set per-persona, not stage-wide.
+2. **`<persona>:<tier>`** (e.g. `api:opus`, `data-model:sonnet`) → split on `:`; load `personas/design/<persona>.md`; invoke the Agent tool with `model: "opus"` (when tier is `opus`) or `model: "sonnet"` (when tier is `sonnet`). The model tier is set per-persona, not stage-wide.
 3. **Bare persona that is not `codex-adversary`** (no colon suffix) → halt: `[dispatch] resolver emitted bare persona '<line>'; expected '<persona>:<tier>' — refusing to dispatch`. This indicates a `--with-tier` regression in the resolver; do not silently default a tier.
 
 Example stdout:
@@ -111,7 +111,7 @@ GATE_MAX_RECYCLES=$(gate_max_recycles_clamp "$SPEC")
 
 ## Phase 1: Dispatch Design Agents
 
-Read each persona file in `<REPO_DIR>/personas/plan/` corresponding to a name in `$SELECTED` (after stripping `:<tier>` suffix per Phase 0b parsing), then dispatch one parallel subagent per name using the Agent tool with the tier-resolved `model:` parameter. The legacy 7-designer roster (api, data-model, ux, scalability, security, integration, wave-sequencer) is the resolver's full-roster fallback. Each agent receives:
+Read each persona file in `<REPO_DIR>/personas/design/` corresponding to a name in `$SELECTED` (after stripping `:<tier>` suffix per Phase 0b parsing), then dispatch one parallel subagent per name using the Agent tool with the tier-resolved `model:` parameter. The legacy 7-designer roster (api, data-model, ux, scalability, security, integration, wave-sequencer) is the resolver's full-roster fallback. Each agent receives:
 - The spec content
 - The review findings (if available)
 - The constitution (if exists)

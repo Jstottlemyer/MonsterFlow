@@ -17,7 +17,7 @@ mkdir -p "$ARTIFACT_DIR"
 
 # ---------------------------------------------------------------------------
 # Resolver pre-flight (account-type-agent-scaling + dynamic-roster-per-gate)
-# plan.sh runs as a single synthesis call (no parallel persona dispatch),
+# design.sh runs as a single synthesis call (no parallel persona dispatch),
 # but the resolver still emits the full selected roster so we can:
 #   (a) write selection.json for the audit trail (persona-metrics validator
 #       + /wrap-insights drift baseline)
@@ -34,7 +34,7 @@ if [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
   RESOLVER_ERR="$(mktemp "${TMPDIR:-/tmp}/autorun-plan-resolver-XXXXXX.err")"
   trap 'rm -f "$RESOLVER_ERR"' EXIT
   RESOLVER_EXIT=0
-  SELECTED_RAW="$(bash "$REPO_DIR/scripts/resolve-personas.sh" plan \
+  SELECTED_RAW="$(bash "$REPO_DIR/scripts/resolve-personas.sh" design \
                     --feature "$SLUG" --with-tier --emit-selection-json 2>"$RESOLVER_ERR")" \
     || RESOLVER_EXIT=$?
   if [ "$RESOLVER_EXIT" -ne 0 ]; then
@@ -104,7 +104,7 @@ fi
 # ---------------------------------------------------------------------------
 if [ ! -f "$ARTIFACT_DIR/review-findings.md" ]; then
   echo "[autorun] plan: ERROR — $ARTIFACT_DIR/review-findings.md not found"
-  echo "[autorun] plan: run.sh must merge risk-findings.md into review-findings.md before calling plan.sh"
+  echo "[autorun] plan: run.sh must merge risk-findings.md into review-findings.md before calling design.sh"
   exit 1
 fi
 

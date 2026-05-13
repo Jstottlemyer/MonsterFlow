@@ -453,7 +453,7 @@ for row in sel:
 ##############################################################################
 # A3b Panel-size table — for each N in {2,3,4,5,6,7}, assert
 # tier_policy_applied.{opus_count_actual,sonnet_count_actual} per spec line
-# 59-65. N=2..6 use gate=check (6 personas); N=7 uses gate=plan (7 personas).
+# 59-65. N=2..6 use gate=check (6 personas); N=7 uses gate=design (7 personas).
 # (N=8 needs 8 personas on disk; out of scope without synthetic tree.)
 #
 # Expected (opus_min=1, sonnet_min=1, remainder_tiebreak=sonnet):
@@ -557,7 +557,7 @@ panel_size_case 3 check "1 2"
 panel_size_case 4 check "2 2"
 panel_size_case 5 check "2 3"
 panel_size_case 6 check "3 3"
-panel_size_case 7 plan  "3 4"
+panel_size_case 7 design "3 4"
 
 echo ""
 echo "--- A14 dispatch wiring grep (commands/*.md + autorun/*.sh) ---"
@@ -573,8 +573,8 @@ a14_wiring_grep "commands/check.md carries model: tier param" \
 a14_wiring_grep "autorun/spec-review.sh translates tier → --model" \
     "$REPO_DIR/scripts/autorun/spec-review.sh" \
     'claude-opus-4-5|claude-sonnet-4-6'
-a14_wiring_grep "autorun/plan.sh translates tier → --model" \
-    "$REPO_DIR/scripts/autorun/plan.sh" \
+a14_wiring_grep "autorun/design.sh translates tier → --model" \
+    "$REPO_DIR/scripts/autorun/design.sh" \
     'claude-opus-4-5|claude-sonnet-4-6'
 a14_wiring_grep "autorun/check.sh translates tier → --model" \
     "$REPO_DIR/scripts/autorun/check.sh" \

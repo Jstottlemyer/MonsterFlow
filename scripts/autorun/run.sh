@@ -898,7 +898,7 @@ if [ -f "$ARTIFACT_DIR/plan.md" ]; then
 else
   update_stage "plan"
   STAGE_EXIT=0
-  bash "$ENGINE_DIR/scripts/autorun/plan.sh" || STAGE_EXIT=$?
+  bash "$ENGINE_DIR/scripts/autorun/design.sh" || STAGE_EXIT=$?
   log_run "plan" "$STAGE_EXIT"
   if [ "$STAGE_EXIT" -ne 0 ]; then
     echo "[autorun] $SLUG: plan failed (exit $STAGE_EXIT)" >&2

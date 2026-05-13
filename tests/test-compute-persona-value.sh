@@ -82,7 +82,7 @@ setup_env() {
   rm -rf "$SANDBOX"
   mkdir -p "$SANDBOX/home/.claude/projects" \
            "$SANDBOX/home/.claude/personas/review" \
-           "$SANDBOX/home/.claude/personas/plan" \
+           "$SANDBOX/home/.claude/personas/design" \
            "$SANDBOX/home/.claude/personas/check" \
            "$SANDBOX/config/monsterflow"
   export HOME="$SANDBOX/home"
