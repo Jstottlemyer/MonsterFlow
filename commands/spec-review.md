@@ -4,7 +4,7 @@ description: Parallel PRD review — 6 specialist agents analyze the spec for ga
 
 **IMPORTANT: Do NOT invoke superpowers skills (writing-plans, brainstorming, executing-plans, etc.) from this command. This command IS the review workflow.**
 
-You are the review step in the pipeline: `/spec → /spec-review → /design → /check → /build`
+You are the review step in the pipeline: `/spec → /spec-review → /blueprint → /check → /build`
 
 Your job is to dispatch 6 parallel PRD reviewer agents against the spec, consolidate their findings, and present them for approval.
 
@@ -229,7 +229,7 @@ If the metrics paths are tracked-and-not-gitignored AND `docs/specs/<feature>/.p
    [Any agent disagreements and how they were resolved]
 
    [AUTORUN MODE: If AUTORUN=1 is set in your environment, skip this approval prompt. Write all artifacts and proceed immediately to the next stage. Do not output the approval prompt text below.]
-   Approve to proceed to /design? (approve / refine <what to change>)
+   Approve to proceed to /blueprint? (approve / refine <what to change>)
    ```
 
 2. **Write `docs/specs/<feature>/review.md`** with the full consolidated review.
@@ -238,7 +238,7 @@ If the metrics paths are tracked-and-not-gitignored AND `docs/specs/<feature>/.p
 
 Update the spec with any critical gaps that were resolved during review discussion. Announce:
 ```
-Review approved. Spec updated. Ready for /design.
+Review approved. Spec updated. Ready for /blueprint.
 ```
 
 ## On Refine

@@ -2,9 +2,9 @@
 
 Personal-tooling repo. Holds commands, personas, templates, and cross-project
 reference docs for Justin's 8-command pipeline (`/kickoff → /spec → /spec-review
-→ /design → /check → /build`, plus `/flow` and `/wrap`).
+→ /blueprint → /check → /build`, plus `/flow` and `/wrap`).
 
-(`/design` is MonsterFlow's design-and-implementation-planning gate. The
+(`/blueprint` is MonsterFlow's design-and-implementation-planning gate. The
 gate, the slash command, the persona directory (`personas/design/`), the
 autorun script (`scripts/autorun/design.sh`), the artifact filename
 (`docs/specs/<feature>/design.md`), the `selection.json` `gate` field,
@@ -21,7 +21,7 @@ Apply in addition to user-level `~/CLAUDE.md`.
 
 ## Built-in Claude Code commands
 
-`/design` is MonsterFlow's design gate. It stays in the terminal and writes `docs/specs/<feature>/design.md`. Avoid `/ultraplan` for pipeline work; it dispatches a remote browser session and produces no local artifact. `/insights` is opt-in via `/wrap-insights` (measurement mode); `/powerup` is ad-hoc educational and not wired into any flow. **`/plan` is Claude Code's built-in plan-mode** — different tool, different intent. If you want MonsterFlow's design pass, use `/design`.
+`/blueprint` is MonsterFlow's design gate. It stays in the terminal and writes `docs/specs/<feature>/design.md`. Avoid `/ultraplan` for pipeline work; it dispatches a remote browser session and produces no local artifact. `/insights` is opt-in via `/wrap-insights` (measurement mode); `/powerup` is ad-hoc educational and not wired into any flow. **`/plan` is Claude Code's built-in plan-mode** — different tool, different intent. If you want MonsterFlow's design pass, use `/blueprint`.
 
 `/wrap` has three tab-completable variants: `/wrap-quick` (fast triage only), `/wrap-insights` (adds Phase 1b `/insights`), `/wrap-full` (insights + force-run conditional phases). Bare-word args (`quick`, `insights`, `full`) still work for direct invocation; the subcommands exist so the variants show up in tab completion.
 
@@ -49,7 +49,7 @@ Tests for both subagents' frontmatter live at `tests/test-agents.sh`. Run `bash 
 
 The persona resolver (`scripts/resolve-personas.sh` / `_resolve_personas.py`) reads `~/.config/monsterflow/config.json` for an `agent_budget` integer (range 1–8). When set, the resolver caps the Claude-persona dispatch at that count per gate; `codex-adversary` is appended separately and does NOT count against the budget. Default (no config or no key) = full on-disk roster.
 
-Recommended: `{"agent_budget": 3}` gives 3 Claude + 1 Codex per gate (`/spec-review`, `/design`, `/check`) — roughly 50% Claude-token reduction vs the full 7/7/6 roster, while keeping an independent-model lens via Codex. Selection is data-driven (rankings from persona insights, falling back to seed list, then alphabetical). Once a feature is in flight, its picks are locked at `docs/specs/<feature>/.budget-lock.json` for deterministic reruns.
+Recommended: `{"agent_budget": 3}` gives 3 Claude + 1 Codex per gate (`/spec-review`, `/blueprint`, `/check`) — roughly 50% Claude-token reduction vs the full 7/7/6 roster, while keeping an independent-model lens via Codex. Selection is data-driven (rankings from persona insights, falling back to seed list, then alphabetical). Once a feature is in flight, its picks are locked at `docs/specs/<feature>/.budget-lock.json` for deterministic reruns.
 
 Kill switch: `MONSTERFLOW_DISABLE_BUDGET=1` bypasses the cap (full roster). Use only in emergencies; the `selection.json` audit trail records `selection_method=kill-switch`.
 
