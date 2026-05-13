@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "prompt_version": "findings-emit@1.0",
+  "stage": "design",
+  "feature": "autorun-overnight-policy",
+  "run_id": "5de79e23-285a-4f94-94bc-4a4d775ef986",
+  "iteration": 3,
+  "started_at": "2026-05-05T04:00:18Z",
+  "completed_at": "2026-05-05T04:00:18Z",
+  "status": "ok",
+  "personas": [
+    "api",
+    "data-model",
+    "ux",
+    "scalability",
+    "security",
+    "integration",
+    "wave-sequencer"
+  ],
+  "artifact_hash": "e7bf27ba09079ea769bf61acdaab0c3962a8292a4171be4d0c5b30b7f7384a1b",
+  "findings_count": 16,
+  "blocker_count": 13,
+  "major_count": 1,
+  "minor_count": 2,
+  "nit_count": 0,
+  "warnings": [
+    "iteration-3 incremental findings"
+  ]
+}

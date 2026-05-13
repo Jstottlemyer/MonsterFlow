@@ -12,7 +12,7 @@
     },
     "stage": {
       "type": "string",
-      "enum": ["spec-review", "plan", "check"]
+      "enum": ["spec-review", "design", "check"]
     },
     "persona": {
       "type": "string",

@@ -10,7 +10,7 @@ Your job is to execute the implementation plan using parallel agents where possi
 
 ## Pre-flight
 
-1. **Find artifacts**: Load `docs/specs/<feature>/plan.md` and optionally `docs/specs/<feature>/check.md`.
+1. **Find artifacts**: Load `docs/specs/<feature>/design.md` and optionally `docs/specs/<feature>/check.md`.
    - If `$ARGUMENTS` names a feature, use that.
    - If plan doesn't exist: "No plan found. Run /design first."
    - If check doesn't exist: "Plan not checked. Run /check first, or proceed without checkpoint? (Skipping /check increases rework risk.)"
@@ -22,10 +22,10 @@ Your job is to execute the implementation plan using parallel agents where possi
 
 Pre-flight before execution. If `docs/specs/<feature>/check/findings.jsonl` exists, run `commands/_prompts/survival-classifier.md` in **addressed-by-revision** mode:
 
-- Inputs: `<feature>/check/findings.jsonl` + `<feature>/check/source.plan.md` (pre-snapshot) + current `<feature>/plan.md` (post-revision).
-- **Pre-revision warning:** if `mtime(plan.md) < mtime(check/findings.jsonl)`, emit a warning that `plan.md` hasn't been edited since `/check`. Run anyway.
-- Idempotency: skip if recorded `artifact_hash` matches `sha256(plan.md)`; re-classify otherwise.
-- Outcome semantics: addressed-by-revision (substance NOT in source.plan.md but IS in plan.md after revision).
+- Inputs: `<feature>/check/findings.jsonl` + `<feature>/check/source.design.md` (pre-snapshot) + current `<feature>/design.md` (post-revision).
+- **Pre-revision warning:** if `mtime(design.md) < mtime(check/findings.jsonl)`, emit a warning that `design.md` hasn't been edited since `/check`. Run anyway.
+- Idempotency: skip if recorded `artifact_hash` matches `sha256(design.md)`; re-classify otherwise.
+- Outcome semantics: addressed-by-revision (substance NOT in source.design.md but IS in design.md after revision).
 - Output: atomic write to `<feature>/check/survival.jsonl`. Echo one-liner if any `classifier_error` rows are written.
 
 If `<feature>/check/findings.jsonl` does not exist, silent no-op.

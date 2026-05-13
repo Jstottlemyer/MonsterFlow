@@ -41,7 +41,7 @@
     },
     "gate": {
       "type": "string",
-      "enum": ["spec-review", "plan", "check"]
+      "enum": ["spec-review", "design", "check"]
     },
     "runs_in_window": {
       "type": "integer",

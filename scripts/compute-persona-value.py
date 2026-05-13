@@ -414,11 +414,14 @@ _AGENT_ID_RE = re.compile(r"agentId:\s*([0-9a-f]{17})")
 _TOTAL_TOKENS_RE = re.compile(r"total_tokens:\s*(\d+)")
 
 # review (persona dir) -> spec-review (gate name).
-_DIR_TO_GATE = {"review": "spec-review", "plan": "plan", "check": "check"}
+_DIR_TO_GATE = {"review": "spec-review", "design": "design", "check": "check"}
 # Reverse for cost-walk attribution sanity (not currently needed but documented).
 
 # Gate -> short prefix used by salt_finding_id().
-_GATE_PREFIX = {"spec-review": "sr", "plan": "pl", "check": "ck"}
+# Note: design gate keeps the historical "pl" prefix (formerly meant "plan")
+# to preserve existing finding-id continuity across the plan→design rename.
+# Don't "fix" pl → ds here without migrating every historical finding_id.
+_GATE_PREFIX = {"spec-review": "sr", "design": "pl", "check": "ck"}
 
 
 # --------------------------------------------------------------------------

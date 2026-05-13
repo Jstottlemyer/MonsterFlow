@@ -11,7 +11,7 @@ named `/plan` but we ceded that name back to Claude Code on 2026-05-12 —
 `/plan` belongs to Claude Code's built-in plan-mode tooling
 (`EnterPlanMode` / `ExitPlanMode`), not to this pipeline. The internal
 gate identifier remains `plan` so on-disk selection.json files, gate-mode
-keys, persona directory paths, the artifact filename `plan.md`, and the
+keys, persona directory paths, the artifact filename `design.md`, and the
 autorun shell `scripts/autorun/design.sh` stay backward-compatible — only
 the user-facing slash command moved.)
 
@@ -117,7 +117,7 @@ Read each persona file in `<REPO_DIR>/personas/design/` corresponding to a name 
 - The constitution (if exists)
 - Their persona's role, checklist, and key questions
 
-**As each design agent returns**, persist its raw output to `docs/specs/<feature>/plan/raw/<persona>.md` immediately (atomic write). The Phase 2c emit reads from this directory. (Note: no snapshot step at `/plan` — `plan.md` is synthesized fresh at this stage, not revised; there is no pre-state to snapshot.)
+**As each design agent returns**, persist its raw output to `docs/specs/<feature>/plan/raw/<persona>.md` immediately (atomic write). The Phase 2c emit reads from this directory. (Note: no snapshot step at `/plan` — `design.md` is synthesized fresh at this stage, not revised; there is no pre-state to snapshot.)
 
 The 7 designers:
 1. **api** — Interface design and developer/user ergonomics
@@ -163,9 +163,9 @@ Run `commands/_prompts/findings-emit.md`. It reads `docs/specs/<feature>/plan/ra
 
 - `docs/specs/<feature>/plan/findings.jsonl` — one row per design-recommendation cluster, with `personas[]` listing the design personas (api / data-model / ux / scalability / security / integration / wave-sequencer) that contributed.
 - `docs/specs/<feature>/plan/participation.jsonl`
-- `docs/specs/<feature>/plan/run.json` — `artifact_hash: sha256(plan.md)` (the freshly synthesized plan, not a source snapshot).
+- `docs/specs/<feature>/plan/run.json` — `artifact_hash: sha256(design.md)` (the freshly synthesized plan, not a source snapshot).
 
-`stage: "plan"` recorded on every emitted row. `prompt_version: "findings-emit@1.0"`. The next stage's classifier (`/check` Phase 0 in synthesis-inclusion mode) reads this `findings.jsonl` and judges which design recommendations made it through Judge into `plan.md`.
+`stage: "plan"` recorded on every emitted row. `prompt_version: "findings-emit@1.0"`. The next stage's classifier (`/check` Phase 0 in synthesis-inclusion mode) reads this `findings.jsonl` and judges which design recommendations made it through Judge into `design.md`.
 
 ## Phase 3: Present & Write
 
@@ -193,7 +193,7 @@ Run `commands/_prompts/findings-emit.md`. It reads `docs/specs/<feature>/plan/ra
    Approve to proceed to /check? (approve / adjust <what to change>)
    ```
 
-2. **Write `docs/specs/<feature>/plan.md`** with the full plan.
+2. **Write `docs/specs/<feature>/design.md`** with the full plan.
 
 ## On Approve
 
@@ -211,6 +211,6 @@ Modify the plan as requested, re-run affected design agents if needed, re-presen
 - **Concrete over abstract** — tasks should be implementable, not vague
 - **Show tradeoffs** — why approach A vs B
 - **YAGNI** — cut anything not needed for the current scope
-- **Persistent artifacts** — plan.md survives the session
+- **Persistent artifacts** — design.md survives the session
 
 **Arguments**: $ARGUMENTS

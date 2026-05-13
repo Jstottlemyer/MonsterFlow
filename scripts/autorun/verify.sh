@@ -139,7 +139,7 @@ WARNING: diff was truncated at 3000 lines (true size: ${TRUE_DIFF_LINES} lines).
 $(head -1000 "$SPEC_FILE")
 
 ## Plan
-$(head -500 "$ARTIFACT_DIR/plan.md" 2>/dev/null || echo "(plan not available)")
+$(head -500 "$ARTIFACT_DIR/design.md" 2>/dev/null || echo "(plan not available)")
 
 ## Committed Changes (git diff since pre-build SHA, capped at 3000 lines — ${DIFF_LINE_COUNT} actual lines shown)
 ${TRUNCATION_NOTE}

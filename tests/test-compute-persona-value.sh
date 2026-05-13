@@ -572,12 +572,12 @@ rankings = [json.loads(l) for l in open(out_path)]
 ranking_keys = {(r["persona"], r["gate"]) for r in rankings}
 
 # Walk source findings.jsonl across both fixture roots. Map gate dir name
-# (spec-review|plan|check) directly to the row's gate field.
+# (spec-review|design|check) directly to the row's gate field.
 source_keys = set()
 for root in (alpha, beta):
     for f in glob.glob(os.path.join(root, "docs", "specs", "*", "*", "findings.jsonl")):
         gate = os.path.basename(os.path.dirname(f))
-        if gate not in ("spec-review", "plan", "check"):
+        if gate not in ("spec-review", "design", "check"):
             continue
         with open(f) as fh:
             for line in fh:

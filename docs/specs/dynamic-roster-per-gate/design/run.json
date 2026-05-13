@@ -1,0 +1,13 @@
+{
+  "stage": "design",
+  "feature": "dynamic-roster-per-gate",
+  "artifact_hash": "sha256:7b3c1b7cb3debf9d87d111e74e730d93fa8ab88c8aee224703c108160b81fbca",
+  "artifact_file": "docs/specs/dynamic-roster-per-gate/plan.md",
+  "revision": 4,
+  "gate_mode": "permissive",
+  "personas": ["api","data-model","ux","scalability","security","integration","wave-sequencer"],
+  "codex_adversary": false,
+  "finding_count": 15,
+  "timestamp": "2026-05-12",
+  "prompt_version": "findings-emit@1.0"
+}

@@ -165,7 +165,7 @@
       "type": "string",
       "enum": [
         "spec-review",
-        "plan",
+        "design",
         "check",
         "verify",
         "build",

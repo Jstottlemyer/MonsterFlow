@@ -12,7 +12,7 @@ Your job is to dispatch 5 parallel plan reviewer agents, synthesize their findin
 
 ## Pre-flight
 
-1. **Find artifacts**: Load `docs/specs/<feature>/spec.md`, `docs/specs/<feature>/review.md`, and `docs/specs/<feature>/plan.md`.
+1. **Find artifacts**: Load `docs/specs/<feature>/spec.md`, `docs/specs/<feature>/review.md`, and `docs/specs/<feature>/design.md`.
    - If `$ARGUMENTS` names a feature, use that.
    - If plan doesn't exist: "No plan found. Run /design first."
 
@@ -22,9 +22,9 @@ Your job is to dispatch 5 parallel plan reviewer agents, synthesize their findin
 
 Pre-flight before reviewers dispatch. If `docs/specs/<feature>/plan/findings.jsonl` exists, run `commands/_prompts/survival-classifier.md` in **synthesis-inclusion** mode:
 
-- Inputs: `<feature>/plan/findings.jsonl` (design recommendations) + `<feature>/plan.md` (freshly synthesized — NO source snapshot, since `plan.md` is created fresh, not revised).
-- Idempotency: if `<feature>/plan/survival.jsonl` exists and every row's `artifact_hash` matches `sha256(plan.md)`, skip. If `artifact_hash` differs, re-classify and overwrite.
-- Outcome semantics: `addressed` = design recommendation visibly shaped `plan.md`; `not_addressed` = Judge dropped/demoted; `rejected_intentionally` = `plan.md`'s "Alternatives Considered" / "Rejected" / "Deferred" section explicitly names the recommendation.
+- Inputs: `<feature>/plan/findings.jsonl` (design recommendations) + `<feature>/design.md` (freshly synthesized — NO source snapshot, since `design.md` is created fresh, not revised).
+- Idempotency: if `<feature>/plan/survival.jsonl` exists and every row's `artifact_hash` matches `sha256(design.md)`, skip. If `artifact_hash` differs, re-classify and overwrite.
+- Outcome semantics: `addressed` = design recommendation visibly shaped `design.md`; `not_addressed` = Judge dropped/demoted; `rejected_intentionally` = `design.md`'s "Alternatives Considered" / "Rejected" / "Deferred" section explicitly names the recommendation.
 - Output: atomic write to `<feature>/plan/survival.jsonl`. Schema: `schemas/survival.schema.json`.
 - Echo one-liner if any `outcome: "classifier_error"` rows are written: `[persona-metrics] N findings could not be classified — see plan/survival.jsonl for reasons.`
 
@@ -36,8 +36,8 @@ If `<feature>/plan/findings.jsonl` does not exist (legacy spec or `/design` skip
 
 Before reviewer agents dispatch, run `commands/_prompts/snapshot.md`:
 
-- Snapshot `docs/specs/<feature>/plan.md` → `docs/specs/<feature>/check/source.plan.md`.
-- Refuse with `run.json.status: "failed"` if `plan.md` is not git-tracked.
+- Snapshot `docs/specs/<feature>/design.md` → `docs/specs/<feature>/check/source.design.md`.
+- Refuse with `run.json.status: "failed"` if `design.md` is not git-tracked.
 - Validate slug.
 - Create `docs/specs/<feature>/check/raw/`.
 - Rotate prior `findings.jsonl` to `findings-<UTC-ts>.jsonl` if present.
@@ -232,7 +232,7 @@ if command -v codex >/dev/null 2>&1 && codex login status >/dev/null 2>&1; then
 fi
 ```
 
-Replace `<plan-path>` with the resolved path to `docs/specs/<feature>/plan.md`. If `/tmp/codex-check-review.txt` exists after the run:
+Replace `<plan-path>` with the resolved path to `docs/specs/<feature>/design.md`. If `/tmp/codex-check-review.txt` exists after the run:
 - If Codex surfaces must-fix or should-fix items not already in the Claude synthesis, add a **Codex Adversarial View** subsection to the checkpoint output.
 - If Codex finds nothing new, note "Codex: no additional findings."
 - If Codex was skipped (not available), omit the section entirely — no mention of it.
@@ -314,7 +314,7 @@ Checkpoint passed. Ready for /build.
 
 ## On Fix Now
 
-Address the must-fix items by updating plan.md, then re-present. Do NOT re-run all 5 reviewers — only re-check the specific dimensions that had FAIL verdicts.
+Address the must-fix items by updating design.md, then re-present. Do NOT re-run all 5 reviewers — only re-check the specific dimensions that had FAIL verdicts.
 
 ## On NO-GO
 

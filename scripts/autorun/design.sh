@@ -31,14 +31,14 @@ mkdir -p "$ARTIFACT_DIR"
 SYNTHESIS_TIER=""
 SYNTHESIS_MODEL=""
 if [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
-  RESOLVER_ERR="$(mktemp "${TMPDIR:-/tmp}/autorun-plan-resolver-XXXXXX.err")"
+  RESOLVER_ERR="$(mktemp "${TMPDIR:-/tmp}/autorun-design-resolver-XXXXXX.err")"
   trap 'rm -f "$RESOLVER_ERR"' EXIT
   RESOLVER_EXIT=0
   SELECTED_RAW="$(bash "$REPO_DIR/scripts/resolve-personas.sh" design \
                     --feature "$SLUG" --with-tier --emit-selection-json 2>"$RESOLVER_ERR")" \
     || RESOLVER_EXIT=$?
   if [ "$RESOLVER_EXIT" -ne 0 ]; then
-    echo "[autorun] plan: ERROR — resolver exited $RESOLVER_EXIT" >&2
+    echo "[autorun] design: ERROR — resolver exited $RESOLVER_EXIT" >&2
     if [ -s "$RESOLVER_ERR" ]; then
       sed 's/^/  /' "$RESOLVER_ERR" >&2
     fi
@@ -50,7 +50,7 @@ if [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
   #   codex-adversary  → flag CODEX_REQUESTED=1; the Claude synthesis loop
   #                      still skips this line (Codex runs as a separate
   #                      post-synthesis adversarial pass below, after
-  #                      plan.md is written).
+  #                      design.md is written).
   #   anything else    → resolver contract violation; halt.
   SELECTED_PERSONAS=()
   SELECTED_TIERS=()
@@ -69,14 +69,14 @@ if [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
         SELECTED_TIERS+=("$tier_name")
         ;;
       *)
-        echo "[autorun:plan] resolver emitted bare persona '$line'; expected '<persona>:<tier>' — refusing to dispatch" >&2
+        echo "[autorun:design] resolver emitted bare persona '$line'; expected '<persona>:<tier>' — refusing to dispatch" >&2
         exit 1
         ;;
     esac
   done <<< "$SELECTED_RAW"
 
   if [ "${#SELECTED_TIERS[@]}" -eq 0 ]; then
-    echo "[autorun] plan: ERROR — resolver emitted zero Claude personas" >&2
+    echo "[autorun] design: ERROR — resolver emitted zero Claude personas" >&2
     exit 1
   fi
 
@@ -87,7 +87,7 @@ if [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
       opus)   SYNTHESIS_TIER="opus" ;;
       sonnet) : ;;
       *)
-        echo "[autorun:plan] unknown tier '$t'; expected 'opus' or 'sonnet'" >&2
+        echo "[autorun:design] unknown tier '$t'; expected 'opus' or 'sonnet'" >&2
         exit 1
         ;;
     esac
@@ -96,15 +96,15 @@ if [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
     opus)   SYNTHESIS_MODEL="claude-opus-4-5" ;;
     sonnet) SYNTHESIS_MODEL="claude-sonnet-4-6" ;;
   esac
-  echo "[autorun] plan: resolver selected: ${SELECTED_PERSONAS[*]} | synthesis tier=$SYNTHESIS_TIER → $SYNTHESIS_MODEL"
+  echo "[autorun] design: resolver selected: ${SELECTED_PERSONAS[*]} | synthesis tier=$SYNTHESIS_TIER → $SYNTHESIS_MODEL"
 fi
 
 # ---------------------------------------------------------------------------
 # Dependency: review-findings.md must exist (written by run.sh after risk merge)
 # ---------------------------------------------------------------------------
 if [ ! -f "$ARTIFACT_DIR/review-findings.md" ]; then
-  echo "[autorun] plan: ERROR — $ARTIFACT_DIR/review-findings.md not found"
-  echo "[autorun] plan: run.sh must merge risk-findings.md into review-findings.md before calling design.sh"
+  echo "[autorun] design: ERROR — $ARTIFACT_DIR/review-findings.md not found"
+  echo "[autorun] design: run.sh must merge risk-findings.md into review-findings.md before calling design.sh"
   exit 1
 fi
 
@@ -112,26 +112,26 @@ fi
 # AUTORUN_DRY_RUN stub mode
 # ---------------------------------------------------------------------------
 if [ "${AUTORUN_DRY_RUN:-0}" = "1" ]; then
-  echo "[autorun] plan: DRY RUN mode — skipping claude -p invocation"
+  echo "[autorun] design: DRY RUN mode — skipping claude -p invocation"
 
-  cat > "$ARTIFACT_DIR/plan.md" <<'EOF'
-# Plan (DRY RUN)
+  cat > "$ARTIFACT_DIR/design.md" <<'EOF'
+# Design (DRY RUN)
 **Note:** Dry-run stub.
 EOF
 
-  echo "[autorun] plan: dry-run artifact written; exiting 0"
+  echo "[autorun] design: dry-run artifact written; exiting 0"
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
 # Autonomy directive (injected via --system-prompt)
 # ---------------------------------------------------------------------------
-AUTONOMY_DIRECTIVE="You are running in fully autonomous overnight mode. Generate the implementation plan now. Do not ask for approval. Write plan.md to docs/specs/$SLUG/plan.md and stop."
+AUTONOMY_DIRECTIVE="You are running in fully autonomous overnight mode. Generate the implementation plan now. Do not ask for approval. Write design.md to docs/specs/$SLUG/design.md and stop."
 
 # ---------------------------------------------------------------------------
 # Build the user-message prompt
 # ---------------------------------------------------------------------------
-PROMPT="$(cat "$REPO_DIR/commands/plan.md")
+PROMPT="$(cat "$REPO_DIR/commands/design.md")
 
 ---
 AUTORUN_CONTEXT:
@@ -139,7 +139,7 @@ AUTORUN_CONTEXT:
 - SPEC_FILE: $SPEC_FILE
 - REVIEW_FINDINGS_FILE: $ARTIFACT_DIR/review-findings.md
 - AUTORUN: 1
-- MODE: headless autonomous — generate the implementation plan, write plan.md, then stop. Do not ask for approval.
+- MODE: headless autonomous — generate the implementation plan, write design.md, then stop. Do not ask for approval.
 
 ## Spec
 $(cat "$SPEC_FILE")
@@ -150,15 +150,15 @@ $(cat "$ARTIFACT_DIR/review-findings.md")"
 # ---------------------------------------------------------------------------
 # Invoke claude -p with timeout; capture stderr for diagnostics
 # ---------------------------------------------------------------------------
-STDERR_LOG="$(mktemp "${TMPDIR:-/tmp}/autorun-plan-XXXXXX.log")"
-STDOUT_LOG="$(mktemp "${TMPDIR:-/tmp}/autorun-plan-stdout-XXXXXX.log")"
+STDERR_LOG="$(mktemp "${TMPDIR:-/tmp}/autorun-design-XXXXXX.log")"
+STDOUT_LOG="$(mktemp "${TMPDIR:-/tmp}/autorun-design-stdout-XXXXXX.log")"
 # Extend the early RESOLVER_ERR trap to also clean the synthesis logs. The
 # resolver-block trap was set at line ~34 and would otherwise be replaced
 # (bash traps are last-wins). Re-include "$RESOLVER_ERR" so its cleanup
 # survives. Empty variable in DRY-RUN mode is harmless to `rm -f`.
 trap 'rm -f "$RESOLVER_ERR" "$STDERR_LOG" "$STDOUT_LOG"' EXIT
 
-echo "[autorun] plan: starting claude -p (timeout=${TIMEOUT_STAGE}s, slug=$SLUG, model=$SYNTHESIS_MODEL)"
+echo "[autorun] design: starting claude -p (timeout=${TIMEOUT_STAGE}s, slug=$SLUG, model=$SYNTHESIS_MODEL)"
 # No --add-dir: spec + review-findings are passed inline; removing 400-file context load
 
 CLAUDE_EXIT=0
@@ -170,56 +170,56 @@ printf '%s' "$PROMPT" | timeout "$TIMEOUT_STAGE" claude -p \
     2>"$STDERR_LOG" || CLAUDE_EXIT=$?
 
 if [ "$CLAUDE_EXIT" -ne 0 ]; then
-  echo "[autorun] plan: FAILED (claude -p exit $CLAUDE_EXIT)"
-  echo "[autorun] plan: last 50 lines of stderr:"
+  echo "[autorun] design: FAILED (claude -p exit $CLAUDE_EXIT)"
+  echo "[autorun] design: last 50 lines of stderr:"
   tail -n 50 "$STDERR_LOG" | sed 's/^/  /'
   exit 1
 fi
 
-echo "[autorun] plan: claude -p exited 0"
+echo "[autorun] design: claude -p exited 0"
 
 # ---------------------------------------------------------------------------
-# Artifact verification: check docs/specs/$SLUG/plan.md first,
+# Artifact verification: check docs/specs/$SLUG/design.md first,
 # then fall back to stdout capture
 # ---------------------------------------------------------------------------
-PLAN_CANONICAL="$PROJECT_DIR/docs/specs/$SLUG/plan.md"
+PLAN_CANONICAL="$PROJECT_DIR/docs/specs/$SLUG/design.md"
 
 if [ -f "$PLAN_CANONICAL" ]; then
-  cp "$PLAN_CANONICAL" "$ARTIFACT_DIR/plan.md"
-  echo "[autorun] plan: plan.md copied from $PLAN_CANONICAL"
+  cp "$PLAN_CANONICAL" "$ARTIFACT_DIR/design.md"
+  echo "[autorun] design: design.md copied from $PLAN_CANONICAL"
 else
-  echo "[autorun] plan: WARN — $PLAN_CANONICAL not found; capturing stdout as plan content"
+  echo "[autorun] design: WARN — $PLAN_CANONICAL not found; capturing stdout as plan content"
   if [ -s "$STDOUT_LOG" ]; then
-    cp "$STDOUT_LOG" "$ARTIFACT_DIR/plan.md"
-    echo "[autorun] plan: plan.md written from stdout capture ($(wc -l < "$ARTIFACT_DIR/plan.md") lines)"
+    cp "$STDOUT_LOG" "$ARTIFACT_DIR/design.md"
+    echo "[autorun] design: design.md written from stdout capture ($(wc -l < "$ARTIFACT_DIR/design.md") lines)"
   else
-    echo "[autorun] plan: ERROR — stdout was also empty; plan.md not written"
+    echo "[autorun] design: ERROR — stdout was also empty; design.md not written"
     exit 1
   fi
 fi
 
 # Final verification
-if [ ! -f "$ARTIFACT_DIR/plan.md" ]; then
-  echo "[autorun] plan: ERROR — $ARTIFACT_DIR/plan.md was not written"
+if [ ! -f "$ARTIFACT_DIR/design.md" ]; then
+  echo "[autorun] design: ERROR — $ARTIFACT_DIR/design.md was not written"
   exit 1
 fi
 
-echo "[autorun] plan: $ARTIFACT_DIR/plan.md written ($(wc -l < "$ARTIFACT_DIR/plan.md") lines)"
+echo "[autorun] design: $ARTIFACT_DIR/design.md written ($(wc -l < "$ARTIFACT_DIR/design.md") lines)"
 
 # ---------------------------------------------------------------------------
 # Codex adversarial design critique (post-synthesis pass)
 #
 # Activated when the resolver emitted `codex-adversary` for this gate (i.e.
 # `agent_budget` is configured and Codex is authenticated). Runs after the
-# Claude synthesis has produced plan.md so Codex critiques the actual proposed
+# Claude synthesis has produced design.md so Codex critiques the actual proposed
 # design, not just the inputs.
 #
 # Failure is non-fatal: a probe/timeout/exec failure logs a warning and
-# continues with the Claude-only plan.md. The pipeline never halts here.
+# continues with the Claude-only design.md. The pipeline never halts here.
 #
 # Output: appends a labeled "## Adversarial Design Critique (Codex)" section
-# to plan.md (so /check sees it via its existing plan.md read) AND writes a
-# sibling `plan-codex-findings.md` for downstream tooling / morning-report use.
+# to design.md (so /check sees it via its existing design.md read) AND writes a
+# sibling `design-codex-findings.md` for downstream tooling / morning-report use.
 # ---------------------------------------------------------------------------
 if [ "${AUTORUN_DRY_RUN:-0}" != "1" ] && [ "${CODEX_REQUESTED:-0}" = "1" ]; then
   CODEX_PROBE_BIN="${AUTORUN_CODEX_PROBE_BIN:-$REPO_DIR/scripts/autorun/_codex_probe.sh}"
@@ -227,16 +227,16 @@ if [ "${AUTORUN_DRY_RUN:-0}" != "1" ] && [ "${CODEX_REQUESTED:-0}" = "1" ]; then
   bash "$CODEX_PROBE_BIN" >/dev/null 2>&1 || CODEX_PROBE_EXIT=$?
 
   if [ "$CODEX_PROBE_EXIT" -eq 0 ]; then
-    echo "[autorun] plan: running Codex adversarial design critique (timeout=${TIMEOUT_CODEX}s)"
-    CODEX_DESIGN_OUT="$(mktemp -t "autorun-plan-codex.XXXXXX")"
-    CODEX_DESIGN_CTX="$(mktemp -t "autorun-plan-codex-ctx.XXXXXX")"
+    echo "[autorun] design: running Codex adversarial design critique (timeout=${TIMEOUT_CODEX}s)"
+    CODEX_DESIGN_OUT="$(mktemp -t "autorun-design-codex.XXXXXX")"
+    CODEX_DESIGN_CTX="$(mktemp -t "autorun-design-codex-ctx.XXXXXX")"
     {
       printf '## Spec\n'
       cat "$SPEC_FILE"
       printf '\n## Review Findings\n'
       cat "$ARTIFACT_DIR/review-findings.md"
       printf '\n## Proposed Plan (Claude synthesis)\n'
-      cat "$ARTIFACT_DIR/plan.md"
+      cat "$ARTIFACT_DIR/design.md"
     } > "$CODEX_DESIGN_CTX"
 
     CODEX_DESIGN_EXIT=0
@@ -265,25 +265,25 @@ Be terse. Aim for under 500 words total. No preamble; start with the first findi
       {
         printf '\n\n---\n\n## Adversarial Design Critique (Codex)\n\n'
         cat "$CODEX_DESIGN_OUT"
-      } >> "$ARTIFACT_DIR/plan.md"
-      cp "$CODEX_DESIGN_OUT" "$ARTIFACT_DIR/plan-codex-findings.md"
+      } >> "$ARTIFACT_DIR/design.md"
+      cp "$CODEX_DESIGN_OUT" "$ARTIFACT_DIR/design-codex-findings.md"
       # Mirror back to the canonical spec dir so re-reads stay consistent.
       PLAN_CANONICAL_DIR="$PROJECT_DIR/docs/specs/$SLUG"
-      if [ -f "$PLAN_CANONICAL_DIR/plan.md" ]; then
-        cp "$ARTIFACT_DIR/plan.md" "$PLAN_CANONICAL_DIR/plan.md"
+      if [ -f "$PLAN_CANONICAL_DIR/design.md" ]; then
+        cp "$ARTIFACT_DIR/design.md" "$PLAN_CANONICAL_DIR/design.md"
       fi
-      echo "[autorun] plan: Codex critique appended ($(wc -l < "$CODEX_DESIGN_OUT") lines)"
+      echo "[autorun] design: Codex critique appended ($(wc -l < "$CODEX_DESIGN_OUT") lines)"
     else
-      echo "[autorun] plan: WARN — Codex critique skipped/failed (exit $CODEX_DESIGN_EXIT); continuing with Claude-only plan.md" >&2
+      echo "[autorun] design: WARN — Codex critique skipped/failed (exit $CODEX_DESIGN_EXIT); continuing with Claude-only design.md" >&2
     fi
     rm -f "$CODEX_DESIGN_OUT" "$CODEX_DESIGN_CTX"
   else
     case "$CODEX_PROBE_EXIT" in
-      1) echo "[autorun] plan: Codex unavailable (binary not on PATH) — skipping critique" >&2 ;;
-      2) echo "[autorun] plan: Codex unavailable (auth-failed) — skipping critique" >&2 ;;
-      *) echo "[autorun] plan: Codex probe exit=$CODEX_PROBE_EXIT — skipping critique" >&2 ;;
+      1) echo "[autorun] design: Codex unavailable (binary not on PATH) — skipping critique" >&2 ;;
+      2) echo "[autorun] design: Codex unavailable (auth-failed) — skipping critique" >&2 ;;
+      *) echo "[autorun] design: Codex probe exit=$CODEX_PROBE_EXIT — skipping critique" >&2 ;;
     esac
   fi
 fi
 
-echo "[autorun] plan: complete"
+echo "[autorun] design: complete"

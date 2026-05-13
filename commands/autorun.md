@@ -20,7 +20,7 @@ description: Run the full pipeline headlessly overnight — spec-review → plan
    ```
 3. Confirm it started with `autorun status`.
 
-Do NOT read the stage commands (spec-review.md, plan.md, etc.) and simulate them yourself. The entire pipeline is driven by `scripts/autorun/run.sh` via the `autorun` CLI.
+Do NOT read the stage commands (spec-review.md, design.md, etc.) and simulate them yourself. The entire pipeline is driven by `scripts/autorun/run.sh` via the `autorun` CLI.
 
 ---
 
@@ -249,7 +249,7 @@ Each queue item runs through these stages in order:
 
 ### Stage 3 — Plan
 - Sequential; receives merged review + risk findings as context
-- Output: `queue/<slug>/plan.md`
+- Output: `queue/<slug>/design.md`
 
 ### Stage 4 — Check
 - 5 agents validate the plan
@@ -390,7 +390,7 @@ queue/
   myfeature/
     review-findings.md        # merged spec-review + risk output
     risk-findings.md
-    plan.md
+    design.md
     check.md
     build-log.md
     pre-build-sha.txt         # written once at Stage 5 entry

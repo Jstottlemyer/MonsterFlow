@@ -847,7 +847,7 @@
 
     <h3 style="margin-top:40px;font-size:20px;font-weight:600">How the night actually goes</h3>
     <ul>
-      <li><strong>Per-feature.</strong> Spec-review → plan → check → build → PR. Each gate's reviewers run in parallel; their findings get judged, deduped, and synthesized before the next gate starts.</li>
+      <li><strong>Per-feature.</strong> Spec-review → design → check → build → PR. Each gate's reviewers run in parallel; their findings get judged, deduped, and synthesized before the next gate starts.</li>
       <li><strong>Permissive overnight.</strong> Most contract / docs / test findings get logged as follow-ups and let the run keep moving. Architectural and security findings route through the bounded-retry loop above.</li>
       <li><strong>Every run lands as a PR.</strong> Default is push-and-review — autorun opens a PR with the artifacts attached, I read it with coffee. Auto-merge is opt-in per-project (set <code>auto_merge_policy</code> in the spec) and requires the gates I trust for <em>that</em> codebase to be green. The pipeline doesn't yet run a post-build runtime check (playwright / E2E / smoke); until it does, "clean gates" doesn't mean "validated end-to-end" and the default stays conservative.</li>
       <li><strong>STOP file.</strong> Touch <code>queue/STOP</code> any time and the next iteration boundary halts cleanly. Mid-flight runs finish what they're on; the queue stops.</li>
@@ -894,7 +894,7 @@ flowchart TD
     SR["/spec-review\nrequirements · gaps · ambiguity\nfeasibility · scope · stakeholders"]:::review
     JS1["Judge · Dedupe · Synth\ncluster · attribute · compose → review.md"]:::synth
     P["/design\napi · data-model · ux · scalability\nsecurity · integration · wave-sequencer"]:::plan
-    JS2["Judge · Dedupe · Synth → plan.md"]:::synth
+    JS2["Judge · Dedupe · Synth → design.md"]:::synth
     C["/check\ncompleteness · sequencing · risk\nscope-discipline · testability"]:::gate
     JS3["Judge · Dedupe · Synth → check.md\nthree-tier verdict"]:::synth
     V1["GO\nclean pass"]:::verdictGo
@@ -947,7 +947,7 @@ flowchart TD
       </pre>
     </div>
     <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Three-tier verdict at /check.</strong> Instead of a binary halt-or-pass, every gate emits one of three verdicts: <code>GO</code> (clean pass), <code>GO_WITH_FIXES</code> (non-architectural findings logged as follow-ups and consumed by <code>/build</code> wave 1 — the common case overnight), and <code>NO_GO</code> (architectural, security, or unclassified findings halt the pipeline). The same verdict shape applies at <code>/spec-review</code> and <code>/design</code>; <code>/check</code> is the last gate before code.</p>
-    <p class="lede" style="margin-top:24px">Each gate runs specialist agents in parallel; a <strong style="color:var(--fg)">Judge</strong> then clusters their raw output, attributes each finding to its source, and composes the synthesized artifact that drives the next phase. <code>spec.md</code> captures intent through Q&amp;A, then feeds 6 PRD reviewers → Judge → <code>review.md</code>; that feeds 7 design agents → Judge → <code>plan.md</code>; that feeds 5 plan validators → Judge → <code>check.md</code>. <code>/build</code> executes against the plan with TDD and verification discipline. <code>/wrap</code> distills what changed back into memory and the wiki. Small work skips the gates it doesn't need — <strong style="color:var(--fg)">same flow scales from a typo fix to a V2</strong>.</p>
+    <p class="lede" style="margin-top:24px">Each gate runs specialist agents in parallel; a <strong style="color:var(--fg)">Judge</strong> then clusters their raw output, attributes each finding to its source, and composes the synthesized artifact that drives the next phase. <code>spec.md</code> captures intent through Q&amp;A, then feeds 7 PRD reviewers → Judge → <code>review.md</code>; that feeds 7 design agents → Judge → <code>design.md</code>; that feeds 6 check validators → Judge → <code>check.md</code>. <code>/build</code> executes against the design with TDD and verification discipline. <code>/wrap</code> distills what changed back into memory and the wiki. Small work skips the gates it doesn't need — <strong style="color:var(--fg)">same flow scales from a typo fix to a V2</strong>.</p>
     <p class="lede" style="margin-top:16px"><strong style="color:var(--fg)">Codex (optional).</strong> If <a href="#requirements">installed</a>, an OpenAI Codex agent runs an adversarial pass at <code>/spec-review</code>, <code>/check</code>, and <code>/build</code> — independent perspective from a different model family, joining the same Judge synthesis as the in-house personas. Silent skip if not set up.</p>
   </div>
 </section>
@@ -1068,7 +1068,7 @@ flowchart TD
         <tr><td><code>/spec</code></td><td>Confidence-tracked Q&amp;A — writes <code>spec.md</code></td><td>Interactive</td></tr>
         <tr><td><code>/spec-review</code></td><td>Parallel PRD review — gaps, risks, ambiguity; + Codex adversarial pass (optional)</td><td>6 reviewers</td></tr>
         <tr><td><code>/design</code></td><td>Architecture + implementation design (incl. wave-sequencer for data-contract precedence). Renamed from <code>/plan</code> 2026-05-12 — <code>/plan</code> belongs to Claude Code's built-in plan-mode now, not to MonsterFlow.</td><td>7 designers</td></tr>
-        <tr><td><code>/check</code></td><td>Last gate before code — validates the plan; + Codex adversarial pass (optional)</td><td>5 validators</td></tr>
+        <tr><td><code>/check</code></td><td>Last gate before code — validates the design; + Codex adversarial pass (optional)</td><td>6 validators</td></tr>
         <tr><td><code>/build</code></td><td>Parallel execution with verification discipline; + Codex implementation review (optional)</td><td>Superpowers</td></tr>
         <tr><td><code>/autorun</code></td><td>Queues a spec and drives all 8 stages unattended. One slug per invocation; multi-spec queues use <code>autorun-batch.sh --mode=overnight</code>. Permissive overnight: contract / docs / test findings get logged as follow-ups; architectural and security findings get up to three logged attempts to converge before halting. Works cross-project — engine scripts stay in MonsterFlow, target repo's git/docs/queue live in <code>$PWD</code>. See the <a href="#autorun">Autorun section</a> above.</td><td>Shell</td></tr>
         <tr><td><code>/flow</code></td><td>Displays the workflow reference card</td><td>—</td></tr>
@@ -1190,7 +1190,7 @@ cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh">Copy</button><pre class="inst
 ║                                                              ║
 ║  FEATURE (full pipeline)                                     ║
 ║  /spec  →  /spec-review  →  /design  →  /check  →  /build    ║
-║   define    6 PRD          7 design   5 plan     execute     ║
+║   define    7 PRD          7 design   6 check    execute     ║
 ║   (Q&amp;A)     agents         agents     agents     (parallel)  ║
 ║  + firecrawl (research) · context7 (API docs)                ║
 ║  + codex adversarial review at spec-review, check, build     ║
@@ -1219,7 +1219,7 @@ cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh">Copy</button><pre class="inst
 ║  docs/specs/constitution.md     (project principles)         ║
 ║  docs/specs/&lt;feature&gt;/spec.md   (living spec)                ║
 ║  docs/specs/&lt;feature&gt;/review.md (PRD review findings)        ║
-║  docs/specs/&lt;feature&gt;/plan.md   (implementation plan)        ║
+║  docs/specs/&lt;feature&gt;/design.md (implementation design)      ║
 ║  docs/specs/&lt;feature&gt;/check.md  (gap checkpoint)             ║
 ║                                                              ║
 ║  KNOWLEDGE LAYER                   [graphify + obsidian]     ║
@@ -1241,7 +1241,7 @@ cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh">Copy</button><pre class="inst
 ║          knowledge flush · git loose ends                    ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
-║  AGENTS: review(6) plan(6) check(5) code-review(9)           ║
+║  AGENTS: review(7) design(7) check(6) code-review(9)         ║
 ║  + judge · synthesis · domain agents                         ║
 ║                                                              ║
 ║  PLUGINS                                                     ║

@@ -71,11 +71,11 @@ mkdir -p "$SIDECAR_DIR"
 CHECK_CANONICAL="$PROJECT_DIR/docs/specs/$SLUG/check.md"
 
 # ---------------------------------------------------------------------------
-# Dependency: plan.md must exist (skipped in dry-run + test-mode)
+# Dependency: design.md must exist (skipped in dry-run + test-mode)
 # ---------------------------------------------------------------------------
 if [ "${CHECK_TEST_MODE:-0}" != "1" ] && [ "${AUTORUN_DRY_RUN:-0}" != "1" ]; then
-  if [ ! -f "$ARTIFACT_DIR/plan.md" ]; then
-    echo "[autorun] check: ERROR — $ARTIFACT_DIR/plan.md not found" >&2
+  if [ ! -f "$ARTIFACT_DIR/design.md" ]; then
+    echo "[autorun] check: ERROR — $ARTIFACT_DIR/design.md not found" >&2
     exit 1
   fi
 fi
@@ -552,7 +552,7 @@ fi
 AUTONOMY_DIRECTIVE="You are running in fully autonomous overnight mode. At every decision point, pick the safest reversible option and execute. Do not ask for approval. Do not pause for user input. Proceed immediately."
 
 SPEC_CONTENT="$(cat "$SPEC_FILE")"
-PLAN_CONTENT="$(cat "$ARTIFACT_DIR/plan.md")"
+PLAN_CONTENT="$(cat "$ARTIFACT_DIR/design.md")"
 
 # ---------------------------------------------------------------------------
 # Resolve which personas to dispatch (account-type-agent-scaling)

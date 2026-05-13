@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "feature": "dynamic-roster-1-tags",
+  "gate": "design",
+  "ran_at": "2026-05-08T01:20:56Z",
+  "selection_method": "full",
+  "selected": [
+    "api",
+    "data-model",
+    "integration",
+    "scalability",
+    "security",
+    "ux",
+    "wave-sequencer"
+  ],
+  "dropped": [],
+  "dropped_pins": [],
+  "codex_status": "appended",
+  "budget_used": 7,
+  "budget_source": "unconfigured",
+  "locked_from": null,
+  "resolver_exit": 0
+}

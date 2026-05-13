@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://monsterflow.dev/schemas/v1/tag-enum.schema.json",
-  "$comment": "v1.1 lockstep marker (2026-05-12): co-touched with persona-frontmatter, spec-frontmatter, selection schemas to satisfy tests/test-schema-lockstep.sh case2 after commit 0208d8a's partial bump.",
+  "$comment": "v1.1 lockstep marker (2026-05-12): co-touched with persona-frontmatter, spec-frontmatter, selection schemas to satisfy tests/test-schema-lockstep.sh case2 after commit 0208d8a's partial bump; co-touched again on plan→design rename (R2).",
   "title": "MonsterFlow tag enum (v1.1)",
-  "description": "Closed 10-value vocabulary for spec tags: and persona fit_tags:. v1.1 (2026-05-12) adds `pipeline` for specs that modify the /spec /spec-review /plan /check /build pipeline itself or its autorun shells. Pure additive extension — no existing personas need re-tagging. Removal/rename of existing values still requires a v2 bump per the original extension policy.",
+  "description": "Closed 10-value vocabulary for spec tags: and persona fit_tags:. v1.1 (2026-05-12) adds `pipeline` for specs that modify the /spec /spec-review /design /check /build pipeline itself or its autorun shells. Pure additive extension — no existing personas need re-tagging. Removal/rename of existing values still requires a v2 bump per the original extension policy.",
   "type": "string",
   "enum": ["api", "data", "docs", "integration", "migration", "pipeline", "refactor", "scalability", "security", "ux"]
 }

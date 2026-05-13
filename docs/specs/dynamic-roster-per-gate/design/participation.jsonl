@@ -1,0 +1,7 @@
+{"stage":"plan","gate":"plan","persona":"api","finding_count":4,"survived_count":4,"survival_rate":1.0,"prompt_version":"findings-emit@1.0"}
+{"stage":"plan","gate":"plan","persona":"data-model","finding_count":4,"survived_count":4,"survival_rate":1.0,"prompt_version":"findings-emit@1.0"}
+{"stage":"plan","gate":"plan","persona":"ux","finding_count":3,"survived_count":3,"survival_rate":1.0,"prompt_version":"findings-emit@1.0"}
+{"stage":"plan","gate":"plan","persona":"scalability","finding_count":3,"survived_count":3,"survival_rate":1.0,"prompt_version":"findings-emit@1.0"}
+{"stage":"plan","gate":"plan","persona":"security","finding_count":5,"survived_count":5,"survival_rate":1.0,"prompt_version":"findings-emit@1.0"}
+{"stage":"plan","gate":"plan","persona":"integration","finding_count":5,"survived_count":5,"survival_rate":1.0,"prompt_version":"findings-emit@1.0"}
+{"stage":"plan","gate":"plan","persona":"wave-sequencer","finding_count":4,"survived_count":4,"survival_rate":1.0,"prompt_version":"findings-emit@1.0"}

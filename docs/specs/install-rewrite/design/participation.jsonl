@@ -1,0 +1,7 @@
+{"schema_version": 1, "prompt_version": "findings-emit@1.0", "stage": "design", "persona": "api", "model": "claude-opus-4-7", "status": "ok", "findings_emitted": 7, "verdict": "DESIGN PINNED"}
+{"schema_version": 1, "prompt_version": "findings-emit@1.0", "stage": "design", "persona": "data-model", "model": "claude-opus-4-7", "status": "ok", "findings_emitted": 6, "verdict": "DESIGN PINNED"}
+{"schema_version": 1, "prompt_version": "findings-emit@1.0", "stage": "design", "persona": "ux", "model": "claude-opus-4-7", "status": "ok", "findings_emitted": 5, "verdict": "DESIGN PINNED"}
+{"schema_version": 1, "prompt_version": "findings-emit@1.0", "stage": "design", "persona": "scalability", "model": "claude-opus-4-7", "status": "ok", "findings_emitted": 4, "verdict": "DESIGN PINNED"}
+{"schema_version": 1, "prompt_version": "findings-emit@1.0", "stage": "design", "persona": "security", "model": "claude-opus-4-7", "status": "ok", "findings_emitted": 12, "verdict": "DESIGN PINNED"}
+{"schema_version": 1, "prompt_version": "findings-emit@1.0", "stage": "design", "persona": "integration", "model": "claude-opus-4-7", "status": "ok", "findings_emitted": 9, "verdict": "DESIGN PINNED"}
+{"schema_version": 1, "prompt_version": "findings-emit@1.0", "stage": "design", "persona": "wave-sequencer", "model": "claude-opus-4-7", "status": "ok", "findings_emitted": 5, "verdict": "DESIGN PINNED"}

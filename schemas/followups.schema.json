@@ -14,7 +14,7 @@
     "schema_version":     {"type": "integer", "const": 1},
     "prompt_version":     {"type": "string", "const": "followups-emit@1.0"},
     "finding_id":         {"type": "string", "pattern": "^(sr|pl|ck)-[0-9a-f]{10,}$", "description": "Same shape as findings.jsonl finding_id. Stage prefix discriminates source gate."},
-    "source_gate":        {"type": "string", "enum": ["spec-review", "plan", "check"], "description": "Gate that emitted this row. Lifecycle reconciliation is scoped to source_gate == current_gate."},
+    "source_gate":        {"type": "string", "enum": ["spec-review", "design", "check"], "description": "Gate that emitted this row. Lifecycle reconciliation is scoped to source_gate == current_gate."},
     "source_iteration":   {"type": "integer", "minimum": 1},
     "class":              {"type": "string", "enum": ["contract", "documentation", "tests", "scope-cuts"], "description": "Followups never carry architectural/security/unclassified — those classes always block and never reach followups by construction."},
     "title":              {"type": "string", "maxLength": 80},

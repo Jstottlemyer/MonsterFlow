@@ -75,11 +75,11 @@ REQUIRED_TOP_LEVEL: tuple[str, ...] = (
 )
 
 ALLOWED_TYPE_VALUES: frozenset[str] = frozenset({"agent_dispatch"})
-ALLOWED_GATE_VALUES: frozenset[str] = frozenset({"spec-review", "plan", "check"})
+ALLOWED_GATE_VALUES: frozenset[str] = frozenset({"spec-review", "design", "check"})
 
 # Persona DIR is 'review' (for the spec-review gate); gate name is 'spec-review'.
 # Coordinator-fixed at /build Stage 1A handoff; redactor brought into sync at /preship per Codex P2.
-PERSONA_PATH_RE = re.compile(r"^personas/(review|plan|check)/[a-z0-9][a-z0-9-]*\.md$")
+PERSONA_PATH_RE = re.compile(r"^personas/(review|design|check)/[a-z0-9][a-z0-9-]*\.md$")
 AGENT_ID_RE = re.compile(r"^[0-9a-f]{17}$")
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"

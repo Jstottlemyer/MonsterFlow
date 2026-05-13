@@ -43,8 +43,8 @@ import os
 import sys
 from pathlib import Path
 
-# Render order is locked: spec-review first, then plan, then check.
-_GATE_ORDER = ["spec-review", "plan", "check"]
+# Render order is locked: spec-review first, then design, then check.
+_GATE_ORDER = ["spec-review", "design", "check"]
 _QUALIFY_MIN = 3   # "runs_in_window >= 3" per spec edge-case e1.
 _TOP_N = 3
 

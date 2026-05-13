@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "prompt_version": "findings-emit@1.0",
+  "feature": "pipeline-gate-permissiveness",
+  "stage": "design",
+  "ran_at": "2026-05-06T01:58:04Z",
+  "artifact_hash": "fd42cd3582c280b098655187016ebd1c46cb8e483077daf5ff4deaddecef8585",
+  "model_versions": {
+    "api": "claude-opus-4-7",
+    "codex-adversary": "codex",
+    "data-model": "claude-opus-4-7",
+    "integration": "claude-opus-4-7",
+    "scalability": "claude-opus-4-7",
+    "security": "claude-opus-4-7",
+    "ux": "claude-opus-4-7",
+    "wave-sequencer": "claude-opus-4-7"
+  },
+  "findings_count": 28,
+  "personas_ran": [
+    "api",
+    "codex-adversary",
+    "data-model",
+    "integration",
+    "scalability",
+    "security",
+    "ux",
+    "wave-sequencer"
+  ],
+  "personas_silent": [],
+  "personas_failed": [],
+  "personas_timeout": [],
+  "status": "ok",
+  "warnings": []
+}

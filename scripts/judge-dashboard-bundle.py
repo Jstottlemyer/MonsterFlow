@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Walk ~/Projects/*/docs/specs/<feature>/{spec-review,plan,check}/ and emit a
+Walk ~/Projects/*/docs/specs/<feature>/{spec-review,design,check}/ and emit a
 script-tag JSON bundle for the Judge tab of the dashboard.
 
 Output shape:
@@ -14,7 +14,7 @@ Output shape:
           "<feature>": {
             "stages": {
               "spec-review": { ... },
-              "plan":        { ... },
+              "design":      { ... },
               "check":       { ... }
             }
           }
@@ -52,7 +52,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-STAGES = ("spec-review", "plan", "check")
+STAGES = ("spec-review", "design", "check")
 SKIP_PATH_FRAGMENTS = ("/tests/fixtures/", "/node_modules/", "/.git/")
 VERDICT_RE = re.compile(
     r"\b(NO[- ]GO|GO WITH FIXES|GO|PASS WITH NOTES|PASS|FAIL)\b",

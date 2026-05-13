@@ -152,7 +152,7 @@
     },
     "stage": {
       "type": "string",
-      "enum": ["spec-review", "plan", "check"]
+      "enum": ["spec-review", "design", "check"]
     }
   },
   "additionalProperties": false
