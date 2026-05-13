@@ -4,6 +4,41 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-05-13
+
+### Added
+
+- **`install.sh` Knowledge Layer stage.** New `do_knowledge_layer` block
+  runs between `do_theme_install` and the CLAUDE.md baseline merger.
+  Detects 5 knowledge-layer pieces (graphify CLI, the 6 obsidian-wiki
+  skills, `OBSIDIAN_VAULT_PATH`, Obsidian.app, cmux config-without-binary
+  drift), classifies each as Ready / Can-install-now / Manual-action-required,
+  and prompts only when the Can-install-now bucket is non-empty.
+  Adopter default is prompt-N; owner is auto-yes (respects `--no-install`).
+  17 new tests in `tests/test-install-knowledge-layer.sh` cover AC1–AC15
+  plus `posix_quote` hoist integrity. Suite count: 59 → 60.
+- **`MONSTERFLOW_APPLICATIONS_DIR`** env override for `detect_obsidian_app`
+  (test seam matching the existing `MONSTERFLOW_HASCMD_OVERRIDE` pattern).
+- **`parse_obsidian_config`** pure-bash parser. Handles quoted/unquoted
+  values, `export` prefix, inline comments outside quotes, `#` inside
+  quoted paths (e.g. `~/Documents/notes#archive`), CRLF tolerance, tilde
+  expansion via `${VAR/#\~/$HOME}`, last-wins on duplicate keys. No
+  `source`, no `eval` (security invariant in function docstring).
+
+### Changed
+
+- **`posix_quote` hoisted to top-level** (was nested inside
+  `do_theme_install`). Required so `install_obsidian_env()` can call
+  it under `--no-theme` runs.
+
+### Fixed
+
+- **`config/cmux.json` no longer overrides user theme.** Dropped
+  `app.appearance: "system"` (was clobbering adopter-curated look/feel
+  via the theme-stage symlink) and `notifications.sound: "default"`
+  (no-op re-assertion of the default). Kept `sidebar.branchLayout: "vertical"`
+  as a defensible workflow-shape opinion.
+
 ## [0.11.10] - 2026-05-13
 
 ### Fixed
