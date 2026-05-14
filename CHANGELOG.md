@@ -4,6 +4,23 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-05-14
+
+### Fixed
+
+- **`/wrap-insights` Phase 1c silent failure** — `scripts/compute-persona-value.py`'s
+  cost-walk prompt parser had two related gaps after the plan→design rename:
+  (a) `_PERSONA_PROMPT_RE` alternation only matched `(review|plan|check)`,
+  silently dropping post-rename `personas/design/<name>.md` mentions in session
+  logs; (b) `_DIR_TO_GATE` had no entry for legacy `plan`, so pre-rename session
+  logs produced rows with `gate: "plan"` that failed the allowlist enum
+  `["spec-review", "design", "check"]` at `emit_rankings()`, aborting the whole
+  compute with `ValueError: rankings row N failed allowlist`. Phase 1c showed
+  nothing because nothing got emitted. Fix: regex now includes `design`,
+  `_DIR_TO_GATE` adds `"plan": "design"` so both eras of session logs attribute
+  to the canonical gate. After the fix, `--best-effort` emits 25 rows across
+  all 3 gates on a real machine; 12/12 test cases still pass.
+
 ## [0.13.0] - 2026-05-14
 
 ### Added
