@@ -1,16 +1,17 @@
 ---
 created: 2026-05-14
-constitution: present (docs/specs/constitution.md — will be re-read at /spec-review)
+revised: 2026-05-14 (post-/spec-review iter1, 9 amendments)
+constitution: absent (proceeded without; session-roster default)
 gate_mode: permissive
 pipeline_path: feature
 tags: [ux, integration, docs]
 confidence:
-  scope: 0.95
+  scope: 0.98
   ux_flow: 0.95
-  data: 0.85
-  integration: 0.85
-  edge_cases: 0.75
-  acceptance: 0.85
+  data: 0.92
+  integration: 0.88
+  edge_cases: 0.90
+  acceptance: 0.95
 predecessor: gate-consolidation-exploration (deferred per Q1; this spec is the cheap-test hypothesis)
 ---
 
@@ -18,58 +19,79 @@ predecessor: gate-consolidation-exploration (deferred per Q1; this spec is the c
 
 ## Summary
 
-Ship six small, mechanically-related UX fixes that address the user feedback batch
+Ship five small, mechanically-related UX fixes that address the user feedback batch
 of 2026-05-14 (input-grammar inconsistency, "feels endless," `/compact` cluelessness,
-missing tab-prefill, mobile-builds-that-don't-launch, rebrand-debt launchd plists).
-All six are author-time changes to existing prompt-emission sites plus one new
-hub-and-spoke skill; no architectural change to the gate pipeline. The bundle
-validates the "consolidation isn't needed if pacing is legible" hypothesis. If
-shipping these dissolves the endless feeling, the larger gate-consolidation work
-(spec'd in memory `gate-consolidation-exploration`) stays deferred.
+missing default-affordance on approvals, mobile-builds-that-don't-launch). No
+gate-count change. Cross-cutting helpers — banner emitter
+`scripts/_pipeline_banner.sh` shared across `commands/*.md` and
+`scripts/autorun/*.sh`, plus mobile-verify dispatch in `commands/build.md`
+Phase 3 — are scope of v0.14. The bundle validates the "consolidation isn't
+needed if pacing is legible" hypothesis. If shipping these dissolves the
+endless feeling, the larger gate-consolidation work (spec'd in memory
+`gate-consolidation-exploration`) stays deferred.
+
+The original Item 6 (launchd plist cleanup) was carved off per /spec-review
+B5 to `docs/runbooks/launchd-rebrand-cleanup.md` as a standalone local-only
+task — it had zero code overlap with Items 1-5 and a partial-failure
+rollback gap.
 
 ## Backlog Routing
 
-Scanned `BACKLOG.md` for items overlapping UX P0 scope (grep terms: progress,
-compact, tab-prefill, input-grammar, mobile-verify, launchd, pause, step-away,
-banner, pacing, endless). Findings:
-
-| Item | Source | Routing | Reason |
-|---|---|---|---|
-| `pipeline-autorun-heartbeat-and-restart-loop-detection` | BACKLOG.md:153 | **(b) stays** | autorun observer signal, different audience from human-in-loop pacing banners |
-| `pipeline-iterative-resolution-loops` | BACKLOG.md:183 | **(b) stays** | already established convention — this spec just applies it inline at Phase 3 for mobile-verify |
-| `monsterflow-pipeline-config-rename` | BACKLOG.md:191 | **(b) stays** | unrelated rename initiative |
-| `install-sh-backup-uninstall` | BACKLOG.md:241 | **(b) stays** | already shipped as v0.13.0 uninstall-sh MVP |
-| All other backlog items | — | **(b) stays** | unrelated to UX scope |
-
-No items routed (a) into this spec, (c) new spec later, or (d) drop.
+Unchanged from initial spec. Scanned `BACKLOG.md`; no items in scope.
+Adjacent items (`pipeline-autorun-heartbeat-and-restart-loop-detection`,
+`pipeline-iterative-resolution-loops`) stay in BACKLOG.
 
 ## Scope
 
 **In scope:**
 
 1. **Input grammar normalize** — all approval prompts in `commands/*.md` use
-   `a/b/c` + Enter format. Free-text augment after letter selection preserved
-   (e.g., user can type `b also add logging<Enter>`).
-2. **Pipeline progress banners** — every gate emits a start banner before work
-   and an end banner after work. Format includes stage-of-total, ETA from
-   rankings history, cumulative session cost, work-size-adaptive denominator,
-   step-away marker for waits ≥3min.
-3. **`/compact` prompting** — end-of-gate banner appends a `/compact` suggestion
-   line when context% exceeds 50% (soft) or 75% (hard escalation). Includes
-   impact info (estimated savings, time cost, "no work lost — artifacts on
-   disk" confirmation).
-4. **Tab-prefill on binary approvals** — every "approve to proceed" / "ready
-   for next stage" gate prefills the default go answer for one-Enter submit.
-   Multi-option decisions and refinement prompts do NOT prefill.
+   `a/b/c` + Enter format. Free-text augment after letter selection
+   preserved (`b also add logging<Enter>`).
+2. **Pipeline progress banners** — every gate emits a start banner before
+   work and an end banner after work. Format includes stage-of-total, ETA
+   from rankings history, cumulative session cost, work-size-adaptive
+   denominator (computed from planned-gate list, not pipeline category),
+   step-away marker for waits ≥3min. **Null-guard:** when invoked outside a
+   pipeline context (no `spec.md`, no `pipeline_path`), banner emits
+   `[pipeline] /build · standalone mode` and proceeds. **Autorun:** when
+   `AUTORUN=1` is set, banner emits to stderr (not stdout) prefixed
+   `[pipeline]` so verdict-sidecar fence parsers reading stdout are
+   unaffected.
+3. **`/compact` prompting (two-path)** — end-of-gate banner appends a
+   `/compact` suggestion based on context-fill mechanism availability:
+   - **Path A** (Claude Code context% probe exists; verified at /blueprint
+     pre-flight via `claude-code-guide`): two-tier prompt — soft at >50%,
+     "strongly recommended" wording at >75%. Includes impact info
+     (estimated savings, time cost, "no work lost").
+   - **Path B** (probe absent): suppress the `/compact` line entirely. At
+     each end-banner, if cumulative session cost has crossed $5 since the
+     last `/compact` or fresh session, emit a single one-liner:
+     `[pipeline] 💾 session cost crossed $5 · consider /compact between major work`.
+   Sentinel for suppression is spec-scoped at
+   `docs/specs/<feature>/.last-compact-suggestion` (not user-global) to
+   avoid racing across concurrent worktrees.
+4. **Empty-Enter default on binary approvals** — every "approve to proceed" /
+   "ready for next stage" gate is phrased so the DEFAULT action is the
+   empty Enter response. Multi-option decisions and refinement prompts do
+   NOT carry the `[default]` annotation. Pattern: `(a approve [default] /
+   b refine X)`. Works regardless of harness support for structured
+   prefill markers.
 5. **Mobile build+launch verify** — new `~/.claude/skills/mobile-verify/`
-   hub-and-spoke skill. `commands/build.md` Phase 3 detects mobile via
-   `*.xcodeproj` / `Package.swift` / `*.xcworkspace` file probe AND constitution
-   `stack:` tag, dispatches to the skill, wraps in 3-attempt fix loop, halts on
-   3rd consecutive failure.
-6. **launchd plist cleanup** — find and rewrite all
-   `~/Library/LaunchAgents/*.plist` referencing `claude-workflow` paths to
-   `MonsterFlow`. `launchctl bootout` + `bootstrap` reload. Mark memory
-   `project_monsterflow_rebrand` resolved. **Local-machine only; not in repo.**
+   hub-and-spoke skill. `commands/build.md` Phase 3 detects mobile via:
+   (i) `*.xcodeproj` OR `*.xcworkspace` in repo root, OR (ii)
+   `constitution.md` `stack:` tag includes `mobile`, OR (iii)
+   `Package.swift` that explicitly declares an iOS/macOS app product
+   (parse the manifest's `.products` for `.executableTarget` with iOS
+   platform). **Naked `Package.swift` does NOT trigger detection.**
+   Dispatch is wrapped in a fix-loop that splits retry semantics:
+   - **Code failures** (compile error, runtime crash on launch) → fix-attempt
+     subagent path; up to 3 attempts; halt with summary on 3rd.
+   - **Infra failures** (simulator unbootable, xcrun missing, runtime
+     mismatch) → reset simulator state (`xcrun simctl erase all` + boot)
+     and retry once. If still failing, halt with `INFRA error` (distinct
+     from CODE failure) so /build doesn't burn its retry budget on stuck
+     simulator state.
 
 **Out of scope:**
 
@@ -79,39 +101,31 @@ No items routed (a) into this spec, (c) new spec later, or (d) drop.
   letter+Enter (preserves compound input).
 - Persistent bottom-bar TUI widget — not possible without a TUI library;
   banners are stderr text instead per Q3.
-- Tab-prefill on multi-option decisions or refinement prompts — rejected per Q5.
+- Tab-prefill via structured marker — replaced with empty-Enter-default
+  per /spec-review B1; no mechanism dependency.
 - `web-verify`, `cli-verify`, `mcp-verify` spokes — slot in via same
   hub-and-spoke pattern when needed; not part of v0.14.
-- `claude-workflow` compat symlink at `~/Projects/claude-workflow` — removal
-  deferred until launchd plists confirmed running on new path for one week.
+- **launchd plist cleanup** — carved to `docs/runbooks/launchd-rebrand-cleanup.md`
+  per /spec-review B5. Local-only task; runs separately tonight; memory
+  `project_monsterflow_rebrand` marked resolved on completion.
+- `claude-workflow` compat symlink at `~/Projects/claude-workflow` —
+  removal deferred until launchd plists confirmed running on new path for
+  one week.
 
 ## Approach
 
-**Chosen approach (per Q1):** *Defer gate consolidation, ship UX P0 first.* The
-original 2026-05-14 user feedback was about pacing, prompt inconsistency, and
-`/compact` cluelessness — not gate count. Consolidation was our hypothesis for
-the root cause; pacing fixes are the literal feedback. Ship pacing, observe
-whether "endless" feeling persists, then decide on consolidation as v0.15+ work.
+**Chosen approach (per Q1):** *Defer gate consolidation, ship UX P0 first.*
+Memory `gate-consolidation-exploration` captures the full design pass for
+later revisit.
 
-**Alternatives considered:**
-
-- **Option A — Full consolidation now:** 1-2 week project, ~25 tier-1 surface
-  items including building `/spec-review`'s first machine-readable verdict
-  sidecar. Sized like the v0.9.0 permissiveness work. Rejected for cost +
-  risk given user has an interview imminent.
-- **Option B — Lite consolidation now:** ~2 days, default `agent_budget: 2`,
-  merge duplicate personas in-place across `personas/review/` and
-  `personas/check/`. ~30% review-cost cut. Rejected because it doesn't
-  address the literal pacing feedback.
-
-The memory `gate-consolidation-exploration` captures the full design pass and
-the 7-merged-persona roster decision in case we revisit Option A or B later.
+**Alternatives considered:** Full consolidation (1-2 wk) and Lite
+consolidation (~2 days) both rejected for cost/risk vs UX-first hypothesis
+test. See memory.
 
 ## Roster Changes
 
-No specialist additions needed. Existing personas suffice. The new
-`mobile-verify` skill is a Skill, not a Persona — it doesn't dispatch at any
-gate, it's invoked from `/build` Phase 3 directly.
+No specialist additions. `mobile-verify` is a Skill (Hub-and-spoke), not a
+Persona — invoked from `/build` Phase 3, not at any review gate.
 
 ## UX / User Flow
 
@@ -125,42 +139,51 @@ Pick work size: (a/b/c/d/e)                                       ← requires E
 
 **After** (uniform):
 ```
-Approve to proceed to /blueprint? (a approve / b refine X)        ← always Enter
-Pick work size: (a/b/c/d/e)                                       ← unchanged
+Approve to proceed to /blueprint? (a approve [default] / b refine X)  ← Enter accepts
+Pick work size: (a/b/c/d/e)                                           ← unchanged
 ```
 
 **Compound-input pattern preserved:** user types `b need to revise the data
-section<Enter>` — the letter is the choice, free text after is the augment.
+section<Enter>` — letter is the choice, free text after is the augment.
 Commands parse `^[a-z]\s*(.*)$` as `<choice>` + `<augment>`.
 
-**Files touched:** every `commands/*.md` with approval prompts. Estimated:
-`spec.md`, `spec-review.md`, `blueprint.md`, `check.md`, `build.md`, `wrap.md`,
-`flow.md`, `preship.md`. ~12 prompt-emission sites total.
+**Files touched:** every `commands/*.md` with approval prompts. ~12
+prompt-emission sites.
 
 ### Item 2 — Pipeline progress banners
 
-**Start banner** (before each gate begins work):
+**Start banner** (before each gate begins work, emits to stderr in autorun):
 ```
 [pipeline] Stage 2 of 5 — /spec-review starting · ~6min ETA · ☕ good step-away
 ```
 
-**End banner** (after each gate completes):
+**End banner** (after each gate completes, emits to stderr in autorun):
 ```
 [pipeline] Stage 2 of 5 ✓ /spec-review done (5m 23s · $0.42 cumulative)
-           next: /blueprint · ~3min
+           next: /blueprint · ~3min · 2 gates remaining
 ```
 
-**Work-size-adaptive denominator:**
-- `pipeline_path: feature` → "Stage X of 5" (`/spec`, `/spec-review`,
-  `/blueprint`, `/check`, `/build`)
-- `pipeline_path: small` → "Stage X of 2" (`/spec`, `/build`)
-- `pipeline_path: bugfix` → "Stage 1 of 1" (just `/build`)
-- Frontmatter field already exists per `commands/spec.md`; no new state.
+**Work-size-adaptive denominator computed from planned-gate list:**
+- `pipeline_path: feature` standard flow → "Stage X of 5" + "N gates remaining"
+- `pipeline_path: small` → "Stage X of 2"
+- `pipeline_path: bugfix` → "Stage 1 of 1"
+- Gates that get skipped on a given run (e.g., user invokes `/build`
+  directly) recompute the denominator at gate-emit time. Source: a
+  computed planned-gate list, not just the frontmatter category.
+
+**Null-guard for non-pipeline invocations:** if `/build` is invoked in a
+cwd with no `docs/specs/<cwd-or-feature>/spec.md`, banner emits
+`[pipeline] /build · standalone mode` and skips the ETA/cumulative-cost
+fields. No crash; no `pipeline_path` read.
+
+**Autorun emission:** when `$AUTORUN=1`, banner writes to stderr (not
+stdout), prefixed `[pipeline]`. This keeps stdout clean for fence-extractor
+post-processors that parse verdict sidecars.
 
 **ETA source:** per-gate medians from `dashboard/data/persona-rankings.jsonl`
-if present. Fallback to documented defaults if no history: `/spec ~8min`,
-`/spec-review ~6min`, `/blueprint ~3min`, `/check ~5min`, `/build varies`.
-A new helper `scripts/_pipeline_eta.py` computes the ETA at gate-start.
+if present. Fallback to documented defaults: `/spec ~8min`, `/spec-review
+~6min`, `/blueprint ~3min`, `/check ~5min`, `/build varies`. Helper
+`scripts/_pipeline_eta.py` computes the ETA at gate-start.
 
 **Cumulative cost:** from `~/.claude/scripts/session-cost.py` running total
 (same source `/wrap` Phase 1 uses).
@@ -170,241 +193,321 @@ A new helper `scripts/_pipeline_eta.py` computes the ETA at gate-start.
 - `🌅` when upcoming wait is ≥6min
 - No marker for <3min stages
 
-### Item 3 — `/compact` prompting
+### Item 3 — `/compact` prompting (two-path)
 
-**Soft threshold** (50% context): end banner appends
+**Mechanism resolution at /blueprint pre-flight:** invoke `claude-code-guide`
+subagent to verify whether Claude Code exposes a context-fill probe surface
+(env-var, stderr channel, status-line API). Pick exactly one path; do NOT
+fall back across paths at runtime.
+
+**Path A — probe exists:**
+
+Soft threshold (>50% context):
 ```
 [pipeline] 💾 Context 55% · /compact recommended before /blueprint
            (saves ~$1.50 on next gate · ~30sec · no work lost — artifacts on disk)
 ```
 
-**Hard threshold** (75% context):
+Hard threshold (>75% context):
 ```
-[pipeline] 💾 Context 78% · /compact REQUIRED before /build — context will overflow next gate
+[pipeline] 💾 Context 78% · /compact strongly recommended before /build
+           (context approaching limit · ~30sec · no work lost)
 ```
 
-**Context% source:** Claude Code harness exposes context fill via env-var or
-output channel. **OPEN QUESTION** (see below) — need to verify mechanism with
-claude-code-guide before authoring the probe. Fallback: heuristic based on
-session-cost.py cumulative spend vs an "approaching wall" threshold (e.g.,
-`>$3.00 cumulative` ≈ 50% for typical specs).
+**Path B — probe absent (suppression mode):**
 
-**Frequency throttle:** if a `/compact` suggestion fired at the previous
-end-banner and context% hasn't dropped since, suppress the next one to avoid
-banner fatigue. Sentinel: `~/.claude/.last-compact-suggestion-context-pct`.
+Suppress `/compact` percentage-driven line entirely. Replace with a
+cost-boundary one-liner emitted only when cumulative session cost has
+crossed $5 since the last `/compact` or fresh session:
+```
+[pipeline] 💾 session cost crossed $5 · consider /compact between major work
+```
 
-### Item 4 — Tab-prefill on binary approvals
+**Suppression sentinel:** to prevent banner fatigue from the
+percentage-driven path under Path A, write
+`docs/specs/<feature>/.last-compact-suggestion` after each emission. Same
+context% within the same spec → suppress. This is **spec-scoped, not
+user-global**, so concurrent /build runs on different worktrees each emit
+independently.
 
-**Mechanism — OPEN QUESTION** (see below): need to verify whether Claude Code
-supports a structured `<suggested-input>` marker, parses "Approve to proceed?"
-text patterns, or uses another path. Sub-spec at `/spec-review` time.
+**User-global opt-out:** `~/.claude/.banner-disabled` (intentionally
+machine-wide) suppresses ALL banner emission, including the `/compact`
+line. This file IS user-global on purpose.
 
-**Prompts that get prefill:**
-- `/spec-review` end: "Approve to proceed to /blueprint?" → prefill `approve`
-- `/check` end: "Ready for /build?" → prefill `go` (today's `/check`; survives
-  until gate-consolidation lands)
-- `/build` end: "All waves complete. Run /preship?" → prefill `yes`
-- `/wrap` Phase 2 end: "Apply these updates?" → prefill `all`
-- `/spec` end: "Proceed to /spec-review?" → prefill `approve`
+### Item 4 — Empty-Enter default on binary approvals
 
-**Prompts that do NOT get prefill** (multi-option / refinement):
+No structured-marker tab-prefill (rejected per /spec-review B1 — mechanism
+unverified). Instead: every binary approval prompt carries a `[default]`
+annotation on the most-common next action, and is phrased so that the
+empty/Enter response is interpreted as selecting that option.
+
+**Prompts that get the `[default]` annotation:**
+- `/spec-review` end: `Approve to proceed to /blueprint? (a approve [default] / b refine X)`
+- `/check` end (today's path; survives until gate-consolidation): `Ready for /build? (a go [default] / b hold)`
+- `/build` end: `All waves complete. Run /preship? (a yes [default] / b skip)`
+- `/wrap` Phase 2 end: `Apply these updates? (a all [default] / b skip / c pick individually)`
+- `/spec` end: `Proceed to /spec-review? (a approve [default] / b refine X)`
+
+**Prompts that do NOT get `[default]`** (multi-option / refinement):
 - `/spec` work-size selector
 - `/spec` Phase 2 approach proposal
 - `/check` NO_GO escape paths
 - Persona-roster confirmation
 - Any `refine X` follow-up
 
+**Command parsing:** when input is empty/whitespace-only on a prompt
+carrying `[default]`, the command treats it as if the user typed the
+default letter. When input is a letter (with or without augment), the
+command parses `^([a-z])\s*(.*)$` normally.
+
 ### Item 5 — Mobile build+launch verify (hub-and-spoke)
 
-**Hub:** `commands/build.md` Phase 3 gains a detection-and-dispatch step:
+**Hub:** `commands/build.md` Phase 3 gains a detection + dispatch step.
 
-```
-1. Detect platform:
-   - constitution.md `stack:` tag includes "mobile" (authoritative), OR
-   - file probe: *.xcodeproj OR Package.swift OR *.xcworkspace in repo root
-   - (i)+(ii); probe is fallback when constitution absent
+**Detection (tightened per /spec-review M1):**
+1. `*.xcodeproj` OR `*.xcworkspace` present in repo root, OR
+2. `docs/specs/constitution.md` exists AND `stack:` tag includes `mobile`, OR
+3. `Package.swift` present AND parses to declare an iOS/macOS app product
+   (i.e., `.executableTarget` with iOS platform, or `iOSApplication` /
+   `Catalyst` product). Naked `Package.swift` (Swift CLI tools, servers,
+   libraries) does NOT match.
 
-2. If mobile detected, invoke Skill: mobile-verify
+If detection fires, invoke the `mobile-verify` skill via deterministic
+path-based call (not skill-discovery — discovery is for human-facing
+affordances; pipeline calls require determinism per Codex CDX-10).
 
-3. Wrap in 3-attempt fix loop:
-   - Attempt 1 fails → dispatch fix-attempt subagent with verify output
-   - Attempt 2 fails → repeat
-   - Attempt 3 fails → halt /build with summary, exit non-zero
-   - Per existing security-N-attempts pattern (memory
-     feedback_security_n_attempts_before_block.md)
-```
+**Retry semantics split (per /spec-review M1):**
 
-**Spoke:** new `~/.claude/skills/mobile-verify/SKILL.md`:
+Verify result categorized as:
+- `PASS` — proceed
+- `CODE failure` — compile error, runtime crash on launch, smoke-check
+  detected SIGABRT / fatal error / exception. Dispatch fix-attempt
+  subagent with verify output. Retry up to 3 times. Halt with summary on
+  3rd consecutive code failure.
+- `INFRA failure` — simulator unbootable, `xcrun` missing, runtime
+  mismatch, no matching destination. Reset simulator state via `xcrun
+  simctl erase all && xcrun simctl boot <UDID>` and retry **once**. If
+  still INFRA failure, halt with `INFRA error: <reason>`. **Does NOT
+  consume the 3-attempt CODE-retry budget.**
+
+**Spoke:** `~/.claude/skills/mobile-verify/SKILL.md` (new):
 ```yaml
 ---
 name: mobile-verify
-description: Use when /build Phase 3 detects an iOS/macOS Swift project. Runs xcodebuild + simulator launch + crash-log scan; reports PASS/FAIL with line excerpts on failure.
+description: Use when /build Phase 3 detects an iOS/macOS Swift app project. Runs xcodebuild + simulator launch + crash-log scan; reports PASS / CODE / INFRA with details.
 ---
 ```
 
 Skill body steps:
-1. Resolve scheme: from project CLAUDE.md `## Build` section if present, else
-   `xcodebuild -list` first scheme
-2. `xcodebuild -scheme <scheme> -destination 'generic/platform=iOS Simulator' build`
-3. Boot simulator if needed: `xcrun simctl boot <auto-select-iPhone-15-or-similar>`
-4. `xcrun simctl install booted <built-app-path>`
-5. `xcrun simctl launch --console-pty booted <bundle-id>` with 5sec timeout
-6. Scan console output for `SIGABRT | fatal error | crashed | _NSExceptionHandler` —
-   FAIL if found
-7. Capture screenshot: `xcrun simctl io booted screenshot .build-verify/launch.png`
-8. Report PASS or FAIL with excerpted lines
+1. Resolve scheme (project CLAUDE.md `## Build` section, else
+   `xcodebuild -list` first scheme)
+2. Pre-flight: probe `xcrun simctl list devices booted` to detect INFRA
+   readiness BEFORE compile (catch missing runtime early)
+3. `xcodebuild -scheme <scheme> -destination 'generic/platform=iOS Simulator' build` — fail = CODE
+4. Boot simulator if needed: `xcrun simctl boot <auto-select>` — fail = INFRA
+5. `xcrun simctl install booted <built-app-path>` — fail = INFRA
+6. `xcrun simctl launch --console-pty booted <bundle-id>` with 5sec timeout — fail = INFRA
+7. Scan console for `SIGABRT | fatal error | crashed | _NSExceptionHandler` — found = CODE
+8. Capture screenshot at `.build-verify/launch.png`
+9. Report PASS / CODE: <excerpt> / INFRA: <reason>
 
-**Future spokes** (out of scope): `web-verify` (npm build + curl localhost),
-`cli-verify` (compile + `--help` smoke), `mcp-verify` (server boot + handshake).
-Same hub call-site pattern; no changes to hub when adding.
-
-### Item 6 — launchd plist cleanup
-
-Local-machine cleanup, not in repo. Steps:
-
-1. `find ~/Library/LaunchAgents -name '*.plist' -exec grep -l claude-workflow {} \;`
-2. For each match, show user the current `<ProgramArguments>` block
-3. Rewrite paths: `s|claude-workflow|MonsterFlow|g` (sed in place with `.bak`)
-4. `launchctl bootout gui/$UID <plist-path>` + `launchctl bootstrap gui/$UID <plist-path>` to reload
-5. Verify next-run timestamp via `launchctl list | grep monsterflow`
-6. Update memory `project_monsterflow_rebrand` → `STATUS: RESOLVED 2026-05-14`
-
-Estimated: 2 plist files (graphify weekly benchmark, vault re-index). ~10 minutes total.
+**Future spokes** (out of scope): `web-verify` (npm build + curl), `cli-verify`
+(compile + --help smoke), `mcp-verify` (server boot + handshake). Same hub
+call-site pattern; no changes to hub when adding.
 
 ## Data & State
 
 **New files:**
-- `scripts/_pipeline_eta.py` — computes per-gate ETA from rankings history; takes `--gate <name>` + `--feature <slug>`, returns seconds-int
+- `scripts/_pipeline_eta.py` — computes per-gate ETA; takes `--gate <name>` + `--feature <slug>`; returns seconds-int
 - `scripts/_pipeline_banner.sh` — emits start/end banners; shared sourceable helper called from `scripts/autorun/*.sh` and each `commands/<gate>.md`'s autorun section
 - `~/.claude/skills/mobile-verify/SKILL.md` — new spoke skill
-- `~/.claude/skills/mobile-verify/scripts/verify.sh` — implementation called by the skill
+- `~/.claude/skills/mobile-verify/scripts/verify.sh` — implementation
+- `docs/runbooks/launchd-rebrand-cleanup.md` — standalone runbook (carved off Item 6)
 
 **Modified files:**
-- `commands/spec.md`, `spec-review.md`, `blueprint.md`, `check.md`, `build.md`, `wrap.md`, `preship.md`, `flow.md` — input grammar normalize, banner emission, tab-prefill markers, `/compact` line emission
-- `scripts/autorun/spec-review.sh`, `design.sh`, `check.sh`, `build.sh` — banner emission for autorun paths
+- `commands/spec.md`, `spec-review.md`, `blueprint.md`, `check.md`, `build.md`, `wrap.md`, `preship.md`, `flow.md` — input grammar normalize, banner emission, `[default]` annotations on binary approvals, `/compact` line emission (Path A or B)
+- `scripts/autorun/spec-review.sh`, `design.sh`, `check.sh`, `build.sh` — banner emission to stderr for autorun paths
 - `VERSION` — bump to `0.14.0`
 - `CHANGELOG.md` — `## [0.14.0] - 2026-05-14` entry
 
-**Sentinel files:**
-- `~/.claude/.last-compact-suggestion-context-pct` — written by end-banner emitter, prevents repeat-suggestion fatigue
-- `~/.claude/.banner-disabled` — opt-out for users who want the old quiet behavior
+**Sentinel files (per /spec-review B4):**
+- `docs/specs/<feature>/.last-compact-suggestion` — **spec-scoped**; written by end-banner emitter on Path A to prevent percentage-driven banner fatigue
+- `~/.claude/.banner-disabled` — **user-global** opt-out for ALL banner emission (intentional machine-wide override)
 
 **No new schemas, no new JSONL, no new gate metadata.**
 
 ## Integration
 
 **Touches but doesn't change:**
-- `dashboard/data/persona-rankings.jsonl` — read-only for ETA computation
+- `dashboard/data/persona-rankings.jsonl` — read-only for ETA
 - `~/.claude/scripts/session-cost.py` — read-only for cumulative cost
 - `docs/specs/<feature>/spec.md` frontmatter `pipeline_path` — read-only for stage denominator
 - Existing autorun stage scripts — banner helper is sourceable, doesn't replace existing logic
 
-**Constitution touches:** none. The skill is at `~/.claude/skills/`, not the project agents dir.
+**Constitution touches:** none. Skill is at `~/.claude/skills/`.
 
-**install.sh touches:** add `mobile-verify` symlink installation step (one new entry in the skills symlink wave).
+**install.sh touches:** add `mobile-verify` symlink installation step
+(one new entry in the skills symlink wave).
 
 ## Edge Cases
 
-- **No constitution + no probe match** — `/build` Phase 3 skips mobile-verify cleanly, falls through to default verify.
-- **constitution says mobile but probe says not** — log a one-line warning; use constitution as authoritative (per Q6 sub-lean).
-- **rankings JSONL empty / missing** — fall back to documented ETA defaults; banner still emits (no "?" ETA in output).
-- **session-cost.py errors out** — emit banner without cost field; never crash the gate.
-- **context% probe unavailable** — fall back to cumulative-cost heuristic; suppress `/compact` line if both unavailable.
-- **Tab-prefill mechanism unsupported** — degrade gracefully; emit prompt without marker; user types as before.
-- **`xcodebuild` exits non-zero before simulator boot** — fix-attempt subagent sees compile errors; routes through 3-attempt loop normally.
-- **Simulator boot fails** (no simulators installed, runtime mismatch) — treat as INFRA error not BUILD error; emit clear message and skip mobile-verify rather than failing the build.
-- **`launchctl bootstrap` fails** (already loaded, stale entry) — script catches and runs `bootout` first, retries once, surfaces remaining error.
-- **User has `~/.claude/.banner-disabled`** — banners suppressed at all gate sites; `/compact` line also suppressed (it rides the end banner).
+- **No constitution + no probe match** — `/build` Phase 3 skips
+  mobile-verify cleanly; banner falls back to standalone mode (per B3).
+- **constitution says mobile but probe says not** — log one-line warning;
+  use constitution as authoritative.
+- **rankings JSONL empty / missing** — fall back to documented ETA
+  defaults; banner still emits.
+- **session-cost.py errors out** — emit banner without cost field; never
+  crash the gate.
+- **Context% probe unavailable AND Path A is configured** —
+  `claude-code-guide` returns "no probe surface"; spec falls into Path B
+  configuration permanently (don't degrade silently into "no banner").
+- **Empty-Enter on a non-default-marked prompt** — re-prompt with the
+  options listed; do NOT pick arbitrarily.
+- **`xcodebuild` exits non-zero before simulator boot** → CODE failure
+  (compile error); fix-attempt subagent path normally.
+- **Simulator boot fails** (no simulators installed, runtime mismatch) →
+  INFRA failure; reset attempt; if still fails, halt with INFRA error.
+- **Concurrent /build across worktrees** — sentinel for compact-suggestion
+  is spec-scoped (per B4); each invocation emits independently.
+- **User has `~/.claude/.banner-disabled`** — banners suppressed at all
+  gate sites; `/compact` line also suppressed.
+- **Autorun stage emitting banner to stderr collides with stderr error
+  messages** — banner prefix `[pipeline]` is distinctive; verify
+  fence-extractor doesn't read stderr (it reads stdout only — confirmed by
+  current implementation).
 
 ## Acceptance Criteria
 
-**AC1** — every approval prompt in `commands/*.md` uses `^([a-z])(?:\s+(.+))?$`
-format; grep test in `tests/test-input-grammar.sh` finds zero `(1/2/3)` or
-`(yes/no)` patterns.
+**AC1** — every approval prompt in `commands/*.md` uses
+`(a/b/c)` + Enter format. Test in `tests/test-input-grammar.sh` scopes the
+grep to active prompt-emission lines only (regex
+`^.*\?\s*\([a-z]\b.*\)|^.*Approve to proceed`), NOT all markdown text. Zero
+matches for `(1/2/3)`, `(yes/no)`, or `(y/n)` patterns in active prompt
+emission.
 
 **AC2** — `scripts/_pipeline_banner.sh start <gate> <feature>` emits a single
 line matching `^\[pipeline\] Stage \d+ of \d+ — /\S+ starting · ~\d+min ETA( · [☕🌅])?$`
 within 100ms.
 
 **AC3** — `scripts/_pipeline_banner.sh end <gate> <feature>` emits a single
-line containing `Stage \d+ of \d+ ✓` and `cumulative` and `next:`. Test
-in `tests/test-pipeline-banner.sh`.
+line containing `Stage \d+ of \d+ ✓`, `cumulative`, `next:`, and
+`gates remaining`. Test in `tests/test-pipeline-banner.sh`.
 
-**AC4** — `scripts/_pipeline_eta.py --gate spec-review --feature foo` returns
-integer-seconds; falls back to documented default when rankings JSONL absent;
-fallback values match exactly: spec=480, spec-review=360, blueprint=180,
+**AC4** — `scripts/_pipeline_eta.py --gate spec-review --feature foo`
+returns integer-seconds; falls back to documented defaults when rankings
+JSONL absent. Fallback values exact: spec=480, spec-review=360, blueprint=180,
 check=300, build=900.
 
-**AC5** — end-banner emits `/compact` line when context% >50%; escalates wording
-at >75%. Suppressed when `.last-compact-suggestion-context-pct` sentinel matches
-current context%. Test in `tests/test-compact-prompt.sh` with mocked context%
-input.
+**AC5 (two-path, per B2)** — `/compact` prompt behavior is exactly one of:
+- **Path A:** end-banner emits `/compact` line at >50% (soft) and >75%
+  (hard, with "strongly recommended" wording per O2). Test in
+  `tests/test-compact-prompt-path-a.sh` with mocked context%.
+- **Path B:** end-banner suppresses percentage-driven line entirely. Emits
+  `session cost crossed $5` only when cumulative > $5 since last
+  /compact-or-fresh-session boundary. Test in
+  `tests/test-compact-prompt-path-b.sh`.
 
-**AC6** — work-size denominator: `pipeline_path: feature` → "of 5", `small` →
-"of 2", `bugfix` → "of 1". Test by varying frontmatter and asserting banner
+Path selection is recorded in `docs/specs/<feature>/.compact-mode`
+(`probe` or `suppress`) at /blueprint pre-flight time, based on
+`claude-code-guide` consultation.
+
+**AC6** — work-size denominator: `pipeline_path: feature` → `of 5` AND `N
+gates remaining` computed from planned-gate list. `small` → `of 2`,
+`bugfix` → `of 1`. Test by varying frontmatter and asserting banner
 output.
 
-**AC7** — tab-prefill marker present on exactly 5 prompts listed in Item 4; not
-present on any multi-option decision prompt. Test via `grep` for the prefill
-marker pattern (TBD pending Open Question resolution).
+**AC7 (per B1)** — `[default]` annotation present on exactly these 5
+prompts: `/spec-review` end, `/check` end, `/build` end, `/wrap` Phase 2,
+`/spec` end. Not present on any multi-option-decision prompt. Command
+parsing of empty-input on a `[default]`-marked prompt selects the default
+letter. Test in `tests/test-empty-enter-default.sh`.
 
-**AC8** — `/build` Phase 3 invokes `mobile-verify` skill when constitution
-`stack:` includes mobile OR when `*.xcodeproj`/`Package.swift`/`*.xcworkspace`
-present in repo root. Test by stubbing both detection sources and asserting
-skill invocation in dry-run.
+**AC8 (per M1)** — `/build` Phase 3 invokes `mobile-verify` skill when:
+(i) `*.xcodeproj` OR `*.xcworkspace` present, OR (ii) constitution
+`stack:` includes mobile, OR (iii) `Package.swift` parses to an iOS/macOS
+app product. Naked `Package.swift` (no iOS app product declared) does NOT
+trigger detection. Test asserts each branch independently with synthetic
+fixtures.
 
-**AC9** — `mobile-verify` skill produces PASS with exit 0 on a known-good
-fixture (synthetic Swift Hello-World) and FAIL with exit 1 on a known-bad
-fixture (deliberately-crashing `init()`). Test fixtures live at
-`tests/fixtures/mobile-verify/{good,bad}/`.
+**AC9** — `mobile-verify` skill produces:
+- PASS exit 0 on known-good fixture (synthetic Swift Hello-World app)
+- CODE exit 1 with crash-line excerpt on known-bad fixture (deliberately-crashing init)
+- INFRA exit 2 with reason on simulator-unavailable fixture
+Fixtures live at `tests/fixtures/mobile-verify/{good,bad,infra}/`.
 
-**AC10** — `/build` Phase 3 retries fix-attempt up to 3 times on verify FAIL;
-halts after 3 with summary. Test in `tests/test-mobile-verify-attempts.sh`
-asserting attempt counter and halt verdict.
+**AC10** — `/build` Phase 3 retries CODE failures up to 3 times via
+fix-attempt subagent. Halts after 3rd consecutive CODE failure.
+`tests/test-mobile-verify-code-attempts.sh`.
 
-**AC11** — Mobile-verify dispatch when constitution absent AND no probe match
-results in clean no-op (no skill invocation, no error). Test with empty repo.
+**AC10b (per M1)** — `/build` Phase 3 on INFRA failure resets simulator
+state (`xcrun simctl erase all`) and retries ONCE. INFRA retry does NOT
+count against the 3-attempt CODE budget. Second INFRA failure halts with
+`INFRA error: <reason>`. `tests/test-mobile-verify-infra-attempts.sh`.
 
-**AC12** — launchd plists in `~/Library/LaunchAgents/` matching grep
-`claude-workflow` are rewritten to `MonsterFlow`; `launchctl list | grep
-monsterflow` shows the new entries running. Memory
-`project_monsterflow_rebrand` updated with `STATUS: RESOLVED 2026-05-14`.
-(Local-only AC; verified by user at apply time, not in CI.)
+**AC11** — Mobile-verify dispatch when constitution absent AND no probe
+match results in clean no-op. Test with empty repo.
+
+**~~AC12~~** — *DROPPED per /spec-review B5. launchd cleanup is no longer
+in scope; runbook at `docs/runbooks/launchd-rebrand-cleanup.md`.*
 
 **AC13** — `~/.claude/.banner-disabled` opt-out file suppresses all banner
-emission cleanly. Test asserts zero `[pipeline]` lines in output when sentinel
-present.
+emission AND the `/compact` line. Test asserts zero `[pipeline]` lines in
+output when sentinel present.
 
-**AC14** — `VERSION` bumped to `0.14.0`; `CHANGELOG.md` has `## [0.14.0] -
-2026-05-14` section with all six items enumerated. Tested by
-`tests/test-changelog-v0.14.0-entry.sh`.
+**AC14** — `VERSION` bumped to `0.14.0`; `CHANGELOG.md` has
+`## [0.14.0] - 2026-05-14` section with all five items enumerated.
+Tested by `tests/test-changelog-v0.14.0-entry.sh`.
 
-**AC15** — autorun-shell-reviewer subagent invoked on `scripts/autorun/*.sh`
-modifications BEFORE the commit step (per memory
-`feedback_build_subagent_invocations_must_fire`). Verified via `/build`
-orchestrator log.
+**AC15** — `autorun-shell-reviewer` subagent invoked on
+`scripts/autorun/*.sh` modifications BEFORE the commit step. Verified via
+`/build` orchestrator log.
+
+**AC16 (per B3)** — `/build` invoked outside a pipeline context (no
+`docs/specs/<cwd>/spec.md`, no `pipeline_path` frontmatter accessible)
+emits `[pipeline] /build · standalone mode` and proceeds without crash.
+No frontmatter read attempted. Test in
+`tests/test-banner-standalone-mode.sh` with empty cwd.
+
+**AC17 (per B4)** — Two simultaneous `/build` runs on different worktrees
+each emit their own compact-suggestion line independently. Sentinel at
+`docs/specs/<feature>/.last-compact-suggestion` does NOT race; user-global
+`~/.claude/.banner-disabled` opt-out applies to both as expected. Test in
+`tests/test-banner-concurrent-worktrees.sh` simulating two cwd contexts.
+
+**AC18 (per M2)** — When `$AUTORUN=1`, banner emissions go to stderr
+(prefix `[pipeline]`), and stdout remains clean for verdict-sidecar fence
+parsing. Test in `tests/test-banner-autorun-stderr.sh` asserts no
+`[pipeline]` text on stdout and matching lines on stderr.
 
 ## Open Questions
 
-**OQ1 (mechanism verification) — How does Claude Code's harness handle tab-prefill?**
-Three possibilities: (a) structured marker in command output (e.g.,
-`<suggested-input>approve</suggested-input>`), (b) pattern recognition on
-"Approve to proceed?" text, (c) some other path. Spec assumes (a) but must
-verify with `claude-code-guide` subagent during `/spec-review` before any
-implementation. If unsupported, degrade gracefully (Item 4 still ships the
-prompt text uniformly; only the prefill affordance is conditional).
+**~~OQ1~~** — *RESOLVED per /spec-review B1: replaced tab-prefill with
+empty-Enter-default semantics. No harness mechanism dependency.*
 
-**OQ2 (mechanism verification) — How is current context% surfaced to a slash command?**
-Spec assumes Claude Code exposes context fill via env-var or stderr channel.
-Must verify with `claude-code-guide` during `/spec-review`. If unsupported,
-fall back to cumulative-cost heuristic (Item 3 still ships; only the trigger
-source differs).
+**~~OQ2~~** — *RESOLVED per /spec-review B2: two-path AC (A=probe, B=suppress
++ $5-boundary). Path selection at /blueprint pre-flight via
+claude-code-guide consultation.*
 
-**OQ3 (autorun applicability) —** banners are useful for human-in-loop pipeline
-runs. For autorun pipeline runs (background agents, no human watching the
-stream), are banners noise or useful for log review? Spec assumes useful (logs
-are read post-run); confirmed at `/spec-review`.
+**~~OQ3~~** — *RESOLVED per /spec-review M2: banners emit to stderr under
+$AUTORUN=1. Autorun log readers see them; fence parsers reading stdout
+are unaffected.*
 
-**OQ4 (skill discovery) —** `~/.claude/skills/mobile-verify/` requires Claude
-Code to discover the skill. Verify discovery is automatic on skill creation,
-or whether `install.sh` needs an explicit registration step.
+**OQ4 (skill discovery, defers to /blueprint) —** `~/.claude/skills/mobile-verify/`
+requires Claude Code to discover the skill. Verify discovery is automatic
+on skill creation (no install.sh registration step needed) OR confirm the
+install.sh skill-symlink wave handles it. /blueprint pre-flight resolves
+via grepping current install.sh + observing existing skill behavior.
+
+## Changes from initial spec (revision history)
+
+- 2026-05-14 iter1 → iter2: 9 amendments applied per /spec-review review.md
+  - **B1:** Tab-prefill → empty-Enter-default (OQ1 RESOLVED)
+  - **B2:** `/compact` two-path (probe vs suppress + $5-boundary) (OQ2 RESOLVED)
+  - **B3:** Banner null-guard for non-pipeline /build + AC16
+  - **B4:** Compact-suggestion sentinel spec-scoped + AC17
+  - **B5:** Item 6 (launchd) carved off to standalone runbook + AC12 dropped
+  - **M1:** Mobile detection tightened (drop naked Package.swift) + split CODE/INFRA retries + AC10b
+  - **M2:** Banner stderr in autorun + AC18 (OQ3 RESOLVED)
+  - **M3:** Summary reframe ("cross-cutting helpers" instead of "no architectural change")
+  - **O1-O4:** Denominator from planned-gates-list, "strongly recommended" wording, AC1 grep scope, prompt-emission-only matching
