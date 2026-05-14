@@ -5,6 +5,13 @@ Ideas not yet scheduled. Newest at the top. Each item: one-liner, **Why:**, **Si
 Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready to work on it; delete from here once it lands.
 
 > **2026-05-04:** install.sh rewrite shipped (v0.5.0) — see CHANGELOG.md.
+> **2026-05-13:** install-graphify-wiki-coverage shipped (v0.12.0) — see CHANGELOG.md.
+
+---
+
+## Audited clean — no action needed
+
+- **github.io page `/design` vs `/blueprint` audit (2026-05-13)** — checked docs/index.html, README.md, QUICKSTART.md for stale `/design` slash-command refs after the /design → /blueprint rename (PR #15). **Result: clean.** docs/index.html has 9 `/blueprint` references (correct user-facing) and 1 `docs/specs/<feature>/design.md` reference at line 1222 — that's the intentional artifact filename per CLAUDE.md's internal-gate-identifier guard, not a stale slash-command ref. README + QUICKSTART have zero `/design` references. No work to do; flagged here so a future audit doesn't re-investigate.
 
 ---
 
