@@ -405,16 +405,27 @@ def confirm_scan_roots(dirs):
 # ==========================================================================
 
 # Persona-prompt regex applied to Agent dispatch input.prompt strings.
-# Persona DIR is `review`; gate name is `spec-review` (we remap below).
+# Persona dirs on disk are `review`, `design`, `check`. Legacy `plan` (pre
+# 2026-05-12 rename) still appears in older session logs and is normalized
+# to `design` via _DIR_TO_GATE below — closes the gate-enum-drift leak
+# captured in memory feedback_persona_value_gate_enum_drift.
 _PERSONA_PROMPT_RE = re.compile(
-    r"personas/(review|plan|check)/([a-z0-9][a-z0-9-]{0,63})\.md"
+    r"personas/(review|plan|design|check)/([a-z0-9][a-z0-9-]{0,63})\.md"
 )
 # Annotations on the parent's tool_result trailing text.
 _AGENT_ID_RE = re.compile(r"agentId:\s*([0-9a-f]{17})")
 _TOTAL_TOKENS_RE = re.compile(r"total_tokens:\s*(\d+)")
 
-# review (persona dir) -> spec-review (gate name).
-_DIR_TO_GATE = {"review": "spec-review", "design": "design", "check": "check"}
+# Persona-dir name -> canonical gate identifier (allowlist enum). The legacy
+# `plan` dir name maps to `design` (plan→design rename, 2026-05-12) so cost
+# rows from pre-rename session logs get attributed to the correct gate
+# instead of failing allowlist validation downstream at emit_rankings().
+_DIR_TO_GATE = {
+    "review": "spec-review",
+    "design": "design",
+    "plan": "design",
+    "check": "check",
+}
 # Reverse for cost-walk attribution sanity (not currently needed but documented).
 
 # Gate -> short prefix used by salt_finding_id().
