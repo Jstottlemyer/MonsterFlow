@@ -4,6 +4,8 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-05-14
+
 ### Added
 
 - **Ghostty terminal theme** shipped as `config/ghostty.config` (Apple
@@ -12,6 +14,43 @@ All notable changes to `MonsterFlow` are documented here.
   `~/.config/ghostty/config` alongside the existing cmux + tmux + zsh
   prompt links. Adopters with a hand-edited ghostty config get a
   timestamped `.bak` via the existing `link_file` backup machinery.
+- **Post-install Obsidian vault hint** in `install.sh` end-block — fires
+  conditionally when `detect_obsidian_env` returns `warn:*` or
+  `can-install`. Guides adopter through the one manual GUI step (launch
+  Obsidian.app, create vault at `~/Documents/Obsidian/wiki`, re-run
+  install). Companion paragraph on `docs/index.html` install section.
+
+### Changed
+
+- **`.gitignore` post-rename cleanup** — mirrors every `plan/*` rule with
+  a `design/*` rule (post plan→design rename arc) so persona-metrics
+  artifacts under `docs/specs/<feature>/design/` no longer leak into
+  `git status`. Also broadens `raw/` → `raw*/` in all four stage dirs so
+  rev-archive variants (`raw-rev1/`, etc.) are covered. Adds
+  `source.design.md` alongside `source.plan.md` for the `check/` gate.
+- **Docs cleanup**: user-facing `design` → `blueprint` references in
+  README, flow-card, docs/index.html, and the locked mermaid source at
+  `docs/specs/persona-metrics/diagrams.md` (~60 refs across slash-command
+  text + mermaid edge labels + artifact filenames). Internal `design`
+  identifier preserved per CLAUDE.md guard.
+- **Autorun launch-log strings** swap Unicode `→` for ASCII `->` in
+  `scripts/autorun/{check,spec-review}.sh` and use braced `${tier}`
+  expansion. Pure-cosmetic; renders cleanly across all terminals.
+
+### Spec work (no implementation yet — drafted in this release)
+
+- **`docs/specs/uninstall-sh/`** — full spec pipeline completed: spec
+  (rev3, manifest-first hybrid), review (rev2 GO_WITH_FIXES), design (13
+  decisions, 6 tasks across 4 waves), check (iter2 GO_WITH_FIXES, 0
+  architectural blockers). Awaits two prereq specs before `/build`.
+- **`docs/specs/install-sh-manifest-emit/spec.md`** — uninstall-sh
+  prereq #4; defines `~/.claude/.monsterflow-install-manifest.jsonl`
+  schema + `schemas/install-manifest.v1.schema.json` JSON Schema +
+  `MONSTERFLOW_MANIFEST=1` env-var staging gate.
+- **`docs/specs/install-sh-claude-md-ownership/spec.md`** — uninstall-sh
+  prereq #5; refactors `scripts/claude-md-merge.py` for explicit modes
+  (`created_file`/`appended_block`/`skipped_manual`), adds sentinel pair
+  around managed `~/CLAUDE.md` content.
 
 ## [0.12.0] - 2026-05-13
 
