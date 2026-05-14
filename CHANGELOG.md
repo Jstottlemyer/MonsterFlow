@@ -4,6 +4,8 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-05-14
+
 ### Added
 
 - **`uninstall.sh` (cold-start MVP)** — reverse of `install.sh` in
