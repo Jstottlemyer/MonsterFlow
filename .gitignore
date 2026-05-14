@@ -28,19 +28,26 @@ docs/specs/*/spec-review/findings*.jsonl
 docs/specs/*/spec-review/participation.jsonl
 docs/specs/*/spec-review/survival.jsonl
 docs/specs/*/spec-review/run.json
-docs/specs/*/spec-review/raw/
+docs/specs/*/spec-review/raw*/
 docs/specs/*/spec-review/source.spec.md
 docs/specs/*/plan/findings*.jsonl
 docs/specs/*/plan/participation.jsonl
 docs/specs/*/plan/survival.jsonl
 docs/specs/*/plan/run.json
-docs/specs/*/plan/raw/
+docs/specs/*/plan/raw*/
+docs/specs/*/design/findings*.jsonl
+docs/specs/*/design/participation.jsonl
+docs/specs/*/design/survival.jsonl
+docs/specs/*/design/run.json
+docs/specs/*/design/raw*/
+docs/specs/*/design/source.design.md
 docs/specs/*/check/findings*.jsonl
 docs/specs/*/check/participation.jsonl
 docs/specs/*/check/survival.jsonl
 docs/specs/*/check/run.json
-docs/specs/*/check/raw/
+docs/specs/*/check/raw*/
 docs/specs/*/check/source.plan.md
+docs/specs/*/check/source.design.md
 docs/specs/*/.persona-metrics-warned
 # END persona-metrics
 
@@ -50,6 +57,7 @@ docs/specs/*/.budget-lock.json
 # Per-gate selection audit — useful for /wrap-insights but not a versioned artifact.
 docs/specs/*/spec-review/selection.json
 docs/specs/*/plan/selection.json
+docs/specs/*/design/selection.json
 docs/specs/*/check/selection.json
 # END agent-budget
 
