@@ -1,0 +1,63 @@
+{
+  "schema_version": 2,
+  "prompt_version": "selection-emit@2.0",
+  "feature": "uninstall-sh",
+  "gate": "design",
+  "selected": [
+    {
+      "persona": "api",
+      "tier": "opus",
+      "fit_score": 2,
+      "combined_score": 1.0
+    },
+    {
+      "persona": "data-model",
+      "tier": "sonnet",
+      "fit_score": 2,
+      "combined_score": 1.0
+    },
+    {
+      "persona": "integration",
+      "tier": "sonnet",
+      "fit_score": 1,
+      "combined_score": 0.5
+    }
+  ],
+  "dropped": [
+    {
+      "persona": "scalability",
+      "tier": "sonnet",
+      "fit_score": 1,
+      "combined_score": 0.5
+    },
+    {
+      "persona": "security",
+      "tier": "sonnet",
+      "fit_score": 1,
+      "combined_score": 0.5
+    },
+    {
+      "persona": "ux",
+      "tier": "sonnet",
+      "fit_score": 1,
+      "combined_score": 0.5
+    },
+    {
+      "persona": "wave-sequencer",
+      "tier": "sonnet",
+      "fit_score": 1,
+      "combined_score": 0.5
+    }
+  ],
+  "codex": {
+    "persona": "codex-adversary",
+    "policy": "additive"
+  },
+  "tier_policy_applied": {
+    "source": "constitution",
+    "opus_min": 1,
+    "opus_count_actual": 1,
+    "sonnet_count_actual": 2,
+    "security_floor": "opus"
+  }
+}
