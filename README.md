@@ -35,7 +35,7 @@ flowchart TD
     SR["/spec-review<br/><sub>requirements · gaps · ambiguity<br/>feasibility · scope · stakeholders</sub>"]:::review
     JS1["Judge · Dedupe · Synth<br/><sub>cluster · attribute · compose<br/>→ review.md</sub>"]:::synth
     P["/blueprint<br/><sub>api · data-model · ux · scalability<br/>security · integration · wave-sequencer</sub>"]:::plan
-    JS2["Judge · Dedupe · Synth<br/><sub>→ plan.md</sub>"]:::synth
+    JS2["Judge · Dedupe · Synth<br/><sub>→ design.md</sub>"]:::synth
     C["/check<br/><sub>completeness · sequencing · risk<br/>scope-discipline · testability</sub>"]:::gate
     JS3["Judge · Dedupe · Synth<br/><sub>→ check.md</sub>"]:::synth
     B["/build<br/><sub>parallel execute</sub>"]:::execute
@@ -172,7 +172,7 @@ flowchart LR
 ║  docs/specs/constitution.md     (project principles)         ║
 ║  docs/specs/<feature>/spec.md   (living spec)                ║
 ║  docs/specs/<feature>/review.md (PRD review findings)        ║
-║  docs/specs/<feature>/plan.md   (implementation plan)        ║
+║  docs/specs/<feature>/design.md (implementation design)      ║
 ║  docs/specs/<feature>/check.md  (gap checkpoint)             ║
 ║                                                              ║
 ║  KNOWLEDGE LAYER                   [graphify + obsidian]     ║
@@ -311,7 +311,7 @@ The pipeline writes persistent spec artifacts to each project:
 docs/specs/constitution.md          # Project principles (from /kickoff)
 docs/specs/<feature>/spec.md        # Living spec (from /spec)
 docs/specs/<feature>/review.md      # PRD review findings (from /spec-review)
-docs/specs/<feature>/plan.md        # Implementation plan (from /plan)
+docs/specs/<feature>/design.md      # Implementation design (from /blueprint)
 docs/specs/<feature>/check.md       # Gap checkpoint (from /check)
 ```
 

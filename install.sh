@@ -1203,7 +1203,7 @@ do_theme_install() {
         DO_THEME=0   # non-interactive adopter: skip
     else
         local THEME_CONFIRM
-        read -rp "Install MonsterFlow shell theme (cmux + tmux + zsh prompt)? [y/N]: " THEME_CONFIRM
+        read -rp "Install MonsterFlow shell theme (cmux + tmux + zsh prompt + ghostty)? [y/N]: " THEME_CONFIRM
         [[ "$THEME_CONFIRM" =~ ^[Yy]$ ]] && DO_THEME=1 || DO_THEME=0
     fi
     [ "$DO_THEME" = "0" ] && return 0
@@ -1213,6 +1213,8 @@ do_theme_install() {
     mkdir -p "$HOME/.config/cmux"
     link_file "$REPO_DIR/config/cmux.json" "$HOME/.config/cmux/cmux.json"
     link_file "$REPO_DIR/config/tmux.conf" "$HOME/.tmux.conf"
+    mkdir -p "$HOME/.config/ghostty"
+    link_file "$REPO_DIR/config/ghostty.config" "$HOME/.config/ghostty/config"
 
     # POSIX single-quote escaping via top-level posix_quote (hoisted above detect_owner).
     # posix_quote returns a fully-quoted string (incl. surrounding '…');
@@ -1353,6 +1355,22 @@ echo "  3. See plugins.md for optional plugins"
 echo "  4. See QUICKSTART.md if this is your first time"
 echo "  5. Auto-bump rules: feat:→minor · fix:/docs:/etc.→patch · type!: or BREAKING CHANGE:→major"
 echo "  6. If anything looks off, run ./scripts/doctor.sh to file a diagnostic"
+
+# Obsidian vault hint — fires when the env was detected as warn/can-install.
+# Re-classify cheaply (pure detect, no side effects) so we don't depend on
+# captured state from do_knowledge_layer earlier in the run.
+_obsidian_post_status="$(detect_obsidian_env 2>/dev/null || echo can-install)"
+case "$_obsidian_post_status" in
+    warn:*|can-install)
+        echo ""
+        echo "Obsidian vault — one-time manual step:"
+        echo "  • Launch Obsidian.app → 'Create new vault'"
+        echo "  • Path: ~/Documents/Obsidian/wiki  (install.sh default; or whatever you set in ~/.obsidian-wiki/config)"
+        echo "  • After the vault exists, re-run 'bash install.sh' — it will append OBSIDIAN_VAULT_PATH to ~/.zshrc"
+        ;;
+esac
+unset _obsidian_post_status
+
 echo ""
 
 # --- Onboard panel (W2 task 2.10, last stage) ---

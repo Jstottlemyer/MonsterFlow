@@ -847,7 +847,7 @@
 
     <h3 style="margin-top:40px;font-size:20px;font-weight:600">How the night actually goes</h3>
     <ul>
-      <li><strong>Per-feature.</strong> Spec-review → design → check → build → PR. Each gate's reviewers run in parallel; their findings get judged, deduped, and synthesized before the next gate starts.</li>
+      <li><strong>Per-feature.</strong> Spec-review → blueprint → check → build → PR. Each gate's reviewers run in parallel; their findings get judged, deduped, and synthesized before the next gate starts.</li>
       <li><strong>Permissive overnight.</strong> Most contract / docs / test findings get logged as follow-ups and let the run keep moving. Architectural and security findings route through the bounded-retry loop above.</li>
       <li><strong>Every run lands as a PR.</strong> Default is push-and-review — autorun opens a PR with the artifacts attached, I read it with coffee. Auto-merge is opt-in per-project (set <code>auto_merge_policy</code> in the spec) and requires the gates I trust for <em>that</em> codebase to be green. The pipeline doesn't yet run a post-build runtime check (playwright / E2E / smoke); until it does, "clean gates" doesn't mean "validated end-to-end" and the default stays conservative.</li>
       <li><strong>STOP file.</strong> Touch <code>queue/STOP</code> any time and the next iteration boundary halts cleanly. Mid-flight runs finish what they're on; the queue stops.</li>
@@ -1141,6 +1141,7 @@ flowchart TD
 cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh">Copy</button><pre class="install"><span class="prompt">$ </span>git clone https://github.com/Jstottlemyer/MonsterFlow.git ~/Projects/MonsterFlow
 <span class="prompt">$ </span>cd ~/Projects/MonsterFlow &amp;&amp; ./install.sh</pre></div>
     <p class="lede" style="margin-top:24px">The installer symlinks commands, personas, templates, and settings into <code>~/.claude/</code>, then offers to install plugins.</p>
+    <p class="lede" style="margin-top:16px"><strong>One manual step if you use the Obsidian wiki skills.</strong> The installer detects and configures everything else automatically (graphify CLI, <code>OBSIDIAN_VAULT_PATH</code> export, <code>Obsidian.app</code> via brew). But the vault itself has to be created inside Obsidian: launch <code>Obsidian.app</code>, choose <em>Create new vault</em>, point it at <code>~/Documents/Obsidian/wiki</code> (the installer's default, overridable in <code>~/.obsidian-wiki/config</code>). Then re-run <code>bash install.sh</code> — it will append the sentinel-bracketed export to <code>~/.zshrc</code> on the second pass.</p>
   </div>
 </section>
 

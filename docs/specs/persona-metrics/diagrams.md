@@ -2,15 +2,15 @@
 
 Three diagrams covering: (1) the pipeline flow with the new feedback edges, (2) per-stage data flow, (3) the self-improvement loop the metrics enable.
 
-These ship as the source of truth for documentation surfaces. **Diagram 1** lands in `README.md` and `docs/index.html` (replacing the existing pipeline mermaid). **Diagram 2** is reference-only for spec/plan/check.md readers. **Diagram 3** is the explainer for *why* the metrics layer matters — headlines the CHANGELOG entry and any future `docs/persona-metrics.md`.
+These ship as the source of truth for documentation surfaces. **Diagram 1** lands in `README.md` and `docs/index.html` (replacing the existing pipeline mermaid). **Diagram 2** is reference-only for spec/design/check.md readers. **Diagram 3** is the explainer for *why* the metrics layer matters — headlines the CHANGELOG entry and any future `docs/persona-metrics.md`.
 
-> **Scope (b) is in effect:** all three multi-agent gates (`/spec-review`, `/plan`, `/check`) emit `findings.jsonl` + `participation.jsonl` + `run.json` at synthesis end. All three downstream stages (`/plan`, `/check`, `/build`) run the survival classifier at their Phase 0 pre-flight. `/plan` and `/build` use *addressed-by-revision* mode (pre-snapshot vs revised artifact). `/check` uses *synthesis-inclusion* mode (judges design recommendations against the freshly-synthesized `plan.md`; no source snapshot, since `plan.md` is created fresh, not revised).
+> **Scope (b) is in effect:** all three multi-agent gates (`/spec-review`, `/blueprint`, `/check`) emit `findings.jsonl` + `participation.jsonl` + `run.json` at synthesis end. All three downstream stages (`/blueprint`, `/check`, `/build`) run the survival classifier at their Phase 0 pre-flight. `/blueprint` and `/build` use *addressed-by-revision* mode (pre-snapshot vs revised artifact). `/check` uses *synthesis-inclusion* mode (judges design recommendations against the freshly-synthesized `design.md`; no source snapshot, since `design.md` is created fresh, not revised).
 
 ---
 
 ## Diagram 1 — Pipeline flow (LOCKED — Tight-C variant)
 
-Production-style mermaid with the new `Judge · Dedupe · Synth` interstitials between gates and a new `Persona Metrics` side observer. All three Judges feed PM. Tight-C tightening applied: only JS1 carries the full Judge sub-text (acts as legend); JS2/JS3 abbreviate to `→ plan.md` / `→ check.md`. Edge labels dropped except the two that explain the new feature: `records` on JS1→PM and `surfaces drift` on W→PM. Style carries meaning everywhere else (dashed orange = Codex challenges; dashed grey = ambient; thick violet = records to PM).
+Production-style mermaid with the new `Judge · Dedupe · Synth` interstitials between gates and a new `Persona Metrics` side observer. All three Judges feed PM. Tight-C tightening applied: only JS1 carries the full Judge sub-text (acts as legend); JS2/JS3 abbreviate to `→ design.md` / `→ check.md`. Edge labels dropped except the two that explain the new feature: `records` on JS1→PM and `surfaces drift` on W→PM. Style carries meaning everywhere else (dashed orange = Codex challenges; dashed grey = ambient; thick violet = records to PM).
 
 ```mermaid
 flowchart TD
@@ -18,8 +18,8 @@ flowchart TD
     S["/spec<br/><sub>Q&A · confidence-tracked</sub>"]:::define
     SR["/spec-review<br/><sub>requirements · gaps · ambiguity<br/>feasibility · scope · stakeholders</sub>"]:::review
     JS1["Judge · Dedupe · Synth<br/><sub>cluster · attribute · compose<br/>→ review.md</sub>"]:::synth
-    P["/plan<br/><sub>api · data-model · ux · scalability<br/>security · integration · wave-sequencer</sub>"]:::plan
-    JS2["Judge · Dedupe · Synth<br/><sub>→ plan.md</sub>"]:::synth
+    P["/blueprint<br/><sub>api · data-model · ux · scalability<br/>security · integration · wave-sequencer</sub>"]:::plan
+    JS2["Judge · Dedupe · Synth<br/><sub>→ design.md</sub>"]:::synth
     C["/check<br/><sub>completeness · sequencing · risk<br/>scope-discipline · testability</sub>"]:::gate
     JS3["Judge · Dedupe · Synth<br/><sub>→ check.md</sub>"]:::synth
     B["/build<br/><sub>parallel execute</sub>"]:::execute
@@ -66,7 +66,7 @@ flowchart TD
     classDef metrics fill:#a78bfa,stroke:#5b21b6,color:#2e1065,stroke-width:3px
 ```
 
-**Reading:** Main row = pipeline. Judges are inline interstitials between gates — they're the terminal step that produces `review.md` / `plan.md` / `check.md`. JS1 carries the legend ("cluster · attribute · compose → review.md"); JS2/JS3 are recognizably the same operation. All three Judges feed PM via thick violet edges; the `records` label appears once on JS1→PM as the canonical example. PM is the only side observer that's a first-class part of the new feature (thick stroke, solid edges in).
+**Reading:** Main row = pipeline. Judges are inline interstitials between gates — they're the terminal step that produces `review.md` / `design.md` / `check.md`. JS1 carries the legend ("cluster · attribute · compose → review.md"); JS2/JS3 are recognizably the same operation. All three Judges feed PM via thick violet edges; the `records` label appears once on JS1→PM as the canonical example. PM is the only side observer that's a first-class part of the new feature (thick stroke, solid edges in).
 
 **Two virtuous loops close the pipeline, mediated by side nodes:**
 
@@ -92,27 +92,27 @@ flowchart TD
         step0a --> agents_a --> raw_a --> judge_a --> emit_a
     end
 
-    subgraph plan_stage["/plan (synthesis-from-recommendations gate — NEW emit site in scope (b))"]
+    subgraph plan_stage["/blueprint (synthesis-from-recommendations gate — NEW emit site in scope (b))"]
         agents_p["Phase 1<br/>6 design agents in parallel<br/>(api · data-model · ux · scalability · security · integration)"]
-        raw_p["plan/raw/&lt;persona&gt;.md<br/>(persisted as each design agent returns)"]
-        judge_p["Phase 2: Judge · Synth<br/>dedupe · cluster · compose plan.md<br/>(no source.plan.md — synthesized fresh)"]
-        emit_p["Phase 2c<br/>findings-emit prompt<br/>writes: plan/findings.jsonl, participation.jsonl, run.json<br/>artifact_hash = sha256(plan.md)"]
+        raw_p["design/raw/&lt;persona&gt;.md<br/>(persisted as each design agent returns)"]
+        judge_p["Phase 2: Judge · Synth<br/>dedupe · cluster · compose design.md<br/>(no source.design.md — synthesized fresh)"]
+        emit_p["Phase 2c<br/>findings-emit prompt<br/>writes: design/findings.jsonl, participation.jsonl, run.json<br/>artifact_hash = sha256(design.md)"]
         agents_p --> raw_p --> judge_p --> emit_p
     end
 
-    subgraph phase0_revision["Phase 0: addressed-by-revision (at /plan and /build)"]
+    subgraph phase0_revision["Phase 0: addressed-by-revision (at /blueprint and /build)"]
         cls_r["survival-classifier (mode: addressed-by-revision)<br/>reads: prior findings.jsonl<br/>     + source.&lt;artifact&gt;.md (pre)<br/>     + revised &lt;artifact&gt;.md (post)"]
         surv_r["survival.jsonl<br/>{outcome, evidence, artifact_hash, confidence}<br/>addressed = revision changed artifact"]
         cls_r --> surv_r
     end
 
     subgraph phase0_inclusion["Phase 0: synthesis-inclusion (at /check — NEW in scope (b))"]
-        cls_i["survival-classifier (mode: synthesis-inclusion)<br/>reads: plan/findings.jsonl<br/>     + plan.md (no source snapshot)"]
-        surv_i["plan/survival.jsonl<br/>addressed = recommendation visibly shaped plan.md<br/>not_addressed = Judge dropped/demoted"]
+        cls_i["survival-classifier (mode: synthesis-inclusion)<br/>reads: design/findings.jsonl<br/>     + design.md (no source snapshot)"]
+        surv_i["design/survival.jsonl<br/>addressed = recommendation visibly shaped design.md<br/>not_addressed = Judge dropped/demoted"]
         cls_i --> surv_i
     end
 
-    emit_a -- "spec-review/findings.jsonl<br/>(consumed at /plan Phase 0)" --> cls_r
+    emit_a -- "spec-review/findings.jsonl<br/>(consumed at /blueprint Phase 0)" --> cls_r
     emit_a -- "check/findings.jsonl<br/>(consumed at /build Phase 0)" --> cls_r
     emit_p --> cls_i
 
@@ -132,8 +132,8 @@ flowchart TD
 
 **Reading:**
 
-- **Two emission archetypes:** review-of-artifact gates (`/spec-review`, `/check`) snapshot before reviewers run and emit findings about the snapshotted artifact. The synthesis-from-recommendations gate (`/plan`) has no pre-state to snapshot — its findings *are* the design recommendations from the 6 design personas, captured post-Judge.
-- **Two classifier modes:** *addressed-by-revision* compares pre-snapshot vs revised artifact (used at `/plan` and `/build` Phase 0). *Synthesis-inclusion* compares findings vs the freshly-synthesized artifact alone (used at `/check` Phase 0). The mode is selected by the calling command's invocation directive in `survival-classifier.md`.
+- **Two emission archetypes:** review-of-artifact gates (`/spec-review`, `/check`) snapshot before reviewers run and emit findings about the snapshotted artifact. The synthesis-from-recommendations gate (`/blueprint`) has no pre-state to snapshot — its findings *are* the design recommendations from the 6 design personas, captured post-Judge.
+- **Two classifier modes:** *addressed-by-revision* compares pre-snapshot vs revised artifact (used at `/blueprint` and `/build` Phase 0). *Synthesis-inclusion* compares findings vs the freshly-synthesized artifact alone (used at `/check` Phase 0). The mode is selected by the calling command's invocation directive in `survival-classifier.md`.
 - **All four artifacts feed the rollup projection.** `/wrap-insights` reads emit + survival data from every feature × stage and computes per-persona stats fresh on each invocation.
 
 ---
@@ -147,10 +147,10 @@ flowchart LR
     roster["Roster<br/>28 personas + Codex<br/>(across all three gates)"]:::shipped
 
     subgraph pipeline["Pipeline run on a feature"]
-        sr["/spec-review · /plan · /check<br/>(all three multi-agent gates)"]:::shipped
+        sr["/spec-review · /blueprint · /check<br/>(all three multi-agent gates)"]:::shipped
         emit["findings.jsonl + participation.jsonl<br/>per gate"]:::shipped
-        revise["user revises<br/>spec.md and plan.md<br/>(plan.md synthesized fresh)"]:::shipped
-        surv["survival-classifier (3 modes/sites)<br/>· /plan: spec-review findings vs revised spec.md<br/>· /check: plan findings vs plan.md (synthesis)<br/>· /build: check findings vs revised plan.md"]:::shipped
+        revise["user revises<br/>spec.md and design.md<br/>(design.md synthesized fresh)"]:::shipped
+        surv["survival-classifier (3 modes/sites)<br/>· /blueprint: spec-review findings vs revised spec.md<br/>· /check: design findings vs design.md (synthesis)<br/>· /build: check findings vs revised design.md"]:::shipped
         survout["survival.jsonl<br/>addressed/not/rejected"]:::shipped
 
         sr --> emit --> revise --> surv --> survout
@@ -190,16 +190,16 @@ flowchart LR
 
 **Reading:**
 
-- **Shipped path (green):** all 28+ personas across the three multi-agent gates run → emit findings → revision (or synthesis at `/plan`) → 3-site survival classifier → drift render covering all three gates' personas → human reads → manual roster edit → adjusted roster runs next feature. Loop closes through the human.
+- **Shipped path (green):** all 28+ personas across the three multi-agent gates run → emit findings → revision (or synthesis at `/blueprint`) → 3-site survival classifier → drift render covering all three gates' personas → human reads → manual roster edit → adjusted roster runs next feature. Loop closes through the human.
 - **Drift covers all three gates' personas now:** with scope (b), the design personas (`api`, `data-model`, `ux`, `scalability`, `security`, `integration`) get measured the same way review and check personas do. The example drift shows `data-model` with a high `silent_rate` (ran 10 times, raised useful recs in only ~7) — exactly the kind of signal scope (b) unlocks.
-- **Deferred path (yellow-dashed):** automation replaces the human judgment step. Tiering rules become *per-gate* now — a persona could be Core at `/spec-review` but Demoted at `/plan` if its design recs consistently get filtered by Judge.
+- **Deferred path (yellow-dashed):** automation replaces the human judgment step. Tiering rules become *per-gate* now — a persona could be Core at `/spec-review` but Demoted at `/blueprint` if its design recs consistently get filtered by Judge.
 - **Why measurement first:** thresholds (Core ≥ 20% load-bearing, Demote < 5%) can't be honestly chosen without 5–10 features of real data across all three gates. This release accumulates that data uniformly.
 
 ---
 
 ## Where each diagram surfaces
 
-| Diagram | README.md | docs/index.html | CHANGELOG.md | spec.md / plan.md | Future adopter doc |
+| Diagram | README.md | docs/index.html | CHANGELOG.md | spec.md / design.md | Future adopter doc |
 |---|---|---|---|---|---|
 | 1 (pipeline flow) | **replaces existing** | **replaces existing** | linked | (already in spec) | linked |
 | 2 (data flow, scope (b)) | not shown | not shown | linked | new section | full |
@@ -215,9 +215,9 @@ flowchart LR
   - Full-size Judges (no shrinking), V3 gate style (personas in sub-text), V2 colors bumped one shade darker.
   - All three Judges visually unified in darker blue (`#7dd3fc` fill / `#075985` stroke).
   - Persona Metrics in violet hero (`#a78bfa` fill / 3px stroke).
-  - JS1 carries the full Judge sub-text ("cluster · attribute · compose → review.md") as the legend; JS2/JS3 abbreviate to `→ plan.md` / `→ check.md`.
+  - JS1 carries the full Judge sub-text ("cluster · attribute · compose → review.md") as the legend; JS2/JS3 abbreviate to `→ design.md` / `→ check.md`.
   - Edge labels minimal: only `records` on JS1→PM and `surfaces drift` on W→PM. All other side-node edge labels dropped (style carries meaning: dashed orange = Codex challenges; dashed grey = ambient; thick violet = records to PM).
-- **Scope (b) adopted:** all three Judges feed PM; `/plan` is now an emit site; `/check` Phase 0 is now a survival-classifier site (synthesis-inclusion mode).
+- **Scope (b) adopted:** all three Judges feed PM; `/blueprint` is now an emit site; `/check` Phase 0 is now a survival-classifier site (synthesis-inclusion mode).
 - **Diagram 2 Phase 2 split:** Judge + Synth shown as one combined step ("Judge · Synth") inside Phase 2 — collapsed for visual cleanliness, with Phase 2c as the explicit emit step.
 - **Diagram 3 deferred-cluster placement:** sibling-subgraph variant (Version A) — clearly partitions shipped vs deferred work, with explicit dotted edges for what each future piece replaces.
 

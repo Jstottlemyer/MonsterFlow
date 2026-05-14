@@ -4,6 +4,15 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Ghostty terminal theme** shipped as `config/ghostty.config` (Apple
+  Terminal "Homebrew" replica — bright green `#28fe14` phosphor on black,
+  SF Mono 13pt, padded windows). `do_theme_install` now symlinks it to
+  `~/.config/ghostty/config` alongside the existing cmux + tmux + zsh
+  prompt links. Adopters with a hand-edited ghostty config get a
+  timestamped `.bak` via the existing `link_file` backup machinery.
+
 ## [0.12.0] - 2026-05-13
 
 ### Added

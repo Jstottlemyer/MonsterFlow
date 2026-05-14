@@ -13,7 +13,7 @@
 ║      set agent_budget=3 in ~/.config/monsterflow/config.json ║
 ║      for 3 Claude + 1 Codex per gate — token-cost win)       ║
 ║  + firecrawl (research) · context7 (API docs)                ║
-║  + codex adversarial review at spec-review, design, check,   ║
+║  + codex adversarial review at spec-review, blueprint, check,║
 ║    build (optional — silent skip if not set up)              ║
 ║  + persona metrics: every Judge step records to              ║
 ║    findings.jsonl + survival.jsonl; surfaces in              ║
