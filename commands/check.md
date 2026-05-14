@@ -53,7 +53,7 @@ SELECTED=$(bash <REPO_DIR>/scripts/resolve-personas.sh check \
 RESOLVER_EXIT=$?
 ```
 
-- If `RESOLVER_EXIT != 0` or stdout empty: apply `commands/_prompts/_resolver-recovery.md` (canonical recovery fragment — interactive: 3-option prompt; non-tty/autorun: abort). No silent seed fallback in headless mode.
+- If `RESOLVER_EXIT != 0`, stdout empty, OR the resolver script is missing from disk: apply `commands/_prompts/_resolver-recovery.md` (canonical recovery fragment — interactive: 3-option prompt; non-tty/autorun: abort). No silent seed fallback in headless mode. **Do NOT emit anything like `"Resolver not found — falling back to full roster at sonnet tier (no budget config)"`** — that conflates a missing-script error with the resolver's no-config default and is the exact recovery D6 dropped. Missing/failed resolver ≠ no budget config.
 - Resolver writes `docs/specs/<feature>/check/selection.json` (v2 schema — includes `tier` per persona).
 - No `agent_budget` in config → full roster (existing behavior).
 - Print one line: `Selected: <names> | Dropped: <names>`.

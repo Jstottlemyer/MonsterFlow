@@ -56,7 +56,7 @@ RESOLVER_EXIT=$?
 
 - `--with-tier` switches resolver stdout to colon-delimited `<persona>:<tier>` grammar (one line per selected persona; `tier ∈ {opus, sonnet}`). `codex-adversary` continues to be emitted bare (no tier suffix) when Codex is authed.
 - `--emit-selection-json` persists `docs/specs/<feature>/design/selection.json` (records `tier_policy_applied`, dropped personas, and recovery state).
-- If `RESOLVER_EXIT != 0` or stdout empty: apply `commands/_prompts/_resolver-recovery.md` (canonical recovery fragment — interactive: 3-option prompt; non-tty/autorun: abort). No silent seed fallback in headless mode.
+- If `RESOLVER_EXIT != 0`, stdout empty, OR the resolver script is missing from disk: apply `commands/_prompts/_resolver-recovery.md` (canonical recovery fragment — interactive: 3-option prompt; non-tty/autorun: abort). No silent seed fallback in headless mode. **Do NOT emit anything like `"Resolver not found — falling back to full roster at sonnet tier (no budget config)"`** — that conflates a missing-script error with the resolver's no-config default and is the exact recovery D6 dropped. Missing/failed resolver ≠ no budget config.
 - No `agent_budget` in config → full roster (existing behavior).
 - Print one line: `Selected: <names> | Dropped: <names>` (strip `:<tier>` suffix for the display).
 

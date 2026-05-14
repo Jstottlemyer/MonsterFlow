@@ -1,9 +1,37 @@
 # Resolver-error recovery (canonical fragment)
 
-Used by `commands/{spec-review,plan,check}.md` Phase 0b when
-`scripts/resolve-personas.sh` exits non-zero or emits empty stdout. This is the
-**single source of truth** for AC #7 (interactive recovery) and AC #8 (non-tty
-abort) of the `account-type-agent-scaling` feature spec.
+Used by `commands/{spec-review,blueprint,check}.md` Phase 0b when
+`scripts/resolve-personas.sh` exits non-zero, is missing, or emits empty stdout.
+This is the **single source of truth** for AC #7 (interactive recovery) and AC
+#8 (non-tty abort) of the `account-type-agent-scaling` feature spec.
+
+## STOP — tempting wrong recoveries (read this before the decision tree)
+
+The model running this fragment WILL be tempted to invent one of the following
+silent recoveries because they sound user-friendly. **Every one is forbidden.**
+If you find yourself about to print or do any of these, halt and re-read the
+decision tree below — you are off-script:
+
+- ❌ *"Resolver not found — falling back to full roster at sonnet tier (no
+  budget config)."* — This conflates a missing-script error with the resolver's
+  legitimate no-config-default. They are different cases. A missing/failed
+  resolver is **never** "no budget config." Decision D6 explicitly dropped the
+  silent full-roster recovery. If you emit this line, you are violating the
+  spec — abort the gate or prompt the user instead.
+- ❌ *"Emulating the resolver's default behavior since the script is missing."*
+  — You are not the resolver. Do not improvise its output. If it is not on
+  disk, that is an install drift bug and the user needs to know.
+- ❌ *"Dispatching the hardcoded seed list to keep the gate moving."* — Seed
+  fallback is only legal as option (2) of the interactive prompt below, and
+  only after the user explicitly chose it. Never auto-select it for the user.
+- ❌ *"Skipping Phase 0b because the resolver failed."* — Phase 0b is not
+  optional. Skipping it produces an unaudited dispatch with no
+  `selection.json`.
+
+The single legal recoveries are: interactive 3-option prompt, OR non-TTY
+abort. Nothing else. If the friendly-sounding fallback you are about to apply
+is not in the decision tree below, you are improvising — stop and follow the
+tree.
 
 ## Decision tree (apply in order)
 

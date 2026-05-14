@@ -46,7 +46,7 @@ SELECTED=$(bash <REPO_DIR>/scripts/resolve-personas.sh spec-review \
 RESOLVER_EXIT=$?
 ```
 
-- If `RESOLVER_EXIT != 0` or stdout is empty: apply `commands/_prompts/_resolver-recovery.md` (canonical recovery fragment — interactive sessions get a 3-option prompt; non-tty/autorun aborts the gate). Do **not** silently fall back to a hardcoded list — that would defeat the budget.
+- If `RESOLVER_EXIT != 0`, stdout is empty, OR the resolver script is missing from disk: apply `commands/_prompts/_resolver-recovery.md` (canonical recovery fragment — interactive sessions get a 3-option prompt; non-tty/autorun aborts the gate). Do **not** silently fall back to a hardcoded list — that would defeat the budget. **In particular, do NOT emit anything like `"Resolver not found — falling back to full roster at sonnet tier (no budget config)"`** — that line conflates a missing-script error with the resolver's no-config default and is the exact recovery decision D6 dropped. Missing/failed resolver ≠ no budget config. Follow the fragment or abort.
 - Otherwise, dispatch one subagent per line of `$SELECTED` using the parsing + dispatch contract below.
 - The resolver writes `docs/specs/<feature>/spec-review/selection.json` with the audit row (schema v2 includes the `tier` field per persona).
 - If `~/.config/monsterflow/config.json` is absent or has no `agent_budget`, the resolver emits the full roster — existing behavior preserved (every line still carries a `:<tier>` suffix).
