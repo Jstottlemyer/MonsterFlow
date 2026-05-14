@@ -681,7 +681,7 @@ $PLAN_CONTENT"
 
   LAUNCHED_PID=$!
   PIDS+=($LAUNCHED_PID)
-  echo "[autorun] check: launched $persona [$tier→$model] (pid=$LAUNCHED_PID)"
+  echo "[autorun] check: launched $persona [${tier}->${model}] (pid=$LAUNCHED_PID)"
 done
 
 FAILED=()

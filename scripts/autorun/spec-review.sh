@@ -183,7 +183,7 @@ $SPEC_CONTENT"
 
   pid=$!
   PIDS+=("$pid")
-  echo "[autorun] spec-review: launched $persona [$tier→$model] (pid=$pid)"
+  echo "[autorun] spec-review: launched $persona [${tier}->${model}] (pid=$pid)"
 done
 
 # ---------------------------------------------------------------------------
