@@ -289,6 +289,8 @@ cd ~/Projects/MonsterFlow
 
 The installer symlinks commands, personas, templates, and settings into `~/.claude/`, then offers to install plugins.
 
+**To reverse**: `bash uninstall.sh` (dry-run by default; `--apply` commits). MVP cold-start / detector-fallback mode — walks `~/.claude/` symlinks, strips MonsterFlow sentinel blocks from `~/.zshrc` and `~/CLAUDE.md`, restores conservative backups. Third-party tools (Obsidian.app, graphify, cmux) are left in place with manual-removal hints; remove yourself if desired.
+
 ## Plugin Dependencies
 
 See [plugins.md](plugins.md) for the full list. Quick install:

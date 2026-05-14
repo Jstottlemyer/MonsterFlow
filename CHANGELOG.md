@@ -4,6 +4,41 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`uninstall.sh` (cold-start MVP)** — reverse of `install.sh` in
+  detector-fallback mode. Dry-run by default; `--apply` commits. Walks
+  symlinks under `~/.claude/{commands,agents,personas,templates,hooks,scripts,skills,schemas,domain-agents,commands/_prompts}`
+  plus `settings.json`, plus theme stage (`~/.tmux.conf`,
+  `~/.config/cmux/cmux.json`, `~/.config/ghostty/config`), plus
+  `~/.local/bin/autorun`. Strips sentinel-bracketed blocks from `~/.zshrc`
+  (theme + obsidian-wiki) and `~/CLAUDE.md` (baseline). Recognizes
+  pre-rebrand `claude-workflow` paths via target-substring fallback.
+  Conservative backup-restore (single backup + older than symlink ctime).
+  Third-party tools (Obsidian.app, graphify, cmux) left in place with
+  manual-removal hint strings.
+- **`scripts/_uninstall_helpers.py`** — Python backend (stdlib-only;
+  positional-CLI per `feedback_hook_stdin_heredoc` memory). 6 subcommands:
+  `parse-manifest`, `detect-fallback-symlinks`, `detect-fallback-backup`,
+  `strip-sentinel-block`, `sha256-check`, `tombstone-manifest`.
+- **`scripts/claude-md-merge.py` sentinel-retrofit** (MVP subset of
+  install-sh-claude-md-ownership prereq): wraps appended canonical sections
+  in `# BEGIN MonsterFlow CLAUDE.md baseline` / `# END MonsterFlow CLAUDE.md baseline`
+  so `uninstall.sh` can strip them cleanly.
+- **`tests/test-uninstall-sh.sh`** — 8 cases covering dry-run no-side-effects,
+  `--apply` symlink removal, zshrc sentinel-strip with surrounding content
+  preserved, full-file backup before strip, idempotent re-run, unbalanced-sentinel
+  refusal, non-MonsterFlow symlink-skip, and pre-rebrand `claude-workflow`-path
+  recognition. Wired into `tests/run-tests.sh`.
+
+### Deferred to follow-up specs
+
+- **`install-sh-manifest-emit`** (drafted at `docs/specs/install-sh-manifest-emit/spec.md`)
+  — manifest emission + `schemas/install-manifest.v1.schema.json` + `MONSTERFLOW_MANIFEST=1`
+  staging gate. Enables ownership-provable manifest-mode reversal.
+- **`install-sh-claude-md-ownership`** (drafted; partial — sentinel-retrofit landed
+  here as MVP subset; explicit-modes refactor of `claude-md-merge.py` deferred).
+
 ## [0.12.1] - 2026-05-14
 
 ### Added

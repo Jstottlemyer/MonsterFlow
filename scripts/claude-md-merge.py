@@ -120,14 +120,29 @@ def main(argv: list = sys.argv[1:]) -> int:
         print("Nothing selected.")
         return 0
 
+    # Wrap appended content in sentinel pair so uninstall.sh can strip it
+    # cleanly (uninstall-sh spec D8 — sentinel ownership lives here per
+    # install-sh-claude-md-ownership prereq carve-off, MVP subset).
+    SENTINEL_BEGIN = "# BEGIN MonsterFlow CLAUDE.md baseline"
+    SENTINEL_END = "# END MonsterFlow CLAUDE.md baseline"
+
+    existing_text = target_path.read_text(encoding="utf-8")
+    already_bracketed = SENTINEL_BEGIN in existing_text and SENTINEL_END in existing_text
+
     with open(target_path, "a", encoding="utf-8") as f:
+        if not already_bracketed:
+            f.write(f"\n{SENTINEL_BEGIN}\n")
         for heading in to_add:
             content = template_sections.get(heading, "")
             f.write(f"\n{content}\n")
+        if not already_bracketed:
+            f.write(f"\n{SENTINEL_END}\n")
 
     print(f"\nAdded {len(to_add)} section(s) to {target_path}:")
     for h in to_add:
         print(f"  + {h}")
+    if not already_bracketed:
+        print(f"  (wrapped in '{SENTINEL_BEGIN}' / '{SENTINEL_END}' sentinels for uninstall reversibility)")
     return 0
 
 

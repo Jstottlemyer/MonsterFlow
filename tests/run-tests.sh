@@ -125,6 +125,8 @@ TESTS=(
   test-baseline-drift.sh
   # install-graphify-wiki-coverage — Knowledge Layer stage (AC1-AC15)
   test-install-knowledge-layer.sh
+  # uninstall-sh MVP — cold-start / detector-fallback mode (AC1-AC8)
+  test-uninstall-sh.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).

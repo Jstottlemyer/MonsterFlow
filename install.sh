@@ -1355,6 +1355,7 @@ echo "  3. See plugins.md for optional plugins"
 echo "  4. See QUICKSTART.md if this is your first time"
 echo "  5. Auto-bump rules: feat:→minor · fix:/docs:/etc.→patch · type!: or BREAKING CHANGE:→major"
 echo "  6. If anything looks off, run ./scripts/doctor.sh to file a diagnostic"
+echo "  7. To reverse: bash uninstall.sh (dry-run by default; --apply commits)"
 
 # Obsidian vault hint — fires when the env was detected as warn/can-install.
 # Re-classify cheaply (pure detect, no side effects) so we don't depend on
