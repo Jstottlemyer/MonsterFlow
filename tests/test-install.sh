@@ -52,7 +52,11 @@ CASE_OUT=""
 # Setup / teardown
 ##############################################################################
 setup_test() {
-    BATS_TMPDIR="$(mktemp -d -t monsterflow-test)"
+    BATS_TMPDIR="$(mktemp -d -t monsterflow-test.XXXXXX)"
+    if [ -z "$BATS_TMPDIR" ] || [ ! -d "$BATS_TMPDIR" ]; then
+        echo "FAIL setup_test: mktemp -d returned invalid path '$BATS_TMPDIR'" >&2
+        exit 1
+    fi
     STUB_DIR="$BATS_TMPDIR/stubs"
     STUB_LOG="$BATS_TMPDIR/stub.log"
     STUB_STATE="$BATS_TMPDIR/state"

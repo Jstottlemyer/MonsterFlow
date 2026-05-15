@@ -52,7 +52,11 @@ EVENT_LOG=""
 # Setup / teardown
 ##############################################################################
 setup_test() {
-    BATS_TMPDIR="$(mktemp -d -t monsterflow-kl-test)"
+    BATS_TMPDIR="$(mktemp -d -t monsterflow-kl-test.XXXXXX)"
+    if [ -z "$BATS_TMPDIR" ] || [ ! -d "$BATS_TMPDIR" ]; then
+        echo "FAIL setup_test: mktemp -d returned invalid path '$BATS_TMPDIR'" >&2
+        exit 1
+    fi
     STUB_DIR="$BATS_TMPDIR/stubs"
     STUB_LOG="$BATS_TMPDIR/stub.log"
     CASE_HOME="$BATS_TMPDIR/home"
