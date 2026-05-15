@@ -106,12 +106,17 @@ Execution discipline:
 - Testing: write thorough tests
 
 [AUTORUN MODE: If AUTORUN=1 is set in your environment, skip this approval prompt. Write all artifacts and proceed immediately to the next stage. Do not output the approval prompt text below.]
-Launch Wave 1? (go / hold)
+Launch Wave 1?
+
+- **a) Launch** — dispatch Wave 1 agents now
+- **b) Hold** — pause and review the plan first (`b I want to adjust task X`)
+
+Reply with `a` or `b <reason>` + Enter.
 ```
 
 ## Phase 2: Execute Waves
 
-On go:
+On `a`:
 
 1. **Dispatch Wave 1** — launch parallel agents for independent tasks using the Agent tool.
    - Each agent receives: the spec, plan, relevant plan tasks, constitution
@@ -133,6 +138,45 @@ On go:
 After all waves complete:
 
 1. Run verification checks (build, tests, lint)
+
+## Phase 3a: Autorun-shell-reviewer dispatch (when scripts/autorun/*.sh modified)
+
+Before the Codex implementation review and pre-commit step, check whether
+this /build modified `scripts/autorun/*.sh`:
+
+```bash
+AUTORUN_CHANGES=$(git diff --name-only HEAD scripts/autorun/ 2>/dev/null | head -20)
+if [ -n "$AUTORUN_CHANGES" ]; then
+  echo "[build] autorun-shell-reviewer dispatch — scripts/autorun/ changed:"
+  echo "$AUTORUN_CHANGES" | sed 's/^/  /'
+  # Invoke the autorun-shell-reviewer subagent via the Agent tool with:
+  #   subagent_type: "autorun-shell-reviewer"
+  #   prompt: describe the diff and ask for High/Medium/Low findings
+  # Halt on High findings; iterate up to 3 attempts (per
+  # pipeline-iterative-resolution-loops convention); on 3rd failure,
+  # surface findings to user as DONE_WITH_CONCERNS and stop pre-commit.
+fi
+```
+
+When `AUTORUN_CHANGES` is non-empty, **you must**:
+
+1. Invoke the `autorun-shell-reviewer` subagent via the Agent tool
+   (`subagent_type: "autorun-shell-reviewer"`). Pass a prompt that includes
+   the list of changed files and asks for High/Medium/Low findings per the
+   subagent's pitfall checklist.
+
+2. **On High findings:** apply fixes and re-invoke the subagent. Repeat up
+   to **3 attempts** total (per pipeline-iterative-resolution-loops convention).
+   - Attempt 1 — fix High findings, re-invoke.
+   - Attempt 2 — fix remaining High findings, re-invoke.
+   - Attempt 3 failure — do NOT pre-commit. Surface all unresolved High
+     findings to Justin as `DONE_WITH_CONCERNS` and stop. Do not proceed to
+     pre-commit or PR until the user acknowledges.
+
+3. **On Medium/Low findings only:** log them in the build summary and proceed
+   to the Codex review step. Medium/Low do not block commit.
+
+4. **No changes to scripts/autorun/*.sh:** skip this phase entirely (silent).
 
 2. **Codex implementation review (if available)** — silent skip if not installed/authenticated:
 

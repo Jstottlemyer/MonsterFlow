@@ -28,6 +28,14 @@ Your job is to dispatch 7 parallel design agents, synthesize their analysis into
 
 2. **Load constitution** (if exists) for constraint checking.
 
+3. **Probe `.compact-mode` for the pipeline-pacing-and-prefill `/compact` suggestion path** (pipeline-pacing-and-prefill Item 3 / AC5). Determine whether the running Claude Code build supports the `.context_window.used_percentage` field on the status-line stdin JSON that `scripts/statusline-command.sh:42` reads. The probe surface is "does `scripts/statusline-command.sh` exist and reference `.context_window.used_percentage` on or near line 42?" — not a live invocation, just a static reachability check (the live JSON only arrives at status-line runtime).
+
+   - If the file exists and contains the literal `.context_window.used_percentage` (e.g., `grep -q 'context_window.used_percentage' scripts/statusline-command.sh`): write the literal string `probe` (no newline-only content; bare token) to `docs/specs/<feature>/.compact-mode`. The end-of-gate banner (`scripts/_pipeline_banner.sh end`) will read this and emit the Path A two-tier `/compact` suggestion when context fill crosses 50% / 75%.
+   - Otherwise (file missing OR field absent): write the literal string `suppress` to `docs/specs/<feature>/.compact-mode`. The end-of-gate banner will fall back to the Path B cost-boundary one-liner.
+   - This file is gitignored (`docs/specs/*/.compact-mode` per `.gitignore`) so the probe result stays spec-scoped per worktree and never lands in commits.
+   - Idempotent: if `docs/specs/<feature>/.compact-mode` already exists with a valid literal (`probe` or `suppress`), leave it untouched — the operator may have overridden it manually.
+   - Silent no-op when the feature has no `docs/specs/<feature>/` directory yet (standalone / not-yet-spec'd flow). The banner helper treats a missing `.compact-mode` as `suppress` by default.
+
 ## Phase 0: Persona Metrics — survival classifier (addressed-by-revision mode)
 
 Pre-flight before design agents dispatch. If `docs/specs/<feature>/spec-review/findings.jsonl` exists, run `commands/_prompts/survival-classifier.md` in **addressed-by-revision** mode:
@@ -190,7 +198,12 @@ Run `commands/_prompts/findings-emit.md`. It reads `docs/specs/<feature>/plan/ra
    [Top risks from design analysis]
 
    [AUTORUN MODE: If AUTORUN=1 is set in your environment, skip this approval prompt. Write all artifacts and proceed immediately to the next stage. Do not output the approval prompt text below.]
-   Approve to proceed to /check? (approve / adjust <what to change>)
+   Approve to proceed to /check?
+
+   - **a) Approve** — accept the plan and continue
+   - **b) Adjust** — name what to change (`b split T6 into two waves`)
+
+   Reply with `a` or `b <change>` + Enter.
    ```
 
 2. **Write `docs/specs/<feature>/design.md`** with the full plan.

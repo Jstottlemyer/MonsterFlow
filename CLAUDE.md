@@ -65,3 +65,17 @@ Rules:
 - Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
 - After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
+
+## Tab-accept suggestions (Claude Code built-in)
+
+After Claude responds in an interactive session, Claude Code may show a
+grayed-out follow-up suggestion in your input box (based on conversation
+context). Press **Tab** or **Right arrow** to accept it, then **Enter** to
+submit. Suggestions skip after turn 1, in non-interactive mode, in plan
+mode, and when the prompt cache is cold.
+
+To disable globally:
+`export CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`
+
+Or toggle via `/config`. Slash commands cannot author suggestions directly
+— they are inferred from Claude's response context.

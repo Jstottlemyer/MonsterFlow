@@ -146,7 +146,13 @@ Default (28): Always active across /spec-review, /blueprint, /check, code-review
 Proposed additions (from repo signals):
 - [agent-name] ([source path]) — [one-line why] — [stage]
 
-Add these? (yes / customize / skip domain agents)
+Add these?
+
+- **a) Yes** — install all proposed domain agents
+- **b) Customize** — pick a subset or add by name (`b mobile-accessibility-reviewer, mcp-protocol-expert`)
+- **c) Skip domain agents** — keep the default 28-persona roster only
+
+Reply with `a`, `b <list>`, or `c` + Enter.
 ```
 
 If the user customizes, let them pick individual agents from the domain library and/or add agents by name.

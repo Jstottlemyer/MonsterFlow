@@ -4,6 +4,8 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PROJECT_DIR="${PROJECT_DIR:-$REPO_DIR}"
 source "$REPO_DIR/scripts/autorun/defaults.sh"
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/_pipeline_banner.sh"
 
 # ---------------------------------------------------------------------------
 # Validate required env vars (set by run.sh before calling this script)
@@ -147,6 +149,9 @@ $(cat "$SPEC_FILE")
 ## Review Findings (includes risk analysis)
 $(cat "$ARTIFACT_DIR/review-findings.md")"
 
+# Banner: stage start (T7 — AC18) — gate name is "blueprint" (slash-command name)
+_pipeline_banner_start "blueprint" "$SLUG"
+
 # ---------------------------------------------------------------------------
 # Invoke claude -p with timeout; capture stderr for diagnostics
 # ---------------------------------------------------------------------------
@@ -205,6 +210,9 @@ if [ ! -f "$ARTIFACT_DIR/design.md" ]; then
 fi
 
 echo "[autorun] design: $ARTIFACT_DIR/design.md written ($(wc -l < "$ARTIFACT_DIR/design.md") lines)"
+
+# Banner: stage end (T7 — AC18) — emitted after design.md is persisted
+_pipeline_banner_end "blueprint" "$SLUG"
 
 # ---------------------------------------------------------------------------
 # Codex adversarial design critique (post-synthesis pass)

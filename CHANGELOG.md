@@ -4,6 +4,61 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-05-14
+
+### Added
+
+- **Pipeline progress banners** (`scripts/_pipeline_banner.sh` + `scripts/_pipeline_eta.py`) —
+  every gate now emits a start banner before work and an end banner after work.
+  Format: `Stage N of M — /<gate> starting · ~Xmin · <step-away marker>` and
+  `Stage N of M ✓ /<gate> done (Xm Ys · $N.NN cumulative) · next: /<gate> · N gates remaining`.
+  ETA uses documented defaults only (spec=~8min, spec-review=~6min, blueprint=~3min,
+  check=~5min, build=varies). Step-away markers: `☕` for 3-6 min, `🌅` for 6+ min.
+  Denominator computed from `pipeline_path` frontmatter via Bash 3.2-compat `case` statement.
+  Null-guard: emits `[pipeline] /build · standalone mode` when no spec.md or no frontmatter.
+  Autorun: all banner output routes to stderr under `$AUTORUN=1`; stdout stays clean for
+  verdict-sidecar fence parsing. User-global opt-out: `~/.claude/.banner-disabled` empty marker.
+
+- **Two-path `/compact` prompting** — end-of-gate banner appends a context-aware
+  `/compact` suggestion:
+  - **Path A** (probe configured): reads `.context_window.used_percentage` from
+    `scripts/statusline-command.sh`'s JSON stdin format. Soft prompt at >50%,
+    strongly recommended at >75%.
+  - **Path B** (probe absent on current Claude Code version): suppresses the
+    percentage line; emits a cost-boundary one-liner when cumulative session cost
+    has crossed $5 since the last `/compact` or fresh session.
+  Path selection written to `docs/specs/<feature>/.compact-mode` (bare literal
+  `probe` or `suppress`) by `/blueprint` pre-flight. Throttle sentinel at
+  `docs/specs/<feature>/.last-compact-suggestion` (JSON:
+  `{"last_context_pct": int, "last_emit_ts": iso8601, "path": "A"|"B"}`).
+  Both files gitignored; both fail-open on parse error.
+
+- **Input grammar normalize** — all 13 approval-prompt emission sites across
+  `commands/*.md` (kickoff, spec, spec-review, blueprint, check, build, wrap,
+  wrap-quick, wrap-insights, wrap-full, autorun, flow) now use uniform `(a/b/c)` +
+  Enter format. Free-text augment after letter selection preserved
+  (`b also do X<Enter>`). Zero remaining `(1/2/3)`, `(yes/no)`, or `(y/n)` patterns
+  in active prompt-emission lines.
+
+- **CLAUDE.md `## Tab-accept suggestions` section** — one paragraph documenting
+  Claude Code's built-in Tab/Right-arrow accept-suggestion pattern and
+  `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false` opt-out env-var. No scripts touched;
+  documentation only.
+
+### Carved out (not in v0.14.0)
+
+> **launchd plist cleanup** — moved to `docs/runbooks/launchd-rebrand-cleanup.md`
+> per /spec-review. Operational runbook, not a code change.
+>
+> **Tab-prefill affordance** — dropped post-/blueprint spike. Claude Code's
+> built-in prompt-suggestion system covers the affordance; slash commands cannot
+> author suggestions directly. Replaced with the CLAUDE.md documentation paragraph above.
+>
+> **`mobile-verify` skill** — carved to **v0.14.1** per /check ck-005 (2026-05-14).
+> Disproportionate architectural scope (skill location, CODE/INFRA classification,
+> targeted UDID erase on infra failure, install.sh skills wave). Will get its own
+> /spec → /build cycle. See BACKLOG.md `mobile-verify-skill` entry.
+
 ## [0.13.1] - 2026-05-14
 
 ### Fixed

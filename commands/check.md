@@ -298,8 +298,21 @@ The recommended-option lean (option 1) is canonical — do not reword. Architect
    ## Observations
    [Non-blocking notes]
 
-   [If GO]: Ready for /build. (go / hold)
-   [If GO WITH FIXES]: Address fixes above, then /build. (fix now / defer to build / hold)
+   [If GO]: Ready for /build.
+
+   - **a) Go** — proceed to /build
+   - **b) Hold** — pause and discuss before /build
+
+   Reply with `a` or `b` + Enter.
+
+   [If GO WITH FIXES]: Address fixes above, then /build.
+
+   - **a) Fix now** — apply must-fix items here, then /build
+   - **b) Defer to build** — pass must-fix items into /build as inline TODOs
+   - **c) Hold** — pause and discuss before /build
+
+   Reply with `a`, `b`, or `c` + Enter.
+
    [If NO-GO]: Revise plan with /blueprint, then re-run /check.
    ```
 

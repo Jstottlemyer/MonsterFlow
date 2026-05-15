@@ -163,6 +163,8 @@ def main():
     ap = argparse.ArgumentParser(description='Claude Code session cost summary')
     ap.add_argument('--session-only', action='store_true', help='show only current session')
     ap.add_argument('--json', action='store_true', help='emit JSON instead of text')
+    ap.add_argument('--cumulative-only', action='store_true',
+                    help='output exactly one integer (cents, today cumulative) on stdout; exit 1 if no session data')
     args = ap.parse_args()
 
     pdir = project_dir()
@@ -174,6 +176,15 @@ def main():
     if not files:
         print(f"No session files in {pdir}", file=sys.stderr)
         return 1
+
+    # --cumulative-only: emit a single integer (cents) representing today's
+    # cumulative cost across all session files, then exit.
+    if args.cumulative_only:
+        today_entries = (e for e in dedup_iter(files) if is_today_local(e))
+        today_summary = summarize(today_entries)
+        cents = int(round(today_summary['cost'] * 100))
+        print(cents)
+        return 0
 
     session_path = files[-1]  # most recently modified
     session_summary = summarize(dedup_iter([session_path]))

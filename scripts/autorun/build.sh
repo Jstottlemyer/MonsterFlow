@@ -38,6 +38,12 @@ source "$REPO_DIR/scripts/autorun/defaults.sh"
 source "$REPO_DIR/scripts/autorun/_policy.sh"
 
 # ---------------------------------------------------------------------------
+# Source _pipeline_banner.sh for progress banners (T7 — AC18)
+# ---------------------------------------------------------------------------
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/_pipeline_banner.sh"
+
+# ---------------------------------------------------------------------------
 # Validate required env vars (set by run.sh before calling this script)
 # ---------------------------------------------------------------------------
 : "${SLUG:?SLUG must be set by run.sh}"
@@ -511,6 +517,10 @@ fi
 # ---------------------------------------------------------------------------
 # Build retry loop
 # ---------------------------------------------------------------------------
+
+# Banner: stage start (T7 — AC18) — before first build attempt
+_pipeline_banner_start "build" "$SLUG"
+
 ATTEMPT=1
 BUILD_SUCCESS=0
 
@@ -658,4 +668,8 @@ fi
 # Success path
 # ---------------------------------------------------------------------------
 update_state "build_complete" "$ATTEMPT"
+
+# Banner: stage end (T7 — AC18) — emitted after successful build
+_pipeline_banner_end "build" "$SLUG"
+
 echo "[autorun] build: complete (attempt $ATTEMPT of $BUILD_MAX_RETRIES)"

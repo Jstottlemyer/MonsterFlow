@@ -39,6 +39,8 @@ PROJECT_DIR="${PROJECT_DIR:-$REPO_DIR}"
 source "$REPO_DIR/scripts/autorun/defaults.sh"
 # shellcheck disable=SC1091
 source "$REPO_DIR/scripts/autorun/_policy.sh"
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/_pipeline_banner.sh"
 
 : "${SLUG:?SLUG must be set by run.sh}"
 : "${QUEUE_DIR:?QUEUE_DIR must be set by run.sh}"
@@ -636,6 +638,9 @@ done
 echo "[autorun] check: resolver selected: ${SELECTED_PERSONAS[*]} | dropped: ${DROPPED_PERSONAS[*]:-none}"
 echo "[autorun] check: Phase 1 — launching ${#PERSONA_FILES[@]} reviewers in parallel (timeout=${TIMEOUT_PERSONA}s each)"
 
+# Banner: stage start (T7 — AC18)
+_pipeline_banner_start "check" "$SLUG"
+
 # ---------------------------------------------------------------------------
 # Phase 1: parallel reviewer calls
 # ---------------------------------------------------------------------------
@@ -811,6 +816,9 @@ fi
 # Phase 3: D33 fenced-output extractor + policy gating
 # ---------------------------------------------------------------------------
 extract_and_decide "$STDOUT_LOG"
+
+# Banner: stage end (T7 — AC18) — emitted after verdict sidecar is written
+_pipeline_banner_end "check" "$SLUG"
 
 echo "[autorun] check: complete"
 exit 0

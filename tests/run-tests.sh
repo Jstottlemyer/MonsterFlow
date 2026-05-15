@@ -127,6 +127,23 @@ TESTS=(
   test-install-knowledge-layer.sh
   # uninstall-sh MVP — cold-start / detector-fallback mode (AC1-AC8)
   test-uninstall-sh.sh
+  # pipeline-pacing-and-prefill — v0.14.0 (16 new tests)
+  test-pipeline-banner.sh
+  test-prompt-inventory.sh
+  test-input-grammar.sh
+  test-pipeline-eta-fallback.sh
+  test-compact-mode-pre-flight.sh
+  test-compact-prompt-path-a.sh
+  test-compact-prompt-path-b.sh
+  test-banner-standalone-mode.sh
+  test-banner-concurrent-worktrees.sh
+  test-banner-autorun-stderr.sh
+  test-banner-disabled-opt-out.sh
+  test-claude-md-tab-accept-pro-tip.sh
+  test-bash32-compat.sh
+  test-session-cost-cumulative-only.sh
+  test-build-md-autorun-shell-reviewer-hook.sh
+  test-changelog-v0.14.0-entry.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).

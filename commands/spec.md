@@ -243,7 +243,13 @@ Roster covers this via: [existing agent, or "nothing"]
 Proposed additions:
 - [agent-name] ([source]) — [one-line why]
 
-Add to roster? (yes / pick subset / skip)
+Add to roster?
+
+- **a) Yes** — install all proposed agents and append to the roster
+- **b) Pick subset** — name the agents to add (`b agent-1, agent-2`)
+- **c) Skip** — no roster changes this spec
+
+Reply with `a`, `b <subset>`, or `c` + Enter.
 ```
 
 4. If approved:

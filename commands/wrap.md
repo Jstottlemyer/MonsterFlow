@@ -287,7 +287,13 @@ If nothing worth capturing: `No learnings to capture this session. ✓`
 
 ### Ask once:
 
-> Apply these updates? (all / skip / pick individually)
+> Apply these updates?
+>
+> - **a) All** — apply every proposed diff
+> - **b) Skip** — no changes, move on
+> - **c) Pick individually** — walk each diff one by one
+>
+> Reply with `a`, `b`, or `c` + Enter.
 
 - **For CLAUDE.md**: Use Edit tool to apply approved diffs
 - **For Memory**: Write files to `~/.claude/projects/<cwd-slug>/memory/` using the standard frontmatter format. Update `MEMORY.md` index.
@@ -601,7 +607,12 @@ If Phase 3b also has findings, append them under the same `=== Loose Ends ===` b
 
 After Phase 3 (and 3b if applicable) are resolved, require explicit confirmation before the wrap is declared complete:
 
-> All loose ends handled — wrap complete? (yes / no, handle [item] first)
+> All loose ends handled — wrap complete?
+>
+> - **a) Yes** — wrap is complete
+> - **b) No, handle [item] first** — name the item to address (`b commit the autorun fix`)
+>
+> Reply with `a` or `b <item>` + Enter.
 
 Do not print any "wrap complete" or session-closed message until the user confirms. If they say "no" or name something to handle first, assist with that item and re-ask.
 

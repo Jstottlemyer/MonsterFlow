@@ -331,3 +331,29 @@ These five items were removed from `dynamic-roster-per-gate` v1 to keep the MVP 
   - **Sequencing:** *do not start* until token-economics + account-scaling items above are done. This adds cost; we need the budget framework in place first.
   - **Size:** L (research project, not a feature ship).
   - **Prior research (2026-05-05):** docs reread + reframe captured. Memory: `project_agent_teams_refit.md` (debate-not-fan-out framing, 3 concrete fits: adversarial /check, personas-as-subagent-defs, hook-enforced invariants). Wiki: `_raw/2026-05-05-1037-agent-teams-refit-monsterflow.md` (general Claude Code primitives, splits at ingest). Read these before opening a `/spec` so we don't restart from a blank page.
+
+---
+
+## From pipeline-pacing-and-prefill /check (2026-05-14)
+
+- **`mobile-verify-skill` (v0.14.1 spec candidate, M)** — Carved off from
+  pipeline-pacing-and-prefill per /check ck-005 (2026-05-14). Mobile-build
+  +launch verify via hub-and-spoke skill. Detection: *.xcodeproj OR
+  *.xcworkspace OR constitution stack:mobile OR Package.swift declaring
+  iOS app product (drop naked Package.swift). Exit-code contract: 0 PASS /
+  1 CODE / 2 INFRA / 3 UNKNOWN (halt with classification text). Targeted
+  UDID erase on INFRA, not erase-all. Skill location at repo
+  .claude/skills/mobile-verify/ (not ~/.claude/), install.sh adds explicit
+  skills wave. **Entry points:** new skill dir + scripts/verify.sh + 4
+  test fixtures (good/bad/infra-stuck/infra-missing-runtime) +
+  tests/test-skills.sh coverage + commands/build.md Phase 3 detection
+  branch.
+
+- **`pipeline-eta-from-timing-data` (v0.15 spec candidate, S-M)** — Carved
+  off from pipeline-pacing-and-prefill per /blueprint OQ7 (2026-05-14).
+  Replaces v0.14's fallback-only ETA in scripts/_pipeline_eta.py with
+  per-gate medians from real timing data. **Entry points:** add stage
+  duration tracking to session-cost.py (or new timing emitter at gate
+  boundaries) → new dashboard/data/gate-timing.jsonl → _pipeline_eta.py
+  real-data branch reading the JSONL with cold-start fallback to current
+  hardcoded defaults.

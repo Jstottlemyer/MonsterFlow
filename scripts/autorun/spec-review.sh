@@ -9,6 +9,8 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PROJECT_DIR="${PROJECT_DIR:-$REPO_DIR}"
 source "$REPO_DIR/scripts/autorun/defaults.sh"
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/_pipeline_banner.sh"
 
 : "${SLUG:?SLUG must be set by run.sh}"
 : "${QUEUE_DIR:?QUEUE_DIR must be set by run.sh}"
@@ -142,6 +144,9 @@ done
 echo "[autorun] spec-review: resolver selected: ${SELECTED_PERSONAS[*]} | dropped: ${DROPPED_PERSONAS[*]:-none}"
 echo "[autorun] spec-review: launching ${#PERSONA_FILES[@]} personas in parallel (timeout=${TIMEOUT_PERSONA}s each)"
 
+# Banner: stage start (T7 — AC18)
+_pipeline_banner_start "spec-review" "$SLUG"
+
 # ---------------------------------------------------------------------------
 # Launch all personas concurrently
 # ---------------------------------------------------------------------------
@@ -241,6 +246,9 @@ REVIEW_MD="$REVIEW_DIR/review.md"
 
 cp "$REVIEW_MD" "$ARTIFACT_DIR/review-findings.md"
 echo "[autorun] spec-review: review-findings.md written ($(wc -l < "$ARTIFACT_DIR/review-findings.md") lines)"
+
+# Banner: stage end (T7 — AC18) — emitted after results are persisted
+_pipeline_banner_end "spec-review" "$SLUG"
 
 # ---------------------------------------------------------------------------
 # Gate: count Verdict: FAIL across all raw persona files

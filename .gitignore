@@ -77,3 +77,9 @@ docs/specs/*/.gate-mode-warned
 docs/specs/*/.persona-metrics-warned
 docs/specs/*/.force-permissive-log
 dashboard/data/persona-insights-bundle.js
+
+# BEGIN pipeline-pacing-and-prefill (MonsterFlow)
+# Spec-scoped sentinel files for /compact prompting — machine-local, never committed.
+docs/specs/*/.compact-mode
+docs/specs/*/.last-compact-suggestion
+# END pipeline-pacing-and-prefill
