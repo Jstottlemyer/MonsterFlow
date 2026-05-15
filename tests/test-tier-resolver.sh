@@ -50,6 +50,7 @@ setup_case() {
     export MONSTERFLOW_REPO_DIR="$REPO_DIR"
     export MONSTERFLOW_CODEX_AUTH=0
     unset MONSTERFLOW_DISABLE_BUDGET
+    unset PROJECT_DIR
 }
 
 teardown_case() {

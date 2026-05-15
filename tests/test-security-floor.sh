@@ -28,6 +28,11 @@ fi
 # trailing line in stdout, no auth side-effects).
 export MONSTERFLOW_CODEX_AUTH=0
 
+# Isolate from inherited env: friend's shell can have PROJECT_DIR pointing at
+# another project (e.g., PatternCall), making `--feature dynamic-roster-per-gate`
+# look in the wrong docs/specs/ and emit "feature dir missing" exit=4.
+unset PROJECT_DIR
+
 TMPROOT="$(mktemp -d -t "security-floor-test.XXXXXX")"
 trap 'rm -rf "$TMPROOT"' EXIT
 

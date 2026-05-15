@@ -53,6 +53,9 @@ setup_case() {
     # Default: codex unauthenticated unless case overrides
     export MONSTERFLOW_CODEX_AUTH=0
     unset MONSTERFLOW_DISABLE_BUDGET
+    # Isolate from inherited env (friend's shell had PROJECT_DIR pointing at
+    # another project, making --with-tier look in the wrong docs/specs/).
+    unset PROJECT_DIR
 }
 
 teardown_case() {
