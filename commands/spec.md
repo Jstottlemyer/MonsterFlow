@@ -371,7 +371,7 @@ When the gate is met (manual approval or auto-run criteria — see below):
 File: docs/specs/<feature-name>/spec.md
 Confidence: [scores]
 
-Ready for /spec-review (6 PRD reviewer agents will analyze this spec).
+Ready for /spec-review (budget-selected PRD reviewer agents will analyze this spec).
 ```
 
 **Auto-Run mode (see Auto-Run section):**

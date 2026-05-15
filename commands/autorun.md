@@ -237,7 +237,7 @@ All fields are optional. Create this file only when you need to override a defau
 Each queue item runs through these stages in order:
 
 ### Stage 1 — Spec Review (parallel)
-- 6 reviewer agents run in parallel against the spec
+- Budget-selected reviewer agents (default: full personas/review/ roster of 7; capped by `agent_budget` in `~/.config/monsterflow/config.json`) run in parallel against the spec
 - Findings merged into `queue/<slug>/review-findings.md`
 - **Gate:** ≥ `spec_review_fatal_threshold` (default 2) agents emit `Verdict: FAIL` → item halted, `failure.md` written, next item
 
@@ -252,7 +252,7 @@ Each queue item runs through these stages in order:
 - Output: `queue/<slug>/design.md`
 
 ### Stage 4 — Check
-- 5 agents validate the plan
+- Budget-selected reviewer agents (default: full personas/check/ roster of 6; capped by `agent_budget`) validate the plan
 - **Gate:** `NO-GO` verdict → item halted
 
 ### Stage 5 — Build + Verify

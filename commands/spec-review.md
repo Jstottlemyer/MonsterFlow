@@ -1,12 +1,14 @@
 ---
-description: Parallel PRD review — 6 specialist agents analyze the spec for gaps, risks, and ambiguity
+description: Parallel PRD review — budget-selected specialist agents analyze the spec for gaps, risks, and ambiguity
 ---
 
 **IMPORTANT: Do NOT invoke superpowers skills (writing-plans, brainstorming, executing-plans, etc.) from this command. This command IS the review workflow.**
 
 You are the review step in the pipeline: `/spec → /spec-review → /blueprint → /check → /build`
 
-Your job is to dispatch 6 parallel PRD reviewer agents against the spec, consolidate their findings, and present them for approval.
+**BEFORE dispatching anything, read `~/.config/monsterflow/config.json` and run the Phase 0b resolver.** The dispatch count is N = lines emitted by the resolver (default = full personas/review/ roster of 7; capped by `agent_budget` when set). Do NOT hardcode a count — your dispatch must match the resolver output exactly.
+
+Your job is to dispatch N parallel PRD reviewer agents (where N is determined by the Phase 0b resolver — see "BEFORE dispatching" above), consolidate their findings, and present them for approval.
 
 **Argument parsing**: `$ARGUMENTS` may carry an optional feature-slug followed by zero or one gate-mode CLI flag — one of `--strict`, `--permissive`, or `--force-permissive="<reason>"`. Split on whitespace; the first non-flag token (if any) is the feature slug, the remaining flag token (if any) is passed verbatim to `gate_mode_resolve` at Phase 0c. If both `--strict` and `--permissive`/`--force-permissive` appear, `gate_mode_resolve` will reject with exit 2.
 
@@ -135,13 +137,16 @@ Each agent receives:
 
 **As each reviewer agent returns**, persist its raw output to `docs/specs/<feature>/spec-review/raw/<persona>.md` immediately (atomic write via tmp + `os.replace`). This file-backed persistence is the structural fix that retires R1 (raw outputs no longer depend on conversation context surviving truncation). The `findings-emit` step at Phase 2c reads from this directory.
 
-The 6 reviewers:
+The reviewer roster (personas/review/, 7 personas as of 2026-05-14):
 1. **requirements** — Success criteria and acceptance conditions
 2. **gaps** — What hasn't been thought through yet
 3. **ambiguity** — What's unclear, contradictory, or underspecified
 4. **feasibility** — Is this buildable? What are the hard problems?
 5. **scope** — What's in/out and where scope creep will happen
 6. **stakeholders** — Who's affected and whether needs conflict
+7. **docs-clarity** — Will adopters/maintainers understand the spec as written?
+
+Which of these actually run is determined by Phase 0b — the resolver reads `~/.config/monsterflow/config.json` `agent_budget` and emits N persona names. Dispatch ONLY those N. Do not run the full list unless the resolver emits all 7.
 
 Each agent must return their findings structured as:
 - Critical Gaps (must answer before building)
@@ -151,7 +156,7 @@ Each agent must return their findings structured as:
 
 ## Phase 2: Judge + Synthesize
 
-After all 6 agents return, apply two passes:
+After all dispatched agents return (count = lines in `$SELECTED` from Phase 0b, minus the bare `codex-adversary` entry which Phase 2b handles), apply two passes:
 
 **Pass 1 — Judge** (read `~/.claude/personas/judge.md`):
 1. Remove duplicate findings flagged by multiple agents → merge into one with higher confidence
@@ -255,7 +260,7 @@ Address the feedback, update the spec, re-run affected reviewers if needed, re-p
 - **Show artifacts, not process** — present findings, not how they were produced
 - **One approval at a time** — don't combine review with planning
 - **You control the pace** — you decide when to approve
-- **Parallel execution** — all 6 reviewers run simultaneously
+- **Parallel execution** — all budget-selected reviewers run simultaneously
 - **Persistent artifacts** — review.md survives the session
 
 **Arguments**: $ARGUMENTS

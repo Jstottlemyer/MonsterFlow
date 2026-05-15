@@ -1,5 +1,5 @@
 ---
-description: Design and implementation planning — 7 specialist agents explore architecture, then produce an implementation plan
+description: Design and implementation planning — budget-selected specialist agents explore architecture, then produce an implementation plan
 ---
 
 **IMPORTANT: Do NOT invoke superpowers skills from this command. This command IS the planning workflow.**
@@ -15,7 +15,9 @@ keys, persona directory paths, the artifact filename `design.md`, and the
 autorun shell `scripts/autorun/design.sh` stay backward-compatible — only
 the user-facing slash command moved.)
 
-Your job is to dispatch 7 parallel design agents, synthesize their analysis into an implementation plan, and present it for approval.
+**BEFORE dispatching anything, read `~/.config/monsterflow/config.json` and run the Phase 0b resolver.** The dispatch count is N = lines emitted by the resolver (default = full personas/design/ roster of 7; capped by `agent_budget` when set). Do NOT hardcode a count — your dispatch must match the resolver output exactly.
+
+Your job is to dispatch N parallel design agents (where N is determined by the Phase 0b resolver — see "BEFORE dispatching" above), synthesize their analysis into an implementation plan, and present it for approval.
 
 **Argument parsing**: `$ARGUMENTS` may carry an optional feature-slug followed by zero or one gate-mode CLI flag — one of `--strict`, `--permissive`, or `--force-permissive="<reason>"`. Split on whitespace; the first non-flag token (if any) is the feature slug, the remaining flag token (if any) is passed verbatim to `gate_mode_resolve` at Phase 0c. If both `--strict` and `--permissive`/`--force-permissive` appear, `gate_mode_resolve` will reject with exit 2.
 
@@ -127,7 +129,7 @@ Read each persona file in `<REPO_DIR>/personas/design/` corresponding to a name 
 
 **As each design agent returns**, persist its raw output to `docs/specs/<feature>/plan/raw/<persona>.md` immediately (atomic write). The Phase 2c emit reads from this directory. (Note: no snapshot step at `/plan` — `design.md` is synthesized fresh at this stage, not revised; there is no pre-state to snapshot.)
 
-The 7 designers:
+The designer roster (personas/design/, 7 personas as of 2026-05-14):
 1. **api** — Interface design and developer/user ergonomics
 2. **data-model** — Data model, storage, and migrations
 3. **ux** — User experience and ergonomics
@@ -135,6 +137,8 @@ The 7 designers:
 5. **security** — Threat model and attack surface
 6. **integration** — How it fits existing system
 7. **wave-sequencer** — What ships in what wave; data contract precedence (three-gate default: data → UI → tests)
+
+Which of these actually run is determined by Phase 0b — the resolver reads `~/.config/monsterflow/config.json` `agent_budget` and emits N persona names. Dispatch ONLY those N. Do not run the full list unless the resolver emits all 7.
 
 Each agent must return:
 - Key Considerations
@@ -146,7 +150,7 @@ Each agent must return:
 
 ## Phase 2: Judge + Synthesize into Implementation Plan
 
-After all 7 agents return, apply two passes using the personas in `~/.claude/personas/`:
+After all dispatched agents return (count = lines in `$SELECTED` from Phase 0b, minus the bare `codex-adversary` entry — at /blueprint Codex is disabled by default), apply two passes using the personas in `~/.claude/personas/`:
 
 **Pass 1 — Judge** (read `personas/judge.md`):
 1. Remove duplicate recommendations across agents → merge into one
@@ -211,7 +215,7 @@ Run `commands/_prompts/findings-emit.md`. It reads `docs/specs/<feature>/plan/ra
 ## On Approve
 
 ```
-Plan approved. Ready for /check (5 plan reviewer agents will validate before build).
+Plan approved. Ready for /check (budget-selected plan reviewer agents will validate before build).
 ```
 
 ## On Adjust
@@ -220,7 +224,7 @@ Modify the plan as requested, re-run affected design agents if needed, re-presen
 
 ## Key Principles
 
-- **Parallel execution** — all 7 designers run simultaneously
+- **Parallel execution** — all budget-selected designers run simultaneously
 - **Concrete over abstract** — tasks should be implementable, not vague
 - **Show tradeoffs** — why approach A vs B
 - **YAGNI** — cut anything not needed for the current scope

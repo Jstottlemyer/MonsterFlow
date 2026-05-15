@@ -1,12 +1,14 @@
 ---
-description: Gap checkpoint — 5 specialist agents validate the plan before implementation begins
+description: Gap checkpoint — budget-selected specialist agents validate the plan before implementation begins
 ---
 
 **IMPORTANT: Do NOT invoke superpowers skills from this command. This command IS the checkpoint workflow.**
 
 You are the check step in the pipeline: `/spec → /spec-review → /blueprint → /check → /build`
 
-Your job is to dispatch 5 parallel plan reviewer agents, synthesize their findings into a go/no-go verdict, and present gaps for resolution before implementation begins.
+**BEFORE dispatching anything, read `~/.config/monsterflow/config.json` and run the Phase 0b resolver.** The dispatch count is `N` = lines emitted by the resolver (default = full personas/check/ roster of 6; capped by `agent_budget` when set). Do NOT hardcode a count — your dispatch must match the resolver output exactly.
+
+Your job is to dispatch N parallel plan reviewer agents (where N is determined by the Phase 0b resolver — see "BEFORE dispatching" above), synthesize their findings into a go/no-go verdict, and present gaps for resolution before implementation begins.
 
 **Argument parsing**: `$ARGUMENTS` may carry an optional feature-slug followed by zero or one gate-mode CLI flag — one of `--strict`, `--permissive`, or `--force-permissive="<reason>"`. Split on whitespace; the first non-flag token (if any) is the feature slug, the remaining flag token (if any) is passed verbatim to `gate_mode_resolve` at Phase 0c. If both `--strict` and `--permissive`/`--force-permissive` appear, `gate_mode_resolve` will reject with exit 2.
 
@@ -122,12 +124,15 @@ For each line in `$SELECTED`, strip the `:<tier>` suffix to get the persona slug
 
 **As each reviewer agent returns**, persist its raw output to `docs/specs/<feature>/check/raw/<persona>.md` immediately (atomic write). The Phase 2c emit reads from this directory.
 
-The 5 reviewers:
+The reviewer roster (personas/check/, 6 personas as of 2026-05-14):
 1. **completeness** — Are all requirements covered? What's missing?
 2. **sequencing** — Is the order right? Are dependencies correct?
 3. **risk** — What could go wrong? What are the unknowns?
 4. **scope-discipline** — Is there unnecessary work? What can be cut?
 5. **testability** — Can we verify the plan worked?
+6. **security-architect** — Threat model, attack surface, `sev:security` tagging.
+
+Which of these actually run is determined by Phase 0b — the resolver reads `~/.config/monsterflow/config.json` `agent_budget` and emits N persona names. Dispatch ONLY those N. Do not run the full list unless the resolver emits all 6.
 
 Each agent must return:
 - Verdict: PASS / PASS WITH NOTES / FAIL
@@ -137,7 +142,7 @@ Each agent must return:
 
 ## Phase 2: Judge + Synthesize
 
-After all 5 agents return, apply two passes using the personas in `~/.claude/personas/`:
+After all dispatched agents return (count = lines in `$SELECTED` from Phase 0b, minus the bare `codex-adversary` entry which Phase 2b handles), apply two passes using the personas in `~/.claude/personas/`:
 
 **Pass 1 — Judge** (read `personas/judge.md`):
 1. Remove duplicate must-fix items flagged by multiple agents → merge with higher confidence
@@ -327,7 +332,7 @@ Checkpoint passed. Ready for /build.
 
 ## On Fix Now
 
-Address the must-fix items by updating design.md, then re-present. Do NOT re-run all 5 reviewers — only re-check the specific dimensions that had FAIL verdicts.
+Address the must-fix items by updating design.md, then re-present. Do NOT re-run the full reviewer roster — only re-check the specific dimensions that had FAIL verdicts.
 
 ## On NO-GO
 
@@ -341,7 +346,7 @@ Run /blueprint to revise, then /check again.
 ## Key Principles
 
 - **This is the last gate before code** — be rigorous
-- **Parallel execution** — all 5 reviewers run simultaneously
+- **Parallel execution** — all budget-selected reviewers run simultaneously
 - **Verdict-driven** — clear PASS/FAIL, not ambiguous
 - **Fix gaps here, not during build** — that's the whole point of this step
 - **Persistent artifacts** — check.md survives the session
