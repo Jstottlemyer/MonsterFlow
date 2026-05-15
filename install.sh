@@ -968,7 +968,9 @@ If the marker exists, install.sh detected an empty vault but the upstream wiki s
 
 **Marker cleanup:** After `/wiki-setup` completes successfully — confirmed by the vault now containing at least 3 of: `concepts/`, `entities/`, `_archives/`, `_raw/`, `index.md`, `log.md`, `.obsidian/` — delete the `.scaffold-pending` marker file. Do NOT remove the marker if /wiki-setup did not run or did not complete successfully.
 
-If `/wiki-setup` is unavailable, surface the marker as a one-line note.
+If `/wiki-setup` is not available in the current session, the adopter still needs to install the wiki skills (see `install-obsidian-wiki-auto-clone` in BACKLOG.md / future spec). Surface the marker once with a one-line note and proceed with the wiki-related ask using whatever capability is currently installed.
+
+This preflight does NOT fire on session start or for non-wiki work — only when the user requests something wiki-adjacent.
 <!-- END MonsterFlow wiki-preflight -->
 WIKI_PREFLIGHT_INSTRUCTION
         echo "  APPENDED: $claude_md — wiki-preflight instruction. Remove BEGIN/END block to revert. Backup at ${claude_md}.bak.${backup_ts}."
@@ -1050,6 +1052,11 @@ install_obsidian_env() {
             echo "  APPENDED: $zshrc (sentinel-bracketed OBSIDIAN_VAULT_PATH export)"
         fi
     fi
+    # Spec-required call site: manage_scaffold_marker + append_wiki_preflight_instruction
+    # called unconditionally at end of install_obsidian_env(), immediately before success echo.
+    # Both helpers are idempotent; on re-run (config pre-exists, zshrc has sentinel) they no-op.
+    manage_scaffold_marker
+    append_wiki_preflight_instruction
     echo "  ✓ Obsidian env configured"
     return 0
 }

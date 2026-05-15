@@ -68,11 +68,15 @@ Rules:
 
 ## Obsidian vault scaffolding (post-install)
 
-If `$OBSIDIAN_VAULT_PATH/.scaffold-pending` exists, install.sh detected an empty vault. Before responding to any wiki-* command (`wiki-update`, `wiki-query`, `wiki-ingest`, `wiki-capture`, `wiki-export`, `wiki-lint`) or before `/wrap`'s Phase 2c wiki integration, suggest the adopter run `/wiki-setup` (from the upstream `Ar9av/obsidian-wiki` skills).
+**Preflight check for wiki-related work:** Before responding to any wiki-* command (`wiki-update`, `wiki-query`, `wiki-ingest`, `wiki-capture`, `wiki-export`, `wiki-lint`) OR before `/wrap`'s Phase 2c wiki integration, check whether `$OBSIDIAN_VAULT_PATH/.scaffold-pending` exists.
 
-**Marker cleanup:** After `/wiki-setup` completes successfully (vault contains at least 3 of: `concepts/`, `entities/`, `_archives/`, `_raw/`, `index.md`, `log.md`, `.obsidian/`), delete the `.scaffold-pending` marker file.
+If the marker exists, install.sh detected an empty vault but the upstream wiki structure has not been built yet. Suggest the adopter run `/wiki-setup` (from the upstream `Ar9av/obsidian-wiki` skills) before proceeding with the wiki-related ask.
 
-If `/wiki-setup` is unavailable, surface the marker as a one-line note and proceed.
+**Marker cleanup:** After `/wiki-setup` completes successfully — confirmed by the vault now containing at least 3 of: `concepts/`, `entities/`, `_archives/`, `_raw/`, `index.md`, `log.md`, `.obsidian/` — delete the `.scaffold-pending` marker file. Do NOT remove the marker if /wiki-setup did not run or did not complete successfully.
+
+If `/wiki-setup` is not available in the current session, the adopter still needs to install the wiki skills (see `install-obsidian-wiki-auto-clone` in BACKLOG.md / future spec). Surface the marker once with a one-line note and proceed with the wiki-related ask using whatever capability is currently installed.
+
+This preflight does NOT fire on session start or for non-wiki work — only when the user requests something wiki-adjacent.
 
 ## Tab-accept suggestions (Claude Code built-in)
 
