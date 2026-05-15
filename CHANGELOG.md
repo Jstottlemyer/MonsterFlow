@@ -4,6 +4,25 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-05-15
+
+### Fixed
+
+- **`mktemp` portability across BSD + GNU** — every `mktemp -d -t <prefix>` call now uses `<prefix>.XXXXXX` template. Adopters with Homebrew `coreutils` + `gnubin` in PATH get GNU mktemp before `/usr/bin/mktemp`, which rejects bare prefixes ("too few X's in template"). Sites fixed: `install.sh:264` + 6 test setup helpers. Empty mktemp result no longer cascades to file ops in `/`.
+- **`tests/run-tests.sh` portability** — 4 missed `setup_test` / `setup_case` sites in `test-install.sh`, `test-install-knowledge-layer.sh`, `test-tier-resolver.sh`, `test-dynamic-roster.sh` were running `mktemp -d -t bare-prefix` and crashing 20-something cases on GNU mktemp systems before any assertion ran.
+- **Stale `PROJECT_DIR` shell pollution** — when adopters had `PROJECT_DIR` exported from another tool (e.g., a different project's workflow scripts), the resolver inherited it and looked for spec dirs in the wrong project. Tests now `unset PROJECT_DIR` in setup helpers; runtime resolver (`scripts/resolve-personas.sh`) auto-unsets `PROJECT_DIR` when it points at a path without `docs/specs/` and emits a one-line warning.
+
+### Added
+
+- **`install.sh` auto-install + tail-summary** (per `feedback_install_sh_auto_install_then_tail_summary`) — install.sh now auto-installs everything it can: wiki-skills via `npx skills add Ar9av/obsidian-wiki`, cmux via `brew install --cask cmux` on drift, `flock` via `Brewfile`. Manual-action prompts retired. New `INSTALL_WARNINGS` accumulator + tail-summary block printed as the FINAL output of install.sh enumerates anything that failed or got skipped, with a one-line "Best practice:" fix for each.
+- **`Brewfile`** — `brew "flock"` added to RECOMMENDED tier. File-locking required by `scripts/autorun/_policy.sh` + `scripts/_followups_lock.py` for concurrent `/build` safety; stock macOS doesn't ship `flock`.
+- **`session-cost.py --cumulative-only`** — additive flag returns integer cents on stdout (exit 0 success / 1 session-data-absent). Used by `_pipeline_banner.sh` for end-banner cumulative-cost emission without re-parsing `session-cost.py`'s human-readable default output.
+- **`scripts/doctor.sh` — Environment Pollution Check section** — 15 env-var conditions diagnosed: `PROJECT_DIR` validity, `MONSTERFLOW_DISABLE_BUDGET` / `MONSTERFLOW_OWNER` / `MONSTERFLOW_HASCMD_OVERRIDE` / test-mode flags, `MONSTERFLOW_FORCE_INTERACTIVE` ⊥ `MONSTERFLOW_NON_INTERACTIVE` conflict, install-time flag leaks (`NO_INSTALL`, `NO_ONBOARD`, `FORCE_ONBOARD`, `CMUX_DEMOTE`), `AUTORUN` without `AUTORUN_STAGE`, `coreutils/gnubin` in PATH. Each WARN line includes a `Best practice:` fix.
+
+### Changed
+
+- **`mobile-verify` carved to v0.14.1 BACKLOG** — per `/check ck-pacing-005` 4-way reviewer convergence (scope-discipline + codex-C4/C6 + risk-SF4). Will ship as standalone `mobile-verify-skill` spec with narrowed CODE/INFRA classification + targeted UDID erase + repo-versioned `.claude/skills/mobile-verify/` location.
+
 ## [0.14.0] - 2026-05-14
 
 ### Added

@@ -753,7 +753,7 @@
 <header class="hero">
   <div class="wrap">
     <img src="social-image.png" alt="The MonsterFlow mascot — a friendly six-armed coding monster wearing a leather harness, each arm typing on a different floating terminal window." class="hero-image">
-    <span class="eyebrow">Autonomous coding for Claude Code · v0.13.3</span>
+    <span class="eyebrow">Autonomous coding for Claude Code · v0.14.1</span>
     <h1>Queue features tonight.<br>Wake up to merged PRs.</h1>
     <p class="hero-hook">When I'm asleep or buried in the day job, I want the pipeline to keep moving but not blindly — so autorun runs the same gates I'd step through manually, takes up to three swings at fixing what fails, and leaves a PR or a failure report waiting in the morning.</p>
     <p class="tagline">
@@ -858,7 +858,7 @@
 0 22 * * * cd ~/Projects/MonsterFlow && scripts/autorun/autorun-batch.sh --mode=overnight</code></pre>
     <p class="lede" style="margin-top:0">Or kick off a single slug right now: <code>scripts/autorun/run.sh &lt;slug&gt;</code>. Either path writes per-stage artifacts under <code>queue/&lt;slug&gt;/</code> and the durable record under <code>docs/specs/&lt;slug&gt;/</code>.</p>
 
-    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Want the long version?</strong> The full policy framework — every override, every audit trail, every known limitation — lives at <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/docs/specs/autorun-overnight-policy/spec.md"><code>docs/specs/autorun-overnight-policy/</code></a>. In flight: <code>dynamic-roster-per-gate</code> picks the best-fit reviewer slice per gate based on what your spec actually mentions; <code>pipeline-iterative-resolution-loops</code> generalizes the three-attempt pattern beyond the security axis. Both tracked in <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/BACKLOG.md"><code>BACKLOG.md</code></a>.</p>
+    <p class="lede" style="margin-top:24px"><strong style="color:var(--fg)">Want the long version?</strong> The full policy framework — every override, every audit trail, every known limitation — lives at <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/docs/specs/autorun-overnight-policy/spec.md"><code>docs/specs/autorun-overnight-policy/</code></a>. Shipped in v0.14: <code>pipeline-pacing-and-prefill</code> (start/end banners at every gate, two-path <code>/compact</code> prompts, input grammar normalize, CLAUDE.md tab-accept doc); install.sh portability + auto-install + tail-summary block; defensive env shield (resolver auto-correct + <code>doctor.sh</code> env-pollution check). In flight: <code>mobile-verify-skill</code> (v0.14.1 candidate — hub-and-spoke build verifier); <code>pipeline-eta-from-timing-data</code> (v0.15 candidate — real-data ETA from stage timing). All tracked in <a href="https://github.com/Jstottlemyer/MonsterFlow/blob/main/BACKLOG.md"><code>BACKLOG.md</code></a>.</p>
   </div>
 </section>
 
@@ -1081,7 +1081,7 @@ flowchart TD
 <section id="requirements">
   <div class="wrap">
     <h2>Requirements</h2>
-    <p class="lede">The pipeline ships in this repo (<code>v0.13.3</code>). Everything else is third-party — installed at latest from its source. No version pinning required for normal use.</p>
+    <p class="lede">The pipeline ships in this repo (<code>v0.14.1</code>). Everything else is third-party — installed at latest from its source. No version pinning required for normal use.</p>
 
     <p class="lede" style="margin-top:24px;color:var(--fg);font-weight:600">Required</p>
     <div class="table-wrap"><table>

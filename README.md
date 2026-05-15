@@ -26,6 +26,8 @@ A complete workflow system that scales to the size of the work:
 | Feature | Full pipeline: `/kickoff` through `/build` |
 | V2 / Rework | Revise existing spec, then full pipeline |
 
+**As of v0.14:** every gate emits start + end banners showing stage-of-total, ETA, cumulative session cost, and step-away markers (`☕` 3–6min, `🌅` ≥6min). Two-path `/compact` prompts suggest context-flush at the right moment. Input grammar is uniform `(a/b/c) + Enter` across all approval prompts. `install.sh` auto-installs everything it can (wiki-skills, flock, cmux on drift) and surfaces any failures as a tail-summary block. `scripts/doctor.sh` diagnoses 15 env-var conditions with best-practice guidance. See [CHANGELOG.md](CHANGELOG.md) for the full v0.14 + v0.14.1 release notes.
+
 ## The Pipeline
 
 ```mermaid
