@@ -1,138 +1,163 @@
 # Design — pipeline-pacing-and-prefill
 
-**Stage:** /blueprint · iteration 1 · gate_mode: permissive (frontmatter)
-**Dispatched:** api:opus, integration:sonnet, data-model:sonnet (budget=3; codex-adversary skipped per /blueprint default gate policy)
-**Synthesizes:** spec.md iter2 + review.md iter1 + 3 design persona outputs
+**Stage:** /blueprint iter1 + /check iter1 inline-fix iter2 · gate_mode: permissive
+**Dispatched (blueprint):** api:opus, integration:sonnet, data-model:sonnet (codex skipped at design gate)
+**Dispatched (check):** completeness:opus, risk:sonnet, scope-discipline:sonnet, codex-adversary
+**Verdict (check iter2 post-fix):** GO_WITH_FIXES — 5 contract/tests/scope-cuts findings route to followups.jsonl; mobile-verify carved to v0.14.1
 
 ## Architecture summary
 
-Five v0.14 UX-pacing items ship via three new artifacts (banner helper, ETA helper, mobile-verify skill) plus minimal-diff splices into eight existing slash commands and four autorun scripts. State surface is intentionally small: three sentinel files (one JSON, two literal markers), no new schemas, no new JSONL. All design personas converged on the same shape; one disagreement (ETA reader's data source) surfaced an honest scope-reduction (ETA ships fallback-only in v0.14).
+Four v0.14 UX-pacing items ship via two helpers + minimal-diff splices into
+12 commands + 4 autorun scripts. Sentinel state = 3 files (one JSON, two
+markers). No new schemas, no new JSONL. Mobile-verify deferred to v0.14.1 as
+a standalone spec. ETA real-data deferred to v0.15.
 
-## Key design decisions
+## Key design decisions (post-/check)
 
-### D1 — `scripts/_pipeline_banner.sh` is dual-mode (sourceable + executable) with positional args
+### D1 — `scripts/_pipeline_banner.sh` (unchanged, expanded bash 3.2 constraints)
 
-**Source:** api (primary), integration (concurrence)
+Dual-mode sourceable+executable. Positional args `start <gate> <feature>` /
+`end <gate> <feature>`. Stdout-vs-stderr routed via `${AUTORUN:-0}` inside.
+Cost/ETA/denominator computed inside; optional `--cost`/`--next` overrides.
 
-Helper exposes two subcommands: `_pipeline_banner.sh start <gate> <feature>` and `end <gate> <feature>`. Stdout-vs-stderr routing decided inside the helper via `${AUTORUN:-0}` — callers don't pass a flag. Heavy fields (cost, ETA, denominator) computed inside; optional `--cost <n>` / `--next <gate>` overrides exist for the rare pre-computed case (e.g., autorun pipeline state that already knows next gate). Same pattern as the existing `scripts/_gate_helpers.sh`.
+**Bash 3.2 forbidden constructs** (per /check F7, expanded from blueprint
+D1): `${arr[-1]}`, `declare -A`, `local -n`, `mapfile`, `read -a`,
+`(?<name>...)` named-group regex, `$'\Q...\E'`. Denominator via `case`.
+Test runner pins `BASH=/bin/bash` for any test touching the helper.
 
-**Bash 3.2 compatibility:** denominator from `pipeline_path` frontmatter via a `case` statement (no associative array). Stage-of-N counter passed in as positional arg or computed via running counter in env (`$PIPELINE_STAGE_NUM`).
+### D2 — *DROPPED (mobile-verify carved to v0.14.1)*
 
-Helper file structure includes a `## Wording Reference` section at the top documenting the canonical banner formats so commands/*.md can reference it with a one-liner instead of duplicating the format string.
+The mobile-verify exit-code contract (0/1/2 = PASS/CODE/INFRA) moves to the
+v0.14.1 follow-up spec, with refinements per /check (UNKNOWN exit 3, narrowed
+INFRA scope, targeted UDID erase).
 
-### D2 — Mobile-verify uses exit-code-authoritative contract
+### D3 — Sidecar files + `/compact` path resolution (post-/check)
 
-**Source:** api
+Three sidecars:
 
-`commands/build.md` Phase 3 calls `~/.claude/skills/mobile-verify/scripts/verify.sh` via **deterministic path-based invocation**, not Skill-tool discovery. Exit codes are the contract surface:
+- **`.compact-mode`** — bare literal `probe` or `suppress`. Written by
+  `/blueprint` pre-flight (T6 amended to include this — per /check F2):
+  the pre-flight probes whether `scripts/statusline-command.sh:42`'s JSON
+  stdin format (`.context_window.used_percentage`) is reachable. Writes
+  `probe` if yes, `suppress` if no. **Concrete probe surface, not
+  claude-code-guide consultation.**
+- **`.last-compact-suggestion`** — JSON `{"last_context_pct": int, "last_emit_ts": iso8601, "path": "A"|"B"}`.
+  Both paths throttle through it. Fail-open on parse error.
+- **`~/.claude/.banner-disabled`** — user-global empty marker; suppresses
+  all banner output.
 
-- `0` — PASS
-- `1` — CODE failure (compile error, runtime crash, smoke-scan match)
-- `2` — INFRA failure (simulator unbootable, xcrun missing, runtime mismatch)
+**Gitignored** (per /check F8): `docs/specs/*/.compact-mode` and
+`docs/specs/*/.last-compact-suggestion` patterns in `.gitignore`. Sentinel
+files don't leak into git history.
 
-Stdout is human-readable detail; `/build` does NOT parse stdout for routing. SKILL.md exists for human-facing affordance/discovery; pipeline calls bypass discovery for determinism (per Codex CDX-10).
+### D4 — ETA fallback-only in v0.14 (wording fixed)
 
-### D3 — Sidecar files at `docs/specs/<feature>/`
+`_pipeline_eta.py` returns hardcoded defaults only. **No "from rankings
+history if present" code path or copy in v0.14** (per /check F11). Real-data
+ETA carved to v0.15 (`pipeline-eta-from-timing-data` BACKLOG entry).
 
-**Source:** data-model (primary), api (concurrence)
+Spec/banner wording uses "typical estimate" or just shows the value
+without history-claim framing.
 
-Three sidecars, two shapes:
+### D5 — `session-cost.py --cumulative-only` (no `--session-only`; pinned output)
 
-- **`.compact-mode`** — bare literal (`probe` or `suppress`). Written once by `/blueprint` pre-flight after `claude-code-guide` consultation on OQ2. Defaults to `suppress` if file absent. One value to express → no JSON overhead.
-- **`.last-compact-suggestion`** — JSON: `{"last_context_pct": int, "last_emit_ts": iso8601, "path": "A"|"B"}`. Written atomically via temp+mv. Banner emitter reads at every end-banner; suppresses re-emission if `last_context_pct` matches and `now - last_emit_ts < 600sec`. Fail-open on parse error (treat as no-prior-emission).
-- **`~/.claude/.banner-disabled`** — user-global empty marker. Existence = opt-out. Suppresses ALL banner emission (including the `/compact` line).
+Per /check F10 + F13: drop `--session-only` flag entirely. Sole new flag is
+`--cumulative-only`. **Pinned output contract:** outputs exactly one
+integer (cents) on stdout, exits 0 on success / 1 on session-data-absent.
+Test: `tests/test-session-cost-cumulative-only.sh`.
 
-**Filename canonical:** `.last-compact-suggestion` (drop the `-context-pct` suffix from the review's draft). JSON contents carry the context_pct field; filename stays compact.
+### D6 — *DROPPED post-/blueprint spike* (unchanged)
 
-### D4 — ETA ships fallback-only in v0.14
+`_pipeline_input.sh` retired with Item 4 (tab-prefill).
 
-**Source:** integration (finding)
+### D7 — install.sh integration (post-/check)
 
-`dashboard/data/persona-rankings.jsonl` schema has no duration/timing field — it tracks value metrics (uniqueness, survival, load-bearing rates), not wall-clock times. Building a per-gate-median ETA against this schema would require inventing a field, which violates the persona-metrics contract.
+`scripts/*.sh` glob in install.sh auto-picks up `_pipeline_banner.sh` and
+`_pipeline_eta.py`. No new install.sh entries for v0.14. (mobile-verify
+skill-wave changes deferred to v0.14.1 spec.)
 
-**Decision:** `_pipeline_eta.py` returns hardcoded defaults always (spec=480, spec-review=360, blueprint=180, check=300, build=900 seconds). AC4 amends to test ONLY the fallback path. Real-data ETA is carved off as a v0.15 follow-up requiring a separate timing JSONL (probably hooked into session-cost.py's existing stage-timing tracking, since that already records gate boundaries).
+### D8 — Codex skipped at /blueprint, ran at /check (delivered NO-GO with 7 findings)
 
-This is an honest scope reduction. The spec promised "ETA from rankings history if present" — that promise can't be kept without schema changes. Better to ship fallback-only than to invent a field.
+Codex critique caught 4 architectural blockers + 3 majors at /check iter1.
+All resolved inline per the /check fix set. No re-run needed.
 
-### D5 — `session-cost.py --cumulative-only --session-only` flag (additive)
+### D9 (new per /check F1) — T6 inventory-first, serialized with T8
 
-**Source:** integration
+T6 is **inventory-first**: enumerate all active prompts across `commands/*.md`
+(12 files: spec, spec-review, blueprint, check, build, wrap, wrap-quick,
+wrap-insights, wrap-full, kickoff, autorun, flow — excluding preship.md
+which doesn't exist). Generated manifest at
+`tests/fixtures/prompt-inventory.txt`. Patches per-command. T6 covers
+grammar normalize on all commands **except** `commands/build.md`. T8 owns
+`build.md` exclusively (grammar normalize + autorun-shell-reviewer hook).
+Serialize: T6 → T8.
 
-Banner helper extracts cumulative cost via a new flag on the existing script: `session-cost.py --cumulative-only --session-only 2>/dev/null || true`. Returns a single dollar-amount integer (cents). On any error: omit cost field, banner emits without it, never crashes the gate. Adds ~10 lines to session-cost.py; doesn't break `/wrap` Phase 1's existing read pattern.
+### D10 (new per /check F3) — autorun-shell-reviewer wired in commands/build.md
 
-### D6 — *DROPPED post-spike (2026-05-14).*
+T8 amends `commands/build.md` Phase 3 with an explicit instruction:
+when `scripts/autorun/*.sh` has uncommitted changes (detect via
+`git diff --name-only HEAD scripts/autorun/`), dispatch
+`autorun-shell-reviewer` subagent BEFORE pre-commit. Halt-on-High via
+3-attempt iterative-resolution loop. AC15 amends to grep for this
+instruction text.
 
-Item 4 (tab-prefill / empty-Enter-default) was dropped after `claude-code-guide`
-investigation revealed: (i) empty-Enter is harness-blocked, (ii) tab-prefill IS
-a Claude Code feature but the suggestions are generated from Claude's response
-context — slash commands cannot author them via any structured marker. The
-`_pipeline_input.sh` parser becomes moot. Item 4 is now a CLAUDE.md
-documentation entry per the revised spec.
+## Implementation tasks (post-/check)
 
-### D7 — install.sh integration is automatic (glob-based)
-
-**Source:** integration
-
-Existing install.sh has a scripts glob (`scripts/*.sh`) that auto-symlinks all helpers to `~/.claude/scripts/`. New `_pipeline_banner.sh` and `_pipeline_input.sh` (if D6 ships) get picked up automatically. No install.sh entry needed.
-
-For the mobile-verify skill: install.sh's skills wave needs verification. **OQ4 (carried from spec):** confirm `~/.claude/skills/` discovery works automatically when a new skill dir appears, or whether install.sh's skill-symlink wave needs an explicit entry. Resolved during T4 implementation.
-
-### D8 — Codex skipped at /blueprint, runs at /check
-
-Per /blueprint default gate policy (resolver emits `codex-adversary` bare but it's pass-through-unchanged at interactive /blueprint). Codex critique happens at /check Phase 2b instead, against the synthesized design.md. This is intentional — design synthesis benefits from a single coherent Claude pass; adversarial review against the design happens at the next gate.
-
-## Implementation tasks
-
-Three-wave plan; total 11 tasks. Wave-sequencer default precedence (data → UI → tests) honored: helpers (data + infra) ship in Wave 1, commands/autorun splice (UI/behavior) in Wave 2, tests + release artifacts in Wave 3.
+3 waves, **8 tasks** (was 11 → 8: T4 / T5 / T11 retired, T8 expanded, T9 reconciled).
 
 | # | Task | Depends on | Size | Wave | Parallel? |
 |---|---|---|---|---|---|
-| T1 | Create `scripts/_pipeline_banner.sh` (start/end subcommands, dual-mode, case-statement denominator) | — | M | 1 | yes |
-| T2 | Create `scripts/_pipeline_eta.py` (fallback-only per D4) | — | S | 1 | yes |
-| T3 | Add `--cumulative-only --session-only` flag to `~/.claude/scripts/session-cost.py` | — | S | 1 | yes |
-| T4 | Create `~/.claude/skills/mobile-verify/SKILL.md` + `scripts/verify.sh` + 3 test fixtures (`good/`, `bad/`, `infra/`) | — | M | 1 | yes |
-| ~~T5~~ | *DROPPED post-spike: `_pipeline_input.sh` moot with Item 4 retired.* | — | — | — | — |
-| ~~T5b~~ | *Folded into T6 (same agent owns CLAUDE.md doc append since it's a small surgical doc edit alongside the commands/*.md sweep)* | — | — | — | — |
-| T6 | **Single agent, sequential, template-first** — Splice banner + input-grammar `(a/b/c)` into 8 `commands/*.md` (spec, spec-review, blueprint, check, build, wrap, preship, flow) AND append `## Tab-accept suggestions` paragraph to `CLAUDE.md`. NO `[default]` annotations. Procedure: apply to `commands/spec.md` FIRST as template; agent visually verifies result reads correctly; then proceeds through 7 remaining + CLAUDE.md in same pass. Total <15min. AC1 grep validates drift at end. | T1 | L | 2 | NO file-level parallelism within T6 (sequential); T6 still runs parallel with T7+T8 in Wave 2 |
-| T7 | Add banner-emission to 4 `scripts/autorun/*.sh` (spec-review, design, check, build) — stderr emit when `$AUTORUN=1` | T1 | M | 2 | yes |
-| T8 | Update `commands/build.md` Phase 3 with mobile detection (4-branch) + dispatch + CODE/INFRA retry split | T4 | M | 2 | yes (with T7) |
-| T9 | Write test suite: `test-pipeline-banner.sh`, `test-input-grammar.sh`, `test-claude-md-tab-accept-pro-tip.sh`, `test-mobile-verify-{code,infra}-attempts.sh`, `test-banner-{standalone-mode,concurrent-worktrees,autorun-stderr}.sh`, `test-compact-prompt-path-{a,b}.sh`, `test-changelog-v0.14.0-entry.sh` (10 new files) | T1-T8 | L | 3 | yes |
-| T10 | Update `tests/run-tests.sh` wiring + `CHANGELOG.md` v0.14.0 entry + `VERSION` bump to 0.14.0 | T9 | S | 3 | yes |
-| T11 | Invoke `autorun-shell-reviewer` subagent on `scripts/autorun/*.sh` modifications BEFORE /build's pre-commit (AC15) | T7 | S | 3 | sequential after T7 |
+| T1 | `scripts/_pipeline_banner.sh` (dual-mode, expanded bash 3.2 forbidden list) | — | M | 1 | yes |
+| T2 | `scripts/_pipeline_eta.py` (fallback-only, no rankings-history code) | — | S | 1 | yes |
+| T3 | `~/.claude/scripts/session-cost.py` add `--cumulative-only` (pinned output: integer cents on stdout) | — | S | 1 | yes |
+| T6 | **Single agent, inventory-first, sequential.** (i) Generate `tests/fixtures/prompt-inventory.txt` from `commands/*.md` (excluding preship/build); (ii) splice grammar normalize + banner emission across 11 files (spec, spec-review, blueprint, check, wrap*, kickoff, autorun, flow); (iii) ADD `/blueprint` pre-flight `.compact-mode` write step (per F2/D3); (iv) append CLAUDE.md "## Tab-accept suggestions" paragraph. NO build.md. | T1 | L | 2 | within-T6 sequential; T6 parallel with T7 |
+| T7 | `scripts/autorun/*.sh` (spec-review, design, check, build) — banner stderr emission when `$AUTORUN=1` | T1 | M | 2 | yes |
+| T8 | **commands/build.md exclusive owner.** Grammar normalize + Phase 3 autorun-shell-reviewer hook (per F3/D10). Serialized after T6. | T1, T6 | M | 2 | runs after T6 finishes |
+| T9 | Test suite — 16 new files (per AC22 enumeration). Includes `test-prompt-inventory.sh`, all banner+compact+session-cost+CLAUDE.md+bash32+build.md tests | T1-T8 | L | 3 | yes |
+| T10 | `.gitignore` adds sentinel patterns (F8); `tests/run-tests.sh` wires 16 tests; `CHANGELOG.md` v0.14.0 entry; `VERSION` 0.14.0; `BACKLOG.md` adds 2 entries (mobile-verify-skill v0.14.1, pipeline-eta-from-timing-data v0.15) | T9 | S | 3 | yes |
 
-**Wave 1** (5 tasks, all parallel) — foundations: helpers + skill. No dependencies.
+**Wave 1:** T1, T2, T3 parallel.
+**Wave 2:** T6 → T8 serialized (both touch CLAUDE.md / build.md respectively but T6 inventory must complete first for build.md grammar parity). T7 parallel alongside T6.
+**Wave 3:** T9 → T10.
 
-**Wave 2** (3 tasks, partial parallel) — splice into commands + autorun + build.md. T6 depends on T1+T5; T7 depends on T1; T8 depends on T4. T6 and T7 can run side-by-side; T8 can run with both.
+**autorun-shell-reviewer invocation** is baked into T8 itself (and into commands/build.md as Phase 3 hook); not a separate task.
 
-**Wave 3** (3 tasks, parallel) — tests + release artifacts. T9 depends on all of Wave 2; T10 depends on T9; T11 is a sequential post-step after T7 (per the established autorun-shell-reviewer pattern).
+## Followups.jsonl content (5 contract/tests/scope-cuts items per /check)
 
-## Open Questions (carried to /check)
+Routed to `docs/specs/pipeline-pacing-and-prefill/followups.jsonl` for /build Phase 0c consumption:
 
-**OQ4 (spec) — `~/.claude/skills/` discovery for mobile-verify.** Confirm install.sh's skill-symlink wave handles new spokes automatically (glob over `~/.claude/skills/*/SKILL.md`), or whether each skill needs an explicit entry. Resolution path: grep install.sh during T4 implementation; if not glob-handled, add explicit entry in T10.
+| finding_id | class | target_phase | summary |
+|---|---|---|---|
+| ck-pacing-009 | contract | (carved with mobile-verify) | Mobile classification narrow — moves to v0.14.1 spec |
+| ck-pacing-010 | contract | build-inline | `--cumulative-only` output contract pinned + test (T3) |
+| ck-pacing-011 | contract | build-inline | ETA wording change (drop "from rankings history") — folded into T2 + T6 |
+| ck-pacing-012 | tests | build-inline | 5 missing test files + count reconcile — folded into T9 + AC22 |
+| ck-pacing-013 | scope-cuts | build-inline | Drop `--session-only` flag — folded into T3 + D5 |
 
-**~~OQ5~~** — *MOOT post-spike 2026-05-14. `_pipeline_input.sh` retired with Item 4.*
+All 5 are addressed by tasks already in the plan; no new followups need /build re-derivation.
 
-**OQ6 (new) — Path B `$5-boundary` throttling.** Spec spec'd Path B emits a one-liner when cumulative cost crosses $5. Should the same `.last-compact-suggestion` JSON sentinel throttle re-emission when context% changes but cost doesn't cross another $5? Lean: yes, throttle Path B with the same sentinel (path field distinguishes A vs B emissions). Confirm at /check.
+## Open Questions
 
-**~~OQ7~~** — *RESOLVED 2026-05-14: append `pipeline-eta-from-timing-data` entry to `BACKLOG.md` during T10 (release-artifact wave). Entry points: `session-cost.py` stage-timing tracking, new `dashboard/data/gate-timing.jsonl`, `_pipeline_eta.py` real-data branch. Size estimate: S-M. v0.15 candidate.*
+None remaining. OQ4-OQ7 all resolved at /check iter1.
 
-## Risk register
+## Risk register (post-/check)
 
-| # | Risk | Likelihood | Impact | Mitigation |
+| # | Risk | Likelihood | Impact | Mitigation status |
 |---|---|---|---|---|
-| ~~R1~~ | *RESOLVED via spike 2026-05-14: harness IS unsupported. Item 4 dropped; replaced with CLAUDE.md doc entry. Risk eliminated by scope cut.* | — | — | — |
-| R2 | mobile-verify detection (4-branch) misses a valid mobile project | medium | medium | **Two-part mitigation:** (a) constitution `stack: mobile` is always-on deterministic override — documented prominently in commands/build.md Phase 3 prose. (b) Soft warning when detection returns false BUT a Swift signal exists (`.swift` files present OR `Package.swift` present): emit `[mobile-verify] no app detected; if this should be mobile, set constitution stack: mobile` to /build's Phase 3 output. AC8 amends to assert this warning fires on swift-signal-without-mobile-product. Doesn't change /build behavior; creates discoverability that addresses the EXACT trigger (user didn't know the affordance existed). |
-| R3 | Banner emission to stderr in autorun breaks an unknown fence-extractor stdout reader | low | high | T7 explicitly tests fence-extractor output integrity; AC18 asserts zero `[pipeline]` lines on stdout under $AUTORUN=1 |
-| R4 | `.last-compact-suggestion` JSON parse error silently breaks throttling | low | low | Fail-open contract (D3) — parse error treated as no-prior-emission; throttling degrades gracefully |
-| R5 | `session-cost.py --cumulative-only` flag conflicts with existing /wrap call | low | medium | Add flag as ADDITIVE; existing flagless invocation preserves /wrap's behavior; test by running /wrap unchanged after T3 |
-| R6 | Wave 2's 8-file splice (T6) drifts: one file gets the new pattern, another keeps the old | medium | low | Splice is template-first (per memory `feedback_template_first_batching`) — apply to one file, get approval, batch remainder; AC1 grep catches drift |
-| R7 | bash 3.2 incompatibility in `_pipeline_banner.sh` (e.g., `${arr[-1]}`, `declare -A`) | medium | medium | Explicit constraint per memory `feedback_negative_array_subscript_bash32`; test under `BASH=/bin/bash` |
-| R8 | autorun-shell-reviewer (T11) flags blocking issues in scripts/autorun/*.sh and forces rework | medium | medium | This is the desired protection per CLAUDE.md — bake review iteration into Wave 3 budget; halt on High findings |
+| ~~R1~~ | tab-prefill empty-Enter | — | — | RESOLVED via spike; Item 4 dropped |
+| ~~R2~~ | mobile-verify detection misses valid project | — | — | N/A; mobile-verify carved to v0.14.1 |
+| R3 | banner stderr breaks fence-extractor | low | high | AC18 + integration test (test-banner-autorun-stderr.sh) |
+| R4 | `.last-compact-suggestion` JSON parse error | low | low | D3 fail-open contract |
+| ~~R5~~ | session-cost flag conflict | — | — | RESOLVED via pinned output contract (D5 / AC21) |
+| R6 | Wave 2 T6 8-file splice drift | medium | low | Inventory-first manifest (D9) + AC1b inventory test |
+| ~~R7~~ | bash 3.2 incompat | — | — | RESOLVED via expanded D1 + AC20 |
+| ~~R8~~ | autorun-shell-reviewer Wave 3 block | — | — | RESOLVED — wired into T8/D10 directly |
 
-## Spec amendments inferred during synthesis
-
-None. The spec iter2 (post /spec-review B1-B5, M1-M3, O1-O4) is fully implementable as written, modulo the four OQs surfaced above (all defer-to-/check cleanly).
+3 active risks (R3, R4, R6) all with explicit AC-level mitigations.
 
 ## Codex critique placeholder
 
-Skipped per /blueprint default gate policy. Codex runs at /check Phase 2b against this synthesized design.md and the spec.md together. Adversarial findings (if any) flow into the /check verdict sidecar.
+Codex critique ran at /check Phase 2b and produced NO-GO with 7 findings (full
+text at `check/raw/codex-adversary.md`). All 7 addressed in the iter2 inline
+fix set above. Codex re-run not needed pre-/build; will run again at /check
+iter2 verdict re-emit if requested.

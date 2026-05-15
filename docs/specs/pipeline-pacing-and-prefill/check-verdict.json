@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "prompt_version": "check-verdict@2.0",
+  "verdict": "GO_WITH_FIXES",
+  "blocking_findings": [],
+  "security_findings": [],
+  "generated_at": "2026-05-14T22:30:00Z",
+  "iteration": 2,
+  "iteration_max": 3,
+  "mode": "permissive",
+  "mode_source": "frontmatter",
+  "class_breakdown": {
+    "architectural": 0,
+    "security": 0,
+    "contract": 2,
+    "documentation": 0,
+    "tests": 1,
+    "scope-cuts": 1,
+    "unclassified": 0
+  },
+  "class_inferred_count": 0,
+  "followups_file": "docs/specs/pipeline-pacing-and-prefill/followups.jsonl",
+  "cap_reached": false,
+  "stage": "check",
+  "iter1_to_iter2_summary": "iter1 NO_GO with 8 architectural blockers; user approved fix-now path with mobile-verify carved to v0.14.1; iter2 verdict GO_WITH_FIXES after all 8 architectural findings resolved inline + 5 non-architectural items routed to followups.jsonl (4 build-inline + 1 deferred to v0.14.1)"
+}
