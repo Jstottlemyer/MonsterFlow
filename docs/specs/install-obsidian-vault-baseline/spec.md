@@ -7,11 +7,11 @@ tags_provenance:
 gate_mode: permissive
 ---
 
-# install-obsidian-vault-baseline Spec (V2 — revised after Codex caught 5 architectural blockers)
+# install-obsidian-vault-baseline Spec (V3 — fixes 2 V2 architectural blockers + 3 majors)
 
-**Created:** 2026-05-14 (V1) · **Revised:** 2026-05-15 (V2)
+**Created:** 2026-05-14 (V1) · **Revised:** 2026-05-15 (V2, V3)
 **Constitution:** none — MonsterFlow personal-tooling repo uses pipeline-default personas
-**Confidence:** Scope 0.95 · UX 0.92 · Data 0.92 · Integration 0.95 · Edge 0.90 · Acceptance 0.92 · **avg 0.93**
+**Confidence:** Scope 0.95 · UX 0.94 · Data 0.94 · Integration 0.96 · Edge 0.92 · Acceptance 0.94 · **avg 0.94**
 
 ## Summary
 
@@ -39,7 +39,7 @@ V2 resolves all 5 by **shifting the scaffold work itself to upstream `/wiki-setu
 ## Scope
 
 **In scope:**
-- 5-line addition to `install.sh` at the END of `install_obsidian_env()` (after config write + `~/.zshrc` sentinel append): if the now-validated `$vault_path` is empty (cruft-aware) AND not-yet-scaffolded (scaffold-marker check), `touch "$vault_path/.scaffold-pending"`.
+- New helper function `manage_scaffold_marker()` in `install.sh`, called from the END of `install_obsidian_env()` (immediately before `echo "  ✓ Obsidian env configured"` at install.sh:971). The helper resolves `vault_path` itself (works for both first-install and re-run paths — see Integration section), then performs the empty-check + marker write OR the scaffold-detection + stale-marker sweep.
 - 1-paragraph addition to MonsterFlow's `CLAUDE.md` instructing Claude on the marker semantics (surface `/wiki-setup` suggestion + remove marker post-success).
 - Belt-and-suspenders sweep: on subsequent `bash install.sh` runs, if marker exists AND vault is now scaffolded (≥2 of `concepts/`, `entities/`, `_archives/`, `_raw/`, `.env`), `rm` the stale marker.
 - 5-case test harness at `tests/test-obsidian-vault-baseline.sh`.
@@ -69,35 +69,49 @@ No roster changes.
 2. Knowledge Layer stage runs `install_obsidian_env`:
    - Prompts for vault path (interactive) or uses `$OBSIDIAN_VAULT_PATH` / default `$HOME/Documents/Obsidian/wiki` (non-interactive).
    - Writes `~/.obsidian-wiki/config` + appends sentinel block to `~/.zshrc` (existing behavior — no change).
-3. **NEW: vault-state classification** (5 lines added to `install_obsidian_env`, after the existing soft-warn about missing `.obsidian/`):
+3. **NEW: marker management at end of install_obsidian_env**. The helper `manage_scaffold_marker()` is called from install.sh:971 (immediately before the existing `echo "  ✓ Obsidian env configured"`). Critically, it works for BOTH paths: first-install (the `else` branch wrote the config + sentinel) AND re-run (the `if [ -f "$config" ]` branch was a no-op). It resolves `vault_path` itself via `parse_obsidian_config`:
    ```bash
-   # Stage A: cruft strip
-   local non_cruft_count
-   non_cruft_count=$(find "$vault_path" -mindepth 1 -maxdepth 1 \
-       ! -name '.DS_Store' ! -name '.Spotlight-V100' ! -name '.fseventsd' \
-       ! -name '.obsidian' ! -name '.git' ! -name '.scaffold-pending' \
-       2>/dev/null | wc -l | tr -d ' ')
-   if [ "$non_cruft_count" = "0" ]; then
-       # Stage B+C: empty after cruft → write marker (skip Stage B since nothing to check)
-       touch "$vault_path/.scaffold-pending"
-       echo "  WROTE:    $vault_path/.scaffold-pending (run /wiki-setup in your next Claude session)"
-   else
-       # Stage B: check scaffold markers
-       local scaffold_markers=0
-       for m in concepts entities _archives _raw .env; do
-           [ -e "$vault_path/$m" ] && scaffold_markers=$((scaffold_markers + 1))
-       done
-       if [ "$scaffold_markers" -ge 2 ]; then
-           # Stage B-true: already scaffolded → sweep stale marker if any
-           if [ -e "$vault_path/.scaffold-pending" ]; then
-               rm -f "$vault_path/.scaffold-pending"
-               echo "  REMOVED:  stale $vault_path/.scaffold-pending (vault already scaffolded)"
-           fi
-       else
-           # Stage C: vault has user content but isn't scaffolded — leave alone
-           :
+   manage_scaffold_marker() {
+       # Resolve vault path independently — works regardless of which branch above ran.
+       local resolved_path
+       resolved_path="$(parse_obsidian_config 2>/dev/null)" || resolved_path=""
+       if [ -z "$resolved_path" ] || [ ! -d "$resolved_path" ]; then
+           return 0   # No config or path missing — nothing to mark
        fi
-   fi
+
+       # Stage A: cruft strip
+       local non_cruft_count
+       non_cruft_count=$(find "$resolved_path" -mindepth 1 -maxdepth 1 \
+           ! -name '.DS_Store' ! -name '.Spotlight-V100' ! -name '.fseventsd' \
+           ! -name '.obsidian' ! -name '.git' ! -name '.scaffold-pending' \
+           2>/dev/null | wc -l | tr -d ' ')
+       if [ "$non_cruft_count" = "0" ]; then
+           # Empty after cruft strip → write marker (no scaffold-marker check needed)
+           if ! touch "$resolved_path/.scaffold-pending" 2>/dev/null; then
+               add_install_warning "vault read-only — could not write $resolved_path/.scaffold-pending. Run /wiki-setup manually when ready."
+               return 0
+           fi
+           echo "  WROTE:    $resolved_path/.scaffold-pending (run /wiki-setup in your next Claude session)"
+           return 0
+       fi
+
+       # Stage B: vault has content — check scaffold markers (V3 success predicate, .env dropped per Codex I2)
+       local scaffold_markers=0
+       for m in concepts entities _archives _raw index.md log.md .obsidian; do
+           [ -e "$resolved_path/$m" ] && scaffold_markers=$((scaffold_markers + 1))
+       done
+       if [ "$scaffold_markers" -ge 3 ]; then
+           # Already scaffolded → sweep stale marker if any
+           if [ -e "$resolved_path/.scaffold-pending" ]; then
+               rm -f "$resolved_path/.scaffold-pending"
+               echo "  REMOVED:  stale $resolved_path/.scaffold-pending (vault already scaffolded)"
+           fi
+       fi
+       # Stage C (vault has user content but isn't scaffolded): silent no-op (intentional — adopter's content, not our concern)
+   }
+
+   # Called from install_obsidian_env, immediately before the final "✓ Obsidian env configured" echo:
+   manage_scaffold_marker
    ```
 4. Install.sh completes. Final output mentions the marker in the tail summary block (`INSTALL_WARNINGS`-adjacent informational line, not a true warning).
 
@@ -122,19 +136,25 @@ No roster changes.
 1. **`$OBSIDIAN_VAULT_PATH/.scaffold-pending`** — 0-byte marker. Existence == "vault not yet scaffolded." File content is irrelevant; only the path matters. `touch`-created; chmod 644 (default umask).
 2. **`CLAUDE.md` paragraph in `~/Projects/MonsterFlow/CLAUDE.md`** — see below.
 
-### CLAUDE.md addition (verbatim authored content)
+### CLAUDE.md addition (verbatim authored content) — V3 reframe per Codex I1
 
 Add to `CLAUDE.md` under a new `## Obsidian vault scaffolding (post-install)` section, near the existing Knowledge Layer / Obsidian content:
 
 ```markdown
 ## Obsidian vault scaffolding (post-install)
 
-When you start a session in this repo or anywhere `$OBSIDIAN_VAULT_PATH` resolves, check whether `$OBSIDIAN_VAULT_PATH/.scaffold-pending` exists. If it does, the adopter ran install.sh against an empty vault and the upstream wiki structure has not been built yet.
+**Preflight check for wiki-related work:** Before responding to any wiki-* command (`wiki-update`, `wiki-query`, `wiki-ingest`, `wiki-capture`, `wiki-export`, `wiki-lint`) OR before `/wrap`'s Phase 2c wiki integration, check whether `$OBSIDIAN_VAULT_PATH/.scaffold-pending` exists.
 
-Before responding to any wiki-* command (`wiki-update`, `wiki-query`, `wiki-ingest`, etc.) or `/wrap`'s Phase 2c wiki integration, suggest the adopter run `/wiki-setup` (from the upstream `Ar9av/obsidian-wiki` skills) first. After `/wiki-setup` completes successfully (vault now has `concepts/`, `entities/`, `_archives/`, `_raw/`, `.env`), delete the `.scaffold-pending` marker file.
+If the marker exists, install.sh detected an empty vault but the upstream wiki structure has not been built yet. Suggest the adopter run `/wiki-setup` (from the upstream `Ar9av/obsidian-wiki` skills) before proceeding with the wiki-related ask.
 
-If `/wiki-setup` is not available in the current session, the adopter still needs to install the wiki skills (see `install-obsidian-wiki-auto-clone` in BACKLOG.md / future spec). In that case, surface the marker once with a one-line note and proceed.
+**Marker cleanup:** After `/wiki-setup` completes successfully — confirmed by the vault now containing at least 3 of: `concepts/`, `entities/`, `_archives/`, `_raw/`, `index.md`, `log.md`, `.obsidian/` — delete the `.scaffold-pending` marker file. Do NOT remove the marker if /wiki-setup did not run or did not complete successfully.
+
+If `/wiki-setup` is not available in the current session, the adopter still needs to install the wiki skills (see `install-obsidian-wiki-auto-clone` in BACKLOG.md / future spec). Surface the marker once with a one-line note and proceed with the wiki-related ask using whatever capability is currently installed.
+
+This preflight does NOT fire on session start or for non-wiki work — only when the user requests something wiki-adjacent.
 ```
+
+**V3 rationale (per V2 Codex I1):** earlier drafts said "when you start a session" — Claude doesn't proactively inspect filesystem state unless a user request triggers relevant behavior. Reframing as a *preflight for wiki-related commands* makes the instruction enforceable. **V3 success predicate (per V2 Codex I2):** dropped `.env` from the predicate; upstream `wiki-setup` writes `.env` separately (may target the tool repo, not `$vault`), so requiring it would block the marker cleanup after legitimate /wiki-setup completion. Used `≥ 3 of 7 indicators` to match the install.sh sweep threshold.
 
 ### Sentinel-block format
 
@@ -142,17 +162,15 @@ No change. `install_obsidian_env` already manages `~/.obsidian-wiki/config` and 
 
 ## Integration
 
-### install.sh hook point (post-Codex-fix from V1.B3)
+### install.sh hook point (V3 — fixes V2 B1' anchor-in-wrong-branch + B2' self-contradiction)
 
-Inside `install_obsidian_env`, immediately after the existing soft-warn block:
-```bash
-if [ ! -d "$vault_path/.obsidian" ]; then
-    echo "  ⚠ $vault_path/.obsidian/ not found — open Obsidian.app and create the vault to finish setup"
-fi
-```
-Insert the vault-state classification block from the UX section above. This runs AFTER config is written and the path is known-good, but inside the function — so the marker write happens before `do_knowledge_layer` returns.
+The marker logic lives in a **new helper function** `manage_scaffold_marker()` defined in `install.sh` and CALLED from inside `install_obsidian_env()` at the very end of the function — immediately before the final `echo "  ✓ Obsidian env configured"` (currently at install.sh:971) and before `return 0` (install.sh:972).
 
-Line-number anchor for `/build`: target install.sh:935 (after the soft-warn, before the atomic config write at line 941).
+This anchor placement is critical: the existing `install_obsidian_env` body is wrapped in `if [ -f "$config" ]; then : ; else <work>; fi` (install.sh:905-970). Placing the helper call at line 971 — OUTSIDE that conditional, but still inside the function — means it fires unconditionally on every install.sh invocation, supporting both first-install (config absent → else branch ran) and re-run (config exists → if branch was a no-op).
+
+The helper itself resolves `vault_path` via `parse_obsidian_config` (the existing function in install.sh), NOT by reading a local variable from one branch — this is what makes the helper robust to both code paths.
+
+**Line-number anchor for `/build`:** insert the helper definition before `install_obsidian_env()` (around install.sh:900); insert the call `manage_scaffold_marker` at install.sh:971 (between the final `fi` of the conditional block and the success echo).
 
 ### Touch points
 
@@ -179,13 +197,19 @@ This spec ships independently. The marker mechanism still works without the upst
 
 ## Acceptance Criteria
 
-### Test cases (5 — Q-rev5 decision)
+### Test cases (5 — Q-rev5 decision; V3 fixes test 5 setup per Codex I3)
 
-1. **Empty vault → marker written** — `$vault_path` exists, is empty (no entries at all). After `install_obsidian_env` runs, `$vault_path/.scaffold-pending` exists and is 0 bytes; install.sh exit 0.
-2. **Non-empty user content → no marker** — `$vault_path` contains `notes.md`. After run, NO `.scaffold-pending` file exists; the user's `notes.md` is untouched; install.sh exit 0.
+1. **Empty vault → marker written** — `$vault_path` exists, is empty (no entries at all). `~/.obsidian-wiki/config` is fresh (absent before run, written during run pointing at `$vault_path`). After `install_obsidian_env` runs, `$vault_path/.scaffold-pending` exists and is 0 bytes; install.sh exit 0.
+2. **Non-empty user content → no marker** — `$vault_path` contains `notes.md`. `~/.obsidian-wiki/config` written during run. After run, NO `.scaffold-pending` file exists; the user's `notes.md` is untouched; install.sh exit 0.
 3. **Cruft-only vault → marker written** — `$vault_path` contains only `.DS_Store` + `.obsidian/`. After run, `.scaffold-pending` exists; cruft entries preserved unchanged.
-4. **Already-scaffolded vault → no marker** — `$vault_path` contains `concepts/`, `entities/`, `_archives/`, `_raw/`, `.env` (5 scaffold markers, well above the ≥2 threshold). After run, NO `.scaffold-pending` written; all scaffold content untouched.
-5. **Stale-marker sweep** — `$vault_path` contains `concepts/`, `entities/`, AND a leftover `.scaffold-pending` from a prior run. After `bash install.sh` runs, `.scaffold-pending` is removed (Stage B sweep); scaffold content untouched. Test asserts both removal and preservation.
+4. **Already-scaffolded vault → no marker (cold first install)** — `$vault_path` contains `concepts/`, `entities/`, `_archives/`, `_raw/`, `index.md`, `log.md`, `.obsidian/` (7 scaffold markers, well above the ≥3 threshold). `~/.obsidian-wiki/config` is fresh. After run, NO `.scaffold-pending` written; all scaffold content untouched.
+5. **Stale-marker sweep on rerun** — **V3 fixed setup**: pre-stage BOTH `~/.obsidian-wiki/config` (pointing at the test vault — simulating a prior install.sh run that wrote the config) AND `$vault_path` containing `concepts/`, `entities/`, `index.md` (≥3 scaffold markers from a prior /wiki-setup) PLUS a leftover `.scaffold-pending` (Claude failed to clean up). `~/.zshrc` already has the sentinel block. Run `bash install.sh`. The `if [ -f "$config" ]; then : ; fi` branch is the no-op path on this rerun; `manage_scaffold_marker` still runs at the function end. Assertion: `.scaffold-pending` removed; scaffold content untouched; no spurious writes to config or zshrc.
+
+This test 5 setup specifically exercises the V3-fixed re-run path that V2's anchor couldn't reach (Codex I3 catch). The pre-staged config is the load-bearing detail.
+
+### Test case 6 (V3 add — Codex I3 follow-up: read-only vault)
+
+6. **Read-only vault → INSTALL_WARNINGS, exit 0** — `$vault_path` exists, is empty, but `chmod 555` (read-only). `touch` fails. After run, `INSTALL_WARNINGS` contains the "vault read-only" message; no marker file; install.sh exit 0 (does not propagate touch failure).
 
 ### Manual acceptance (author checklist, not a test)
 
@@ -204,10 +228,11 @@ This spec ships independently. The marker mechanism still works without the upst
 
 ## Open Questions
 
-None remaining at confidence ≥ 0.90. The V1 Open Question about `.manifest.json` schema is moot — we don't write a manifest. The `--reconfigure-vault` flag is moot — adopter can `touch $vault/.scaffold-pending` by hand to re-trigger the CLAUDE.md prompt.
+None remaining at confidence ≥ 0.94. V1's Open Question about `.manifest.json` schema is moot. V2's Codex-caught issues (anchor in wrong branch, spec self-contradiction, weak CLAUDE.md trigger, wrong success predicate, test 5 setup) are all addressed in V3.
 
-## Notes for /spec-review V2 pass
+## Notes for /spec-review V3 pass
 
-- Watch for resurfacing of V1 blockers: the spec should NOT reference `~/.zshenv.local`, `.manifest.json`, `readlink -f`, `--reconfigure-vault`, or a "5-file scaffold" anywhere except in the V2 revision context section (where they're explicitly documented as dropped).
-- Codex should validate that the install.sh:935 hook anchor is real and the surrounding lines support a 25-LoC insertion without disturbing existing logic.
-- Confirm CLAUDE.md instruction is unambiguous enough that Claude won't double-rm the marker or rm-too-eagerly (before /wiki-setup actually succeeds).
+- V1 blockers (B1-B5) all addressed in V2 → no resurfacing expected.
+- V2 blockers (B1' anchor, B2' contradiction) addressed: anchor moved outside the conditional via the new `manage_scaffold_marker` helper called at install.sh:971; Integration + Scope now agree on placement.
+- V2 majors I1-I3 addressed: CLAUDE.md reframed as wiki-preflight (not session-start); success predicate uses `concepts/, entities/, _archives/, _raw/, index.md, log.md, .obsidian/` (no `.env`, ≥3 threshold); test 5 setup pre-stages config + scaffolded vault.
+- New defensive: V3 added case 6 (read-only vault) per Codex I3 follow-up.
