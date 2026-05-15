@@ -19,21 +19,26 @@ predecessor: gate-consolidation-exploration (deferred per Q1; this spec is the c
 
 ## Summary
 
-Ship five small, mechanically-related UX fixes that address the user feedback batch
+Ship four small, mechanically-related UX fixes that address the user feedback batch
 of 2026-05-14 (input-grammar inconsistency, "feels endless," `/compact` cluelessness,
-missing default-affordance on approvals, mobile-builds-that-don't-launch). No
-gate-count change. Cross-cutting helpers — banner emitter
-`scripts/_pipeline_banner.sh` shared across `commands/*.md` and
+mobile-builds-that-don't-launch). No gate-count change. Cross-cutting helpers —
+banner emitter `scripts/_pipeline_banner.sh` shared across `commands/*.md` and
 `scripts/autorun/*.sh`, plus mobile-verify dispatch in `commands/build.md`
 Phase 3 — are scope of v0.14. The bundle validates the "consolidation isn't
 needed if pacing is legible" hypothesis. If shipping these dissolves the
 endless feeling, the larger gate-consolidation work (spec'd in memory
 `gate-consolidation-exploration`) stays deferred.
 
+The original Item 4 (tab-prefill affordance) was DROPPED post-/blueprint
+spike (2026-05-14): the mechanism the user observed is Claude Code's
+built-in prompt-suggestion system, which is already-on and not under
+slash-command authoring control. Empty-Enter is harness-blocked. v0.14
+instead documents the existing Tab-accept-suggestion pattern in `CLAUDE.md`
+as a "pro tip" — no code, just discoverability.
+
 The original Item 6 (launchd plist cleanup) was carved off per /spec-review
 B5 to `docs/runbooks/launchd-rebrand-cleanup.md` as a standalone local-only
-task — it had zero code overlap with Items 1-5 and a partial-failure
-rollback gap.
+task.
 
 ## Backlog Routing
 
@@ -71,12 +76,15 @@ Adjacent items (`pipeline-autorun-heartbeat-and-restart-loop-detection`,
    Sentinel for suppression is spec-scoped at
    `docs/specs/<feature>/.last-compact-suggestion` (not user-global) to
    avoid racing across concurrent worktrees.
-4. **Empty-Enter default on binary approvals** — every "approve to proceed" /
-   "ready for next stage" gate is phrased so the DEFAULT action is the
-   empty Enter response. Multi-option decisions and refinement prompts do
-   NOT carry the `[default]` annotation. Pattern: `(a approve [default] /
-   b refine X)`. Works regardless of harness support for structured
-   prefill markers.
+4. **CLAUDE.md "pro tip" entry on Claude Code's prompt-suggestion system** —
+   `claude-code-guide` spike (2026-05-14) confirmed the TAB-prefill the
+   user observed is Claude Code's built-in prompt-suggestion system:
+   suggestions appear as grayed-out text after Claude's responses; user
+   accepts via Tab or Right-arrow. NOT under slash-command authoring
+   control. v0.14 adds one paragraph to `CLAUDE.md` documenting this so
+   adopters know the affordance exists and how to disable it
+   (`export CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`). No code changes
+   to commands or scripts.
 5. **Mobile build+launch verify** — new `~/.claude/skills/mobile-verify/`
    hub-and-spoke skill. `commands/build.md` Phase 3 detects mobile via:
    (i) `*.xcodeproj` OR `*.xcworkspace` in repo root, OR (ii)
@@ -101,8 +109,11 @@ Adjacent items (`pipeline-autorun-heartbeat-and-restart-loop-detection`,
   letter+Enter (preserves compound input).
 - Persistent bottom-bar TUI widget — not possible without a TUI library;
   banners are stderr text instead per Q3.
-- Tab-prefill via structured marker — replaced with empty-Enter-default
-  per /spec-review B1; no mechanism dependency.
+- Slash-command-authored tab-prefill / empty-Enter-default — DROPPED post-spike
+  2026-05-14. No authoring mechanism exists. Claude Code's built-in
+  prompt-suggestion system already provides Tab-accept naturally and is
+  documented in CLAUDE.md per Item 4.
+- `_pipeline_input.sh` empty-Enter parser helper — moot with Item 4 dropped.
 - `web-verify`, `cli-verify`, `mcp-verify` spokes — slot in via same
   hub-and-spoke pattern when needed; not part of v0.14.
 - **launchd plist cleanup** — carved to `docs/runbooks/launchd-rebrand-cleanup.md`
@@ -234,31 +245,31 @@ independently.
 machine-wide) suppresses ALL banner emission, including the `/compact`
 line. This file IS user-global on purpose.
 
-### Item 4 — Empty-Enter default on binary approvals
+### Item 4 — CLAUDE.md "pro tip" on Claude Code's prompt-suggestion system
 
-No structured-marker tab-prefill (rejected per /spec-review B1 — mechanism
-unverified). Instead: every binary approval prompt carries a `[default]`
-annotation on the most-common next action, and is phrased so that the
-empty/Enter response is interpreted as selecting that option.
+Append to `CLAUDE.md` (project-level) one paragraph under a new section
+titled `## Tab-accept suggestions`:
 
-**Prompts that get the `[default]` annotation:**
-- `/spec-review` end: `Approve to proceed to /blueprint? (a approve [default] / b refine X)`
-- `/check` end (today's path; survives until gate-consolidation): `Ready for /build? (a go [default] / b hold)`
-- `/build` end: `All waves complete. Run /preship? (a yes [default] / b skip)`
-- `/wrap` Phase 2 end: `Apply these updates? (a all [default] / b skip / c pick individually)`
-- `/spec` end: `Proceed to /spec-review? (a approve [default] / b refine X)`
+```markdown
+## Tab-accept suggestions (Claude Code built-in)
 
-**Prompts that do NOT get `[default]`** (multi-option / refinement):
-- `/spec` work-size selector
-- `/spec` Phase 2 approach proposal
-- `/check` NO_GO escape paths
-- Persona-roster confirmation
-- Any `refine X` follow-up
+After Claude responds in an interactive session, Claude Code may show a
+grayed-out follow-up suggestion in your input box (based on conversation
+context). Press **Tab** or **Right arrow** to accept it, then **Enter** to
+submit. Suggestions skip after turn 1, in non-interactive mode, in plan
+mode, and when the prompt cache is cold.
 
-**Command parsing:** when input is empty/whitespace-only on a prompt
-carrying `[default]`, the command treats it as if the user typed the
-default letter. When input is a letter (with or without augment), the
-command parses `^([a-z])\s*(.*)$` normally.
+To disable globally:
+`export CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`
+
+Or toggle via `/config`. Slash commands cannot author suggestions directly
+— they are inferred from Claude's response context. MonsterFlow's pipeline
+commands benefit from this automatically when prompts end conversationally
+(e.g., questions, "Approve to proceed?" patterns).
+```
+
+That's the entire deliverable. No code, no scripts, no commands/*.md
+changes for Item 4.
 
 ### Item 5 — Mobile build+launch verify (hub-and-spoke)
 
@@ -325,8 +336,9 @@ call-site pattern; no changes to hub when adding.
 - `docs/runbooks/launchd-rebrand-cleanup.md` — standalone runbook (carved off Item 6)
 
 **Modified files:**
-- `commands/spec.md`, `spec-review.md`, `blueprint.md`, `check.md`, `build.md`, `wrap.md`, `preship.md`, `flow.md` — input grammar normalize, banner emission, `[default]` annotations on binary approvals, `/compact` line emission (Path A or B)
+- `commands/spec.md`, `spec-review.md`, `blueprint.md`, `check.md`, `build.md`, `wrap.md`, `preship.md`, `flow.md` — input grammar normalize, banner emission, `/compact` line emission (Path A or B). NO `[default]` annotations (Item 4 dropped post-spike).
 - `scripts/autorun/spec-review.sh`, `design.sh`, `check.sh`, `build.sh` — banner emission to stderr for autorun paths
+- `CLAUDE.md` — append `## Tab-accept suggestions` paragraph (Item 4)
 - `VERSION` — bump to `0.14.0`
 - `CHANGELOG.md` — `## [0.14.0] - 2026-05-14` entry
 
@@ -417,18 +429,22 @@ gates remaining` computed from planned-gate list. `small` → `of 2`,
 `bugfix` → `of 1`. Test by varying frontmatter and asserting banner
 output.
 
-**AC7 (per B1)** — `[default]` annotation present on exactly these 5
-prompts: `/spec-review` end, `/check` end, `/build` end, `/wrap` Phase 2,
-`/spec` end. Not present on any multi-option-decision prompt. Command
-parsing of empty-input on a `[default]`-marked prompt selects the default
-letter. Test in `tests/test-empty-enter-default.sh`.
+**AC7 (per /blueprint spike 2026-05-14; replaces B1)** — `CLAUDE.md`
+contains a `## Tab-accept suggestions` section explaining Claude Code's
+built-in prompt-suggestion system + the `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION`
+opt-out env-var. Test in `tests/test-claude-md-tab-accept-pro-tip.sh`
+greps for the section header + opt-out string.
 
-**AC8 (per M1)** — `/build` Phase 3 invokes `mobile-verify` skill when:
-(i) `*.xcodeproj` OR `*.xcworkspace` present, OR (ii) constitution
-`stack:` includes mobile, OR (iii) `Package.swift` parses to an iOS/macOS
-app product. Naked `Package.swift` (no iOS app product declared) does NOT
-trigger detection. Test asserts each branch independently with synthetic
-fixtures.
+**AC8 (per M1 + /blueprint R2 mitigation)** — `/build` Phase 3 invokes
+`mobile-verify` skill when: (i) `*.xcodeproj` OR `*.xcworkspace` present,
+OR (ii) constitution `stack:` includes mobile, OR (iii) `Package.swift`
+parses to an iOS/macOS app product. Naked `Package.swift` (no iOS app
+product declared) does NOT trigger detection. Test asserts each branch
+independently with synthetic fixtures. **AC8b:** when detection returns
+false BUT a Swift signal exists (any `.swift` file present OR
+`Package.swift` present), `/build` Phase 3 emits a one-line warning:
+`[mobile-verify] no app detected; if this should be mobile, set constitution stack: mobile`.
+Test asserts the warning fires on swift-signal-without-app fixture.
 
 **AC9** — `mobile-verify` skill produces:
 - PASS exit 0 on known-good fixture (synthetic Swift Hello-World app)
@@ -482,8 +498,13 @@ parsing. Test in `tests/test-banner-autorun-stderr.sh` asserts no
 
 ## Open Questions
 
-**~~OQ1~~** — *RESOLVED per /spec-review B1: replaced tab-prefill with
-empty-Enter-default semantics. No harness mechanism dependency.*
+**~~OQ1~~** — *RESOLVED twice. First per /spec-review B1: replaced
+tab-prefill with empty-Enter-default. Then per /blueprint spike 2026-05-14:
+empty-Enter is harness-blocked AND no slash-command tab-prefill authoring
+mechanism exists. Item 4 is now a CLAUDE.md documentation entry
+explaining Claude Code's built-in (not-MonsterFlow-authored)
+prompt-suggestion system. The user's original observation is honored, not
+replicated by us.*
 
 **~~OQ2~~** — *RESOLVED per /spec-review B2: two-path AC (A=probe, B=suppress
 + $5-boundary). Path selection at /blueprint pre-flight via
