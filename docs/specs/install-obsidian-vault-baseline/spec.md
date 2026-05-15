@@ -1,7 +1,7 @@
 ---
-tags: [docs, integration]
+tags: [api, data, docs, integration, migration, scalability, security, ux]
 tags_provenance:
-  baseline: [integration]
+  baseline: [api, data, integration, migration, scalability, security, ux]
   llm_added: [docs]
   user_overrides: []
 gate_mode: permissive
