@@ -26,12 +26,18 @@ Your job is to dispatch N parallel PRD reviewer agents (where N is determined by
 
 ## Phase 1, step 0: Snapshot + rotate (persona-metrics)
 
-Before reviewer agents dispatch, run the snapshot directive at `commands/_prompts/snapshot.md`:
+**RUN THIS NOW with the Bash tool — BEFORE Phase 0b, BEFORE dispatching any subagent.** Subagents write to `spec-review/raw/<persona>.md` and the Write tool does NOT auto-create parent directories. Skipping or deferring this step is the root cause of "Error writing file" failures from dispatched reviewers.
+
+```bash
+mkdir -p docs/specs/<feature>/spec-review/raw/
+```
+
+Then run the full snapshot directive `commands/_prompts/snapshot.md`:
 
 - Snapshot `docs/specs/<feature>/spec.md` → `docs/specs/<feature>/spec-review/source.spec.md` (atomic write).
 - Refuse with `run.json.status: "failed"` if `spec.md` is not git-tracked.
 - Validate slug against `^[a-z0-9][a-z0-9-]{0,63}$`.
-- Create `docs/specs/<feature>/spec-review/raw/` directory.
+- (mkdir already done above.)
 - If a prior `findings.jsonl` exists in `docs/specs/<feature>/spec-review/`, rename it to `findings-<UTC-ts>.jsonl` (format `%Y-%m-%dT%H-%M-%SZ`) BEFORE the new emit at Phase 2c. Filename is the only superseded marker — no schema mutation.
 - Echo one-line user feedback (`[persona-metrics] snapshot ... (rotated N prior)`).
 

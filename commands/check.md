@@ -36,12 +36,18 @@ If `<feature>/plan/findings.jsonl` does not exist (legacy spec or `/blueprint` s
 
 ## Phase 1, step 0: Snapshot + rotate (persona-metrics)
 
-Before reviewer agents dispatch, run `commands/_prompts/snapshot.md`:
+**RUN THIS NOW with the Bash tool — BEFORE Phase 0b, BEFORE dispatching any subagent.** Subagents write to `check/raw/<persona>.md` and the Write tool does NOT auto-create parent directories. Skipping or deferring this step is the root cause of "Error writing file" failures from dispatched reviewers.
+
+```bash
+mkdir -p docs/specs/<feature>/check/raw/
+```
+
+Then run the full snapshot directive `commands/_prompts/snapshot.md`:
 
 - Snapshot `docs/specs/<feature>/design.md` → `docs/specs/<feature>/check/source.design.md`.
 - Refuse with `run.json.status: "failed"` if `design.md` is not git-tracked.
 - Validate slug.
-- Create `docs/specs/<feature>/check/raw/`.
+- (mkdir already done above.)
 - Rotate prior `findings.jsonl` to `findings-<UTC-ts>.jsonl` if present.
 - Echo one-line user feedback.
 

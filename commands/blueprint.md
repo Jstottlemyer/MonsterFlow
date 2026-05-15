@@ -38,6 +38,16 @@ Your job is to dispatch N parallel design agents (where N is determined by the P
    - Idempotent: if `docs/specs/<feature>/.compact-mode` already exists with a valid literal (`probe` or `suppress`), leave it untouched — the operator may have overridden it manually.
    - Silent no-op when the feature has no `docs/specs/<feature>/` directory yet (standalone / not-yet-spec'd flow). The banner helper treats a missing `.compact-mode` as `suppress` by default.
 
+## Phase 0a: Ensure raw/ directory exists (run BEFORE subagent dispatch)
+
+**RUN THIS NOW with the Bash tool — BEFORE Phase 0b, BEFORE dispatching any subagent.** Subagents write to `plan/raw/<persona>.md` and the Write tool does NOT auto-create parent directories. Unlike `/spec-review` and `/check`, there is no snapshot step at this gate (`design.md` is synthesized fresh), so the dir creation has no other home — it MUST happen here.
+
+```bash
+mkdir -p docs/specs/<feature>/plan/raw/
+```
+
+(Note the historical `plan/` directory name — the internal gate identifier remains `plan` per CLAUDE.md's gate-rename guard, even though the user-facing slash command is `/blueprint`.)
+
 ## Phase 0: Persona Metrics — survival classifier (addressed-by-revision mode)
 
 Pre-flight before design agents dispatch. If `docs/specs/<feature>/spec-review/findings.jsonl` exists, run `commands/_prompts/survival-classifier.md` in **addressed-by-revision** mode:
