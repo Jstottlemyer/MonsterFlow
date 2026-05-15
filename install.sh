@@ -135,8 +135,8 @@ prompt_budget_qa() {
 
     # Per-gate pin prompts. Validate against on-disk personas (per the locked
     # qualifying-row definition in docs/specs/account-type-agent-scaling/spec.md).
-    declare -a GATES=(spec-review plan check)
-    declare -a GATE_DIRS=(review plan check)
+    declare -a GATES=(spec-review design check)
+    declare -a GATE_DIRS=(review design check)
     declare -a GATE_DEFAULTS=(requirements integration scope-discipline)
     local pins_json="{}"
     local i=0
@@ -1419,9 +1419,9 @@ echo "=== Installation complete ==="
 echo ""
 echo "Installed:"
 echo "  - 38 pipeline agents:"
-echo "      29 pipeline personas (review 6, plan 7, check 5, code-review 9, judge, synthesis)"
+echo "      31 pipeline personas (review 7, design 7, check 6, code-review 9, judge, synthesis)"
 echo "       9 domain agents (mobile 6, games 3) — available to /kickoff for per-project install"
-echo "  - 10 pipeline commands (/kickoff → /spec → /spec-review → /plan → /check → /build + /autorun + /flow + /wrap + /bump-version)"
+echo "  - 10 pipeline commands (/kickoff → /spec → /spec-review → /blueprint → /check → /build + /autorun + /flow + /wrap + /bump-version)"
 echo "  - 2 focused subagents (autorun-shell-reviewer, persona-metrics-validator)"
 echo "  - 2 user-only skills (/autorun-dryrun, /bump-version)"
 echo "  - 2 PostToolUse hooks (shellcheck on .sh, jq empty on .json) — advisory-only"
@@ -1457,6 +1457,22 @@ esac
 unset _obsidian_post_status
 
 echo ""
+
+# --- Agent budget prompt (first-time install only) ---
+# Fires when no ~/.config/monsterflow/config.json exists and we have a TTY.
+# Without this, fresh adopters get the resolver's full-roster default (6+ Claude
+# personas per gate) and the "i still get 6 agents" report. Re-run anytime via
+# bash install.sh --reconfigure-budget. Non-interactive installs leave the config
+# absent (resolver falls through to full roster — documented in tail summary).
+if [ ! -f "$HOME/.config/monsterflow/config.json" ] && [ "$NON_INTERACTIVE" = "0" ]; then
+    if [ -t 0 ]; then
+        prompt_budget_qa "$REPO_DIR" || {
+            INSTALL_WARNINGS+=("agent-budget prompt did not complete; resolver will use full roster — re-run: bash install.sh --reconfigure-budget")
+        }
+    fi
+elif [ ! -f "$HOME/.config/monsterflow/config.json" ] && [ "$NON_INTERACTIVE" = "1" ]; then
+    INSTALL_WARNINGS+=("no ~/.config/monsterflow/config.json — resolver will dispatch the full persona roster per gate (6+ Claude). To cap: bash install.sh --reconfigure-budget on a TTY, or write {\"agent_budget\":3} to that path.")
+fi
 
 # --- Onboard panel (W2 task 2.10, last stage) ---
 # Run scripts/onboard.sh if present (W3 authors it in parallel; [ -x ] guard
