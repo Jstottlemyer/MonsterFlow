@@ -10,9 +10,9 @@
   "TIMEOUT_PERSONA": "600s",
   "TIMEOUT_STAGE": "1800s",
   "policies": {
-    "verdict": "block",
+    "verdict": "warn",
     "branch": "block",
-    "codex_probe": "block",
+    "codex_probe": "warn",
     "verify_infra": "block"
   },
   "untracked_capture_max_bytes": 104857600

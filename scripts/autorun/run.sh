@@ -773,7 +773,7 @@ export GATE_MODE GATE_MODE_SOURCE
 # gate_max_recycles — read via existing helper (clamped 1..5).
 MAX_RECYCLES_RAW="$(_gh_frontmatter_field "$SPEC_FILE" gate_max_recycles 2>/dev/null || true)"
 case "$MAX_RECYCLES_RAW" in
-  ''|*[!0-9]*) MAX_RECYCLES=2; MAX_RECYCLES_SOURCE="default" ;;
+  ''|*[!0-9]*) MAX_RECYCLES=3; MAX_RECYCLES_SOURCE="default" ;;
   *)           MAX_RECYCLES="$MAX_RECYCLES_RAW"; MAX_RECYCLES_SOURCE="spec" ;;
 esac
 

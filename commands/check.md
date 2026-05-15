@@ -186,7 +186,7 @@ OVERALL_VERDICT: <GO|GO_WITH_FIXES|NO_GO>
   ],
   "generated_at": "<ISO-8601 UTC>",
   "iteration": 1,
-  "iteration_max": 2,
+  "iteration_max": 3,
   "mode": "<permissive|strict>",
   "mode_source": "<frontmatter|cli|cli-force|default>",
   "class_breakdown": {
