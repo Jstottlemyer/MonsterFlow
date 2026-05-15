@@ -1,164 +1,213 @@
 ---
-tags: [api, data, docs, integration, migration, scalability, security, ux]
+tags: [docs, integration]
 tags_provenance:
-  baseline: [api, data, integration, migration, scalability, security, ux]
+  baseline: [integration]
   llm_added: [docs]
   user_overrides: []
 gate_mode: permissive
 ---
 
-# install-obsidian-vault-baseline Spec
+# install-obsidian-vault-baseline Spec (V2 — revised after Codex caught 5 architectural blockers)
 
-**Created:** 2026-05-14
-**Constitution:** none — MonsterFlow personal-tooling repo uses pipeline-default personas (review/design/check)
-**Confidence:** Scope 0.95 · UX 0.95 · Data 0.90 · Integration 0.95 · Edge 0.92 · Acceptance 0.92 · **avg 0.93**
+**Created:** 2026-05-14 (V1) · **Revised:** 2026-05-15 (V2)
+**Constitution:** none — MonsterFlow personal-tooling repo uses pipeline-default personas
+**Confidence:** Scope 0.95 · UX 0.92 · Data 0.92 · Integration 0.95 · Edge 0.90 · Acceptance 0.92 · **avg 0.93**
 
 ## Summary
 
-Ship a 5-file starter Obsidian vault template at `templates/obsidian-vault-baseline/` and have `install.sh`'s `install_obsidian_env` scaffold it to `$OBSIDIAN_VAULT_PATH` when the target directory is missing or empty (cruft-allowlist-aware). Adopter prompted before scaffold; respects existing non-empty vaults absolutely. Closes the v0.12.0 onboarding gap where adopters got `manual:0/6` wiki skills and an empty directory with no idea what goes in it.
+When `install.sh`'s existing `install_obsidian_env` validates an empty `$OBSIDIAN_VAULT_PATH`, write a 0-byte marker file at `$OBSIDIAN_VAULT_PATH/.scaffold-pending`. MonsterFlow's `CLAUDE.md` instructs Claude that the marker means "suggest the adopter run `/wiki-setup` before any wiki command, then remove the marker on success." The actual vault structure (9 directories, `.obsidian/` config, `index.md`, `log.md`, `.env`) is owned by the upstream `Ar9av/obsidian-wiki` `wiki-setup` skill — not re-implemented in bash.
+
+## V2 revision context
+
+V1 (2026-05-14) failed `/spec-review` with 5 architectural blockers:
+- B1: invented `.manifest.json` schema (reality: upstream uses `.env`, no manifest file exists)
+- B2: invented `~/.zshenv.local` config target (reality: `~/.obsidian-wiki/config` + `~/.zshrc` sentinel)
+- B3: hook point inside `install_obsidian_env` ran after `do_knowledge_layer` already rendered (reality: install.sh:1065)
+- B4: contradicted current non-interactive behavior (install.sh:912 returns early when default path missing)
+- B5: 5-file scaffold under-delivered vs upstream `wiki-setup` (9 dirs + Obsidian config + index.md + log.md + .env)
+
+V2 resolves all 5 by **shifting the scaffold work itself to upstream `/wiki-setup`** (run by Claude in the adopter's first session) and reducing install.sh's job to writing a single 0-byte marker file. The blockers dissolve: no manifest schema to get wrong, no new config target (we don't write any config — `install_obsidian_env` already does that), no hook-point conflict (we add code at the END of `install_obsidian_env`, after detection has already finished), no non-interactive behavior change (current behavior preserved verbatim), no under-scoped scaffold (we don't scaffold).
 
 ## Backlog Routing
 
 | # | Item | Routing |
 |---|------|---------|
-| 1 | install-obsidian-vault-baseline (this spec) | (a) In scope |
-| 2 | install-obsidian-wiki-auto-clone | (b) Stays in BACKLOG.md — separate concern (tool repo vs vault content) |
-| 3 | uninstall.sh reverter | (b) Stays in BACKLOG.md — orthogonal, M-sized |
+| 1 | install-obsidian-vault-baseline (this spec) | (a) In scope (revised) |
+| 2 | install-obsidian-wiki-auto-clone | (b) Stays in BACKLOG.md — sibling spec, ships independently |
+| 3 | uninstall.sh reverter | (b) Stays in BACKLOG.md |
 
 ## Scope
 
 **In scope:**
-- `templates/obsidian-vault-baseline/` directory with 5 starter files (see Data section).
-- `scaffold_obsidian_vault_baseline()` helper in `install.sh`, called from inside `install_obsidian_env` after `$OBSIDIAN_VAULT_PATH` is resolved.
-- Empty-detection: cruft-allowlist (`.DS_Store`, `.Spotlight-V100`, `.fseventsd`, `.obsidian/`, `.git/`) ignored; any other content blocks scaffold.
-- Adopter `(Y/n)` prompt before scaffold (default Y; auto-Y under `--non-interactive`).
-- Prompt for `$OBSIDIAN_VAULT_PATH` when unset (default `~/Documents/ObsidianVault`); write absolute path to `~/.zshenv.local` sentinel block.
-- Idempotent re-run: present-status one-liner in install transcript when baseline already exists.
-- 6-case test harness under `tests/test-obsidian-vault-baseline.sh`.
+- 5-line addition to `install.sh` at the END of `install_obsidian_env()` (after config write + `~/.zshrc` sentinel append): if the now-validated `$vault_path` is empty (cruft-aware) AND not-yet-scaffolded (scaffold-marker check), `touch "$vault_path/.scaffold-pending"`.
+- 1-paragraph addition to MonsterFlow's `CLAUDE.md` instructing Claude on the marker semantics (surface `/wiki-setup` suggestion + remove marker post-success).
+- Belt-and-suspenders sweep: on subsequent `bash install.sh` runs, if marker exists AND vault is now scaffolded (≥2 of `concepts/`, `entities/`, `_archives/`, `_raw/`, `.env`), `rm` the stale marker.
+- 5-case test harness at `tests/test-obsidian-vault-baseline.sh`.
 
 **Out of scope:**
-- Cloning the upstream `Ar9av/obsidian-wiki` tool repo (handled by separate `install-obsidian-wiki-auto-clone` spec).
-- Drift detection / refresh / template versioning (Q7 decision).
-- doctor.sh row for this scaffold (Q9 decision).
-- Migrating existing vaults (the empty-or-missing guard makes this explicit).
+- The actual vault scaffolding (`mkdir concepts/ entities/ ...`, write `index.md`, write `.env`, etc.) — upstream `wiki-setup` owns this.
+- Changes to `install_obsidian_env`'s existing config-write behavior, sentinel-block format, or non-interactive return-early logic.
+- Cloning the upstream wiki-skills repo (sibling spec `install-obsidian-wiki-auto-clone`).
+- `--reconfigure-vault` flag (no longer needed; marker can be touched by hand).
+- doctor.sh row for this marker (Q9 decision held: scaffold-once action, not ongoing state).
 
 ## Approach
 
-Direct extension of the existing `install_obsidian_env` flow — no new install.sh stage, no new doctor section, no new sentinel-block format. Template content authored fresh in MonsterFlow voice (Q4) rather than mirrored from the upstream tool repo (lower fidelity dependency on a third-party README that may rename or restructure). Uses the same idempotency posture as v0.12.0 detect-only stages (Q7): present-status one-liner when re-run finds baseline already in place.
+Maximally minimal: install.sh's job ends at "we noticed your vault is empty; here's a breadcrumb." Claude's job (via CLAUDE.md instruction) is to act on the breadcrumb when it sees it. Upstream `wiki-setup` does the actual file-creation work. This composes three independent surfaces without coupling them: install.sh stays bash-only and idempotent; MonsterFlow's CLAUDE.md grows by one paragraph; upstream wiki-setup is unchanged.
+
+The original Q&A (V1) drove much detail (5-file template, manifest schema, prompt UX) that V2 deletes entirely. The retained decisions: cruft-allowlist algorithm for empty detection (Q6, expanded with scaffold-marker stage), integration point in `install_obsidian_env`. The Q-rev1 through Q-rev5 round nailed: deferral to /wiki-setup (Q-rev1.b), marker + CLAUDE.md hint (Q-rev2.b/b2), Claude-owned cleanup + install.sh sweep (Q-rev3.b), two-stage detection (Q-rev4.a), 5 test cases (Q-rev5.b).
 
 ## Roster Changes
 
-No roster changes — install.sh / Bash work falls under MonsterFlow's existing review/design/check personas. No domain agents added.
+No roster changes.
 
 ## UX / User Flow
 
-1. Adopter runs `bash install.sh` (cold start, fresh machine).
-2. Knowledge Layer stage reaches `install_obsidian_env`.
-3. **`$OBSIDIAN_VAULT_PATH` resolution:**
-   - If set in env, use it (tilde-expand before any FS op per `feedback_tilde_expansion_in_bash_config_reads`).
-   - If unset and interactive: prompt `"Where should your Obsidian vault live? [default: ~/Documents/ObsidianVault]:"`. Tilde-expand the input. Append to `~/.zshenv.local` sentinel block (chmod 600).
-   - If unset and `--non-interactive`: use default `$HOME/Documents/ObsidianVault`, write to `~/.zshenv.local` sentinel block, log to INSTALL_WARNINGS so adopter sees it in tail summary.
-4. **Empty check:**
-   - Dir doesn't exist → `mkdir -p`; treat as empty.
-   - Dir exists → run cruft-allowlist scan (Q6 algorithm). Empty after cruft strip → proceed. Non-empty → skip with log line `Obsidian vault not empty at <path> — baseline scaffold skipped (existing content preserved).`
-5. **Scaffold prompt (interactive only):**
-   - `"Found empty vault at <path>. Scaffold 5 starter files (README.md, index.md, .manifest.json, projects/.gitkeep, _raw/.gitkeep)? (Y/n):"`.
-   - Default Y on bare-Enter; explicit `n` skips with a one-liner explaining how to scaffold later.
-   - Under `--non-interactive`: auto-Y, surface in INSTALL_WARNINGS tail summary block.
-6. **Scaffold action:** copy `templates/obsidian-vault-baseline/*` to `$OBSIDIAN_VAULT_PATH`. Atomic per-file (tmp + rename). Set `.manifest.json` permissions to 644.
-7. **Success confirmation:** `✓ Obsidian vault baseline scaffolded (5 files) at <path>`. Adopter opens Obsidian.app, points it at `$OBSIDIAN_VAULT_PATH`, sees `index.md` as the front page.
-8. **Re-run path** (subsequent `bash install.sh`): present-status one-liner — `Obsidian vault baseline: present (5 files at <path>)`. No prompt, no action.
+### First-time install
+
+1. Adopter runs `bash install.sh` (cold start).
+2. Knowledge Layer stage runs `install_obsidian_env`:
+   - Prompts for vault path (interactive) or uses `$OBSIDIAN_VAULT_PATH` / default `$HOME/Documents/Obsidian/wiki` (non-interactive).
+   - Writes `~/.obsidian-wiki/config` + appends sentinel block to `~/.zshrc` (existing behavior — no change).
+3. **NEW: vault-state classification** (5 lines added to `install_obsidian_env`, after the existing soft-warn about missing `.obsidian/`):
+   ```bash
+   # Stage A: cruft strip
+   local non_cruft_count
+   non_cruft_count=$(find "$vault_path" -mindepth 1 -maxdepth 1 \
+       ! -name '.DS_Store' ! -name '.Spotlight-V100' ! -name '.fseventsd' \
+       ! -name '.obsidian' ! -name '.git' ! -name '.scaffold-pending' \
+       2>/dev/null | wc -l | tr -d ' ')
+   if [ "$non_cruft_count" = "0" ]; then
+       # Stage B+C: empty after cruft → write marker (skip Stage B since nothing to check)
+       touch "$vault_path/.scaffold-pending"
+       echo "  WROTE:    $vault_path/.scaffold-pending (run /wiki-setup in your next Claude session)"
+   else
+       # Stage B: check scaffold markers
+       local scaffold_markers=0
+       for m in concepts entities _archives _raw .env; do
+           [ -e "$vault_path/$m" ] && scaffold_markers=$((scaffold_markers + 1))
+       done
+       if [ "$scaffold_markers" -ge 2 ]; then
+           # Stage B-true: already scaffolded → sweep stale marker if any
+           if [ -e "$vault_path/.scaffold-pending" ]; then
+               rm -f "$vault_path/.scaffold-pending"
+               echo "  REMOVED:  stale $vault_path/.scaffold-pending (vault already scaffolded)"
+           fi
+       else
+           # Stage C: vault has user content but isn't scaffolded — leave alone
+           :
+       fi
+   fi
+   ```
+4. Install.sh completes. Final output mentions the marker in the tail summary block (`INSTALL_WARNINGS`-adjacent informational line, not a true warning).
+
+### First Claude session
+
+1. Adopter opens Claude (anywhere — could be `cd $OBSIDIAN_VAULT_PATH` or in MonsterFlow itself).
+2. Claude reads `CLAUDE.md` (project-level or `~/CLAUDE.md` if Claude is in the vault dir; for MonsterFlow we'll add the instruction to MonsterFlow's own `CLAUDE.md`).
+3. The new CLAUDE.md paragraph (see Data section below) tells Claude: "If `$OBSIDIAN_VAULT_PATH/.scaffold-pending` exists, suggest `/wiki-setup` before any wiki-* command; after `/wiki-setup` completes, remove the marker."
+4. Adopter runs `/wiki-setup` (upstream skill); vault gets the 9-directory structure + `.obsidian/app.json` + `index.md` + `log.md` + `.env`.
+5. Claude removes the marker.
+
+### Re-run install.sh after scaffold
+
+1. `bash install.sh` again. `install_obsidian_env` runs as before.
+2. Vault is now non-empty (has `concepts/`, `.env`, etc). Stage A's `non_cruft_count` is `>0`. Stage B fires: `scaffold_markers >= 2` → sweep stale marker if any (defensive — Claude should have removed it, but install.sh sweeps anyway).
+3. Install.sh completes silently for this stage.
 
 ## Data & State
 
-### Template files (5)
+### Files written by this spec
 
-Located at `templates/obsidian-vault-baseline/` in the MonsterFlow repo:
+1. **`$OBSIDIAN_VAULT_PATH/.scaffold-pending`** — 0-byte marker. Existence == "vault not yet scaffolded." File content is irrelevant; only the path matters. `touch`-created; chmod 644 (default umask).
+2. **`CLAUDE.md` paragraph in `~/Projects/MonsterFlow/CLAUDE.md`** — see below.
 
-1. **`README.md`** — terse first-five-minutes orientation. Three sections: "what this is" (1 paragraph), "the 6 skills" (one-line summary per skill, names only), "first session" (`capture this: X` → `/wrap` → `what do I know about X` example). Authored in MonsterFlow voice (long comma-stitched sentences per `user_writing_voice`), no em-dashes (per `feedback_no_em_dashes`).
-2. **`index.md`** — vault front page. Hand-authored walkthrough (Q4 decision) showing the wiki workflow with one example wikilink (`[[example-page]]`) to demonstrate the syntax. Frontmatter includes `summary:` field per obsidian-wiki contract.
-3. **`.manifest.json`** — initialized to the schema expected by the upstream `wiki-update` / `wiki-ingest` skills (see Open Questions — schema not yet confirmed). Working assumption: `{"version": 1, "pages": [], "last_updated": null}`.
-4. **`projects/.gitkeep`** — empty placeholder so the `projects/` subdir exists. The 6 wiki skills assume this subdir for per-project knowledge pages.
-5. **`_raw/.gitkeep`** — empty placeholder for the raw capture queue (the inbox `wiki-capture` writes to, processed by `wiki-ingest` at /wrap).
+### CLAUDE.md addition (verbatim authored content)
 
-### Sentinel block in `~/.zshenv.local`
+Add to `CLAUDE.md` under a new `## Obsidian vault scaffolding (post-install)` section, near the existing Knowledge Layer / Obsidian content:
 
-When prompting for `$OBSIDIAN_VAULT_PATH`, install.sh writes:
+```markdown
+## Obsidian vault scaffolding (post-install)
 
-```bash
-# === MonsterFlow: OBSIDIAN_VAULT_PATH (vault-baseline) ===
-export OBSIDIAN_VAULT_PATH="/Users/<adopter>/Documents/ObsidianVault"
-# === /MonsterFlow: OBSIDIAN_VAULT_PATH ===
+When you start a session in this repo or anywhere `$OBSIDIAN_VAULT_PATH` resolves, check whether `$OBSIDIAN_VAULT_PATH/.scaffold-pending` exists. If it does, the adopter ran install.sh against an empty vault and the upstream wiki structure has not been built yet.
+
+Before responding to any wiki-* command (`wiki-update`, `wiki-query`, `wiki-ingest`, etc.) or `/wrap`'s Phase 2c wiki integration, suggest the adopter run `/wiki-setup` (from the upstream `Ar9av/obsidian-wiki` skills) first. After `/wiki-setup` completes successfully (vault now has `concepts/`, `entities/`, `_archives/`, `_raw/`, `.env`), delete the `.scaffold-pending` marker file.
+
+If `/wiki-setup` is not available in the current session, the adopter still needs to install the wiki skills (see `install-obsidian-wiki-auto-clone` in BACKLOG.md / future spec). In that case, surface the marker once with a one-line note and proceed.
 ```
 
-Absolute path (tilde pre-expanded). Sentinel-bracketed for idempotent re-runs and clean reversal by future `uninstall.sh`.
+### Sentinel-block format
+
+No change. `install_obsidian_env` already manages `~/.obsidian-wiki/config` and `~/.zshrc` sentinel block; V2 doesn't touch either.
 
 ## Integration
 
-### install.sh hook point
+### install.sh hook point (post-Codex-fix from V1.B3)
 
-Inside the existing `install_obsidian_env()` function, after `$OBSIDIAN_VAULT_PATH` is resolved (or prompted) and before the Knowledge Layer wiki-skills detection (so the scaffold runs first, then wiki detection reports against a real vault).
-
-### Function signature
-
+Inside `install_obsidian_env`, immediately after the existing soft-warn block:
 ```bash
-scaffold_obsidian_vault_baseline() {
-    # Args: $1 = vault path (absolute, tilde-expanded)
-    # Returns: 0 on success / already-present / adopter-declined
-    #          non-zero on hard error (template-source missing, write failed)
-    # Side effects: copies 5 files to $1, prints status to stdout, may append to INSTALL_WARNINGS
-}
+if [ ! -d "$vault_path/.obsidian" ]; then
+    echo "  ⚠ $vault_path/.obsidian/ not found — open Obsidian.app and create the vault to finish setup"
+fi
 ```
+Insert the vault-state classification block from the UX section above. This runs AFTER config is written and the path is known-good, but inside the function — so the marker write happens before `do_knowledge_layer` returns.
+
+Line-number anchor for `/build`: target install.sh:935 (after the soft-warn, before the atomic config write at line 941).
 
 ### Touch points
 
-- `install.sh` — new helper function + one call site in `install_obsidian_env`. Estimated ~80 LoC.
-- `templates/obsidian-vault-baseline/` — 5 new files (~150 lines of content total: README + index.md prose, plus .manifest.json + 2 .gitkeep).
-- `tests/test-obsidian-vault-baseline.sh` — new 6-case harness (~250 LoC mirroring the `test-install-knowledge-layer.sh` shape).
+- `install.sh` — ~25 LoC added inside `install_obsidian_env` (vault-state classification + marker write/sweep).
+- `CLAUDE.md` — ~12 lines added (1 H2 section + 1 paragraph).
+- `tests/test-obsidian-vault-baseline.sh` — new 5-case harness, ~180 LoC modeled on `test-install-knowledge-layer.sh`.
 - `tests/run-tests.sh` — register the new test (1 line).
-- `BACKLOG.md` — remove item #1 (this spec) on ship.
+- `BACKLOG.md` — remove item #1 on ship; update v0.12.0 follow-up note to point to this spec's outcome.
+- `CHANGELOG.md` — `[0.15.0]` (or current minor) entry.
 
-### Sequencing relative to `install-obsidian-wiki-auto-clone`
+### Sequencing relative to install-obsidian-wiki-auto-clone
 
-This spec can ship independently. The other spec adds wiki-skills cloning; the two compose naturally (vault scaffolded → wiki skills detected as `auto:6/6` instead of `manual:0/6`). Order is not constrained — either can ship first.
+This spec ships independently. The marker mechanism still works without the upstream wiki skills being installed (CLAUDE.md's instruction includes the "/wiki-setup unavailable" branch: surface a one-line note, proceed). The sibling spec, when shipped, makes `/wiki-setup` actually invokable from the adopter's Claude session.
 
 ## Edge Cases
 
-1. **`$OBSIDIAN_VAULT_PATH` resolves to a symlink** — `readlink -f` the path before all FS ops; scaffold lands on the real target. The sentinel block in `~/.zshenv.local` records the user-supplied path (not the resolved one) so user intent is preserved.
-2. **Vault path contains spaces** — always quote `"$VAULT_PATH"` in install.sh; tests cover this in case (c) of the harness if Q8's option (b) is extended (we chose b → 6 cases; this lives in Open Questions as a defensive-coding reminder).
-3. **Tilde in user-typed path** — adopter types `~/MyVault`; install.sh applies `${VAR/#\~/$HOME}` BEFORE writing to sentinel block (per `feedback_tilde_expansion_in_bash_config_reads`).
-4. **`templates/obsidian-vault-baseline/` missing in the cloned repo** — hard error: `Template source missing at <path>. Re-clone or check repo integrity.` Refuses scaffold, surfaces in tail summary.
-5. **Adopter declines scaffold (`n` at prompt)** — log line: `Vault baseline skipped per adopter choice. Re-run with bash install.sh --reconfigure-vault when ready.` (The `--reconfigure-vault` flag is a documented escape hatch; implementation deferred to first issue request — adding it preemptively violates YAGNI.)
-6. **Cruft accumulates after first install** — adopter opens Obsidian.app once (creates `.obsidian/`), then closes without writing notes. Re-run install.sh: `.obsidian/` is on the allowlist, so empty-detection still considers the vault empty and proposes scaffold. Edge case is fine — scaffold is what we want here.
-7. **Write race** — adopter has Obsidian.app open on the vault path during scaffold. File-level race on `index.md` etc. Per-file atomic writes (tmp + rename) avoid corruption; Obsidian.app's file watcher picks up new files as if the user added them externally.
-8. **Disk full / permission denied** — bubble up the bash error, log to INSTALL_WARNINGS, exit with non-zero from `scaffold_obsidian_vault_baseline()` but continue install.sh (do not exit the whole install — vault baseline is not a hard dependency of the rest of the install).
+1. **Vault path is a symlink** — install.sh resolves via the existing `vault_path="${vault_path/#\~/$HOME}"` expansion at install.sh:926. No additional canonicalization needed (V1's `readlink -f` was a Codex catch — BSD doesn't support `-f`; we drop the canonicalization entirely).
+2. **Vault contains only `.git/`** — Codex C8 risk. Stage A's cruft list includes `.git/`, so this counts as empty → marker written. Adopter who `git init`'d a private notes repo gets one marker file written, which `/wiki-setup` would then process by adding the 9-directory structure ON TOP of their git repo (their content is preserved — wiki-setup uses `mkdir -p`). Test case (3) of the harness explicitly covers `.git/`-only state.
+3. **Vault is read-only** — `touch` fails. `install_obsidian_env`'s existing path-validation already returns early on missing/unreadable paths. For read-only-but-extant paths, the touch failure should be logged to `INSTALL_WARNINGS` and the function should continue (per existing `add_install_warning` pattern in install.sh).
+4. **Concurrent install.sh runs** — touching a marker file is idempotent; no `flock` needed for the marker itself. The sentinel-block append in install.sh is already guarded by `grep -qF "$begin"` (line 953) which handles the concurrency case the way it always has.
+5. **Adopter runs `/wiki-setup` without the marker existing** — fine; upstream behavior unchanged. CLAUDE.md only prompts when the marker exists.
+6. **Marker survives upstream `/wiki-setup` because Claude forgot to `rm`** — install.sh's belt-and-suspenders sweep (Stage B) catches this on the next install.sh re-run. Documented and tested in case 5.
+7. **Vault has 1 of the 5 scaffold markers** (e.g., only `concepts/`) — Stage B's `>= 2` threshold means this is NOT considered scaffolded. Probably a partial/aborted /wiki-setup OR a coincidental user directory. Spec treats this as "user content present" (Stage C) — leave alone. Adopter's choice whether to manually run /wiki-setup or clean up first.
 
 ## Acceptance Criteria
 
-### Test cases (6 — Q8 decision)
+### Test cases (5 — Q-rev5 decision)
 
-1. **Cold scaffold** — empty existing dir + interactive + Y at prompt → all 5 files present, `.manifest.json` valid JSON, no warnings.
-2. **Missing dir** — `$OBSIDIAN_VAULT_PATH` points to non-existent path + interactive + Y → `mkdir -p` runs, 5 files present.
-3. **Idempotent re-run** — already-scaffolded vault → present-status one-liner emitted, no file writes, no prompt.
-4. **Refuse on non-empty** — vault contains a user-authored `notes.md` → scaffold skipped, log line written, exit 0 (not a failure), user file untouched.
-5. **Cruft allowlist** — dir contains only `.DS_Store` + `.obsidian/` → treated as empty, scaffold proceeds, the 2 cruft entries preserved.
-6. **Env-var unset + non-interactive** — `OBSIDIAN_VAULT_PATH` unset + `--non-interactive` → default `$HOME/Documents/ObsidianVault` used, sentinel block written to `~/.zshenv.local`, scaffold proceeds, tail-summary warning emitted listing the default path used.
+1. **Empty vault → marker written** — `$vault_path` exists, is empty (no entries at all). After `install_obsidian_env` runs, `$vault_path/.scaffold-pending` exists and is 0 bytes; install.sh exit 0.
+2. **Non-empty user content → no marker** — `$vault_path` contains `notes.md`. After run, NO `.scaffold-pending` file exists; the user's `notes.md` is untouched; install.sh exit 0.
+3. **Cruft-only vault → marker written** — `$vault_path` contains only `.DS_Store` + `.obsidian/`. After run, `.scaffold-pending` exists; cruft entries preserved unchanged.
+4. **Already-scaffolded vault → no marker** — `$vault_path` contains `concepts/`, `entities/`, `_archives/`, `_raw/`, `.env` (5 scaffold markers, well above the ≥2 threshold). After run, NO `.scaffold-pending` written; all scaffold content untouched.
+5. **Stale-marker sweep** — `$vault_path` contains `concepts/`, `entities/`, AND a leftover `.scaffold-pending` from a prior run. After `bash install.sh` runs, `.scaffold-pending` is removed (Stage B sweep); scaffold content untouched. Test asserts both removal and preservation.
 
-### Manual acceptance
+### Manual acceptance (author checklist, not a test)
 
-- `bash install.sh` on a fresh machine (or with `$OBSIDIAN_VAULT_PATH` unset) produces a working vault that opens cleanly in Obsidian.app with `index.md` as the front page.
-- The 5 starter files read naturally to a first-time adopter who has never seen the wiki skills — no jargon-heavy prose, no broken wikilinks beyond the intentional example.
-- `bash install.sh` re-run on the same machine emits no spurious prompts and the install transcript shows `Obsidian vault baseline: present (5 files at <path>)`.
+- Author runs `bash install.sh` on a clean macOS machine with `$OBSIDIAN_VAULT_PATH` unset → defaults to `$HOME/Documents/Obsidian/wiki`; if path doesn't exist, install_obsidian_env returns early per existing behavior; if exists and empty, marker written.
+- Author opens Claude in a project with this spec's CLAUDE.md change; if the marker exists in `$OBSIDIAN_VAULT_PATH`, Claude suggests `/wiki-setup` in its first response to any wiki-related ask.
+- Author runs `/wiki-setup`; vault gets 9 dirs + index.md + log.md + .env; Claude removes the marker.
+- Author re-runs `bash install.sh` → silent success on the Knowledge Layer stage (no spurious prompts, no re-write of marker).
 
 ### Definition of "shipped"
 
-- All 6 tests pass under `bash tests/run-tests.sh`.
-- `bash install.sh` end-to-end on a clean macOS adopter machine completes without errors.
-- v0.12.0's `manual:0/6` wiki-skills reporting unchanged (this spec doesn't touch wiki-skills detection — only vault content).
-- BACKLOG.md item #1 removed; CHANGELOG.md gets `[0.15.0]` entry (or whatever minor version is current at ship time).
+- All 5 tests pass under `bash tests/run-tests.sh`.
+- `bash install.sh` on a clean machine completes without errors and writes the marker when expected.
+- CLAUDE.md change pushed; visible to Claude in the next session.
+- BACKLOG.md item #1 removed; CHANGELOG entry written.
+- This spec's `/spec-review` returns PASS or PASS WITH NOTES on second-pass (this is V2; first pass was the FAIL that drove the rewrite).
 
 ## Open Questions
 
-1. **`.manifest.json` initial schema** (deferred to implementation) — the exact JSON the upstream `Ar9av/obsidian-wiki` skills expect (`wiki-update` writes it, `wiki-ingest` reads it). Working assumption: `{"version": 1, "pages": [], "last_updated": null}`. Resolve at `/build` time by reading the upstream tool repo's source-of-truth file, NOT by guessing. If the schema is more elaborate than this, that fact is local and doesn't change anything in this spec — only the literal contents of the template file.
-2. **`--reconfigure-vault` escape hatch** (deferred) — Edge Case 5 documents the flag in a log line but doesn't implement it. YAGNI until an adopter reports being stuck after declining the scaffold prompt. Track in BACKLOG.md as a follow-up note when this spec ships.
-3. **Vault path validation** — should install.sh refuse paths under `/System`, `/usr`, `/private`, etc.? Right now we trust the adopter. Probably fine for v1, revisit if anyone foot-guns themselves.
+None remaining at confidence ≥ 0.90. The V1 Open Question about `.manifest.json` schema is moot — we don't write a manifest. The `--reconfigure-vault` flag is moot — adopter can `touch $vault/.scaffold-pending` by hand to re-trigger the CLAUDE.md prompt.
+
+## Notes for /spec-review V2 pass
+
+- Watch for resurfacing of V1 blockers: the spec should NOT reference `~/.zshenv.local`, `.manifest.json`, `readlink -f`, `--reconfigure-vault`, or a "5-file scaffold" anywhere except in the V2 revision context section (where they're explicitly documented as dropped).
+- Codex should validate that the install.sh:935 hook anchor is real and the surrounding lines support a 25-LoC insertion without disturbing existing logic.
+- Confirm CLAUDE.md instruction is unambiguous enough that Claude won't double-rm the marker or rm-too-eagerly (before /wiki-setup actually succeeds).
