@@ -66,6 +66,14 @@ Rules:
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
 - After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
 
+## Obsidian vault scaffolding (post-install)
+
+If `$OBSIDIAN_VAULT_PATH/.scaffold-pending` exists, install.sh detected an empty vault. Before responding to any wiki-* command (`wiki-update`, `wiki-query`, `wiki-ingest`, `wiki-capture`, `wiki-export`, `wiki-lint`) or before `/wrap`'s Phase 2c wiki integration, suggest the adopter run `/wiki-setup` (from the upstream `Ar9av/obsidian-wiki` skills).
+
+**Marker cleanup:** After `/wiki-setup` completes successfully (vault contains at least 3 of: `concepts/`, `entities/`, `_archives/`, `_raw/`, `index.md`, `log.md`, `.obsidian/`), delete the `.scaffold-pending` marker file.
+
+If `/wiki-setup` is unavailable, surface the marker as a one-line note and proceed.
+
 ## Tab-accept suggestions (Claude Code built-in)
 
 After Claude responds in an interactive session, Claude Code may show a

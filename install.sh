@@ -893,6 +893,88 @@ install_graphify_skill_via_cli() {
     return 0
 }
 
+# manage_scaffold_marker — write .scaffold-pending on empty vault; sweep stale marker on scaffolded vault.
+# Called unconditionally at end of install_obsidian_env() regardless of which config-write branch ran.
+# upstream: Ar9av/obsidian-wiki @ wiki-setup skill (7 scaffold indicators)
+# Scaffold indicators: concepts/ entities/ _archives/ _raw/ index.md log.md .obsidian/
+# Threshold: >=3 of 7 to consider the vault already scaffolded (tolerates upstream evolution).
+manage_scaffold_marker() {
+    local resolved_path
+    resolved_path="$(parse_obsidian_config 2>/dev/null)" || resolved_path=""
+    if [ -z "$resolved_path" ] || [ ! -d "$resolved_path" ]; then
+        return 0   # No config or path missing — nothing to mark
+    fi
+
+    # Stage A: cruft strip — count non-cruft entries (arithmetic comparison per D3)
+    local non_cruft_count
+    non_cruft_count=$(find "$resolved_path" -mindepth 1 -maxdepth 1 \
+        ! -name '.DS_Store' ! -name '.Spotlight-V100' ! -name '.fseventsd' \
+        ! -name '.obsidian' ! -name '.git' ! -name '.scaffold-pending' \
+        2>/dev/null | wc -l | tr -dc '0-9')
+    non_cruft_count="${non_cruft_count:-0}"
+
+    if [ "$non_cruft_count" -eq 0 ]; then
+        # Empty after cruft strip → write marker
+        if ! touch "$resolved_path/.scaffold-pending" 2>/dev/null; then
+            add_install_warning "vault read-only — could not write $resolved_path/.scaffold-pending. Run /wiki-setup manually when ready."
+            return 0
+        fi
+        echo "  WROTE:    $resolved_path/.scaffold-pending (run /wiki-setup in your next Claude session)"
+        return 0
+    fi
+
+    # Stage B: vault has content — check scaffold markers (upstream: Ar9av/obsidian-wiki)
+    # Scaffold indicators: concepts/ entities/ _archives/ _raw/ index.md log.md .obsidian/
+    local scaffold_markers=0
+    for m in concepts entities _archives _raw index.md log.md .obsidian; do
+        [ -e "$resolved_path/$m" ] && scaffold_markers=$((scaffold_markers + 1))
+    done
+    if [ "$scaffold_markers" -ge 3 ]; then
+        # Already scaffolded → sweep stale marker if any
+        if [ -e "$resolved_path/.scaffold-pending" ]; then
+            rm -f "$resolved_path/.scaffold-pending"
+            echo "  REMOVED:  stale $resolved_path/.scaffold-pending (vault already scaffolded)"
+        fi
+    fi
+    # Stage C (vault has user content but isn't scaffolded): silent no-op — adopter's content, not our concern
+}
+
+# append_wiki_preflight_instruction — append sentinel-bracketed wiki-preflight instruction to ~/CLAUDE.md.
+# Idempotent: skips if BEGIN sentinel already present.
+# Backup: copies ~/CLAUDE.md to ~/CLAUDE.md.bak.<ts> on first modification.
+# Visibility: prints APPENDED line to stdout on first write.
+# Removal: delete the <!-- BEGIN MonsterFlow wiki-preflight --> ... <!-- END --> block to revert.
+append_wiki_preflight_instruction() {
+    local claude_md="$HOME/CLAUDE.md"
+    local begin="<!-- BEGIN MonsterFlow wiki-preflight -->"
+    local end="<!-- END MonsterFlow wiki-preflight -->"
+
+    [ -f "$claude_md" ] || touch "$claude_md"
+    if grep -qF "$begin" "$claude_md"; then
+        :   # Already appended; idempotent
+    else
+        # Backup before first modification
+        local backup_ts
+        backup_ts="$(date +%s)"
+        cp "$claude_md" "${claude_md}.bak.${backup_ts}" 2>/dev/null || true
+        cat >> "$claude_md" << 'WIKI_PREFLIGHT_INSTRUCTION'
+
+<!-- BEGIN MonsterFlow wiki-preflight -->
+## Obsidian vault scaffolding (post-install)
+
+**Preflight check for wiki-related work:** Before responding to any wiki-* command (`wiki-update`, `wiki-query`, `wiki-ingest`, `wiki-capture`, `wiki-export`, `wiki-lint`) OR before `/wrap`'s Phase 2c wiki integration, check whether `$OBSIDIAN_VAULT_PATH/.scaffold-pending` exists.
+
+If the marker exists, install.sh detected an empty vault but the upstream wiki structure has not been built yet. Suggest the adopter run `/wiki-setup` (from the upstream `Ar9av/obsidian-wiki` skills) before proceeding with the wiki-related ask.
+
+**Marker cleanup:** After `/wiki-setup` completes successfully — confirmed by the vault now containing at least 3 of: `concepts/`, `entities/`, `_archives/`, `_raw/`, `index.md`, `log.md`, `.obsidian/` — delete the `.scaffold-pending` marker file. Do NOT remove the marker if /wiki-setup did not run or did not complete successfully.
+
+If `/wiki-setup` is unavailable, surface the marker as a one-line note.
+<!-- END MonsterFlow wiki-preflight -->
+WIKI_PREFLIGHT_INSTRUCTION
+        echo "  APPENDED: $claude_md — wiki-preflight instruction. Remove BEGIN/END block to revert. Backup at ${claude_md}.bak.${backup_ts}."
+    fi
+}
+
 # Task 3.2 — install_obsidian_env
 # Atomic write to ~/.obsidian-wiki/config (same-dir temp per D7/MF8 — INSTALL_SCRATCH
 # would cross filesystems and lose atomicity on macOS where mktemp is in /var/folders).
@@ -1128,6 +1210,12 @@ do_knowledge_layer() {
             fi
         fi
     fi
+    # Marker management + ~/CLAUDE.md instruction: run unconditionally after install dispatch.
+    # Works for both first-install (install_obsidian_env just wrote the config) and re-run
+    # (config pre-exists, install_obsidian_env not called). Both helpers are idempotent.
+    manage_scaffold_marker
+    append_wiki_preflight_instruction
+
     # cmux drift fires regardless of install path — auto-attempt brew install if drift detected
     if [ "$c" = "drift" ]; then
         if has_cmd brew; then

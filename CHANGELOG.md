@@ -4,6 +4,14 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-05-15
+
+### Added
+
+- **`install-obsidian-vault-baseline`** — `install.sh` now writes a `.scaffold-pending` marker at `$OBSIDIAN_VAULT_PATH/.scaffold-pending` when the vault exists but is empty (after cruft-stripping `.DS_Store`, `.Spotlight-V100`, `.fseventsd`, `.obsidian`, `.git`). Belt-and-suspenders sweep removes the marker on re-run when the vault is already scaffolded (≥3 of 7 upstream indicators: `concepts/`, `entities/`, `_archives/`, `_raw/`, `index.md`, `log.md`, `.obsidian/`). Read-only vaults log a warning and exit 0.
+- **`append_wiki_preflight_instruction`** — `install.sh` appends a sentinel-bracketed (`<!-- BEGIN/END MonsterFlow wiki-preflight -->`) instruction block to `~/CLAUDE.md` (global — cross-project visibility). Tells Claude to suggest `/wiki-setup` before any wiki-* command when the marker exists. Idempotent; backs up `~/CLAUDE.md` to `~/CLAUDE.md.bak.<ts>` on first write; prints visibility line to stdout. Remove the sentinel block to revert.
+- **`tests/test-obsidian-vault-baseline.sh`** — 12-case harness covering: empty vault, user content, cruft-only, already-scaffolded, stale-marker sweep, read-only vault, path with spaces, parse failure, CLAUDE.md idempotency, content preservation, creation from scratch, and predicate-drift guard.
+
 ## [0.14.1] - 2026-05-15
 
 ### Fixed
