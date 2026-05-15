@@ -78,6 +78,12 @@ setup_test() {
     # has_cmd hook (D11): install.sh checks ONLY $STUB_DIR when this is set.
     export MONSTERFLOW_HASCMD_OVERRIDE="$STUB_DIR"
 
+    # Defensive: isolate from inherited env that breaks tests on adopters' machines
+    # (friend's shell had PROJECT_DIR set, polluting --with-tier feature-dir lookups).
+    unset PROJECT_DIR
+    unset MONSTERFLOW_DISABLE_BUDGET
+    unset MONSTERFLOW_OWNER
+
     # Short-circuit recursive prompts (plugin install + test-suite-validate)
     export MONSTERFLOW_INSTALL_TEST=1
 

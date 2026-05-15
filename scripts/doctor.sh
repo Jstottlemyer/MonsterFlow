@@ -258,6 +258,39 @@ print(hashlib.sha256('\n'.join(canon).encode('utf-8')).hexdigest())
     echo '```'
     echo ""
 
+    echo "## Environment Pollution Check"
+    echo '```'
+    POLL_FOUND=0
+    if [ -n "${PROJECT_DIR:-}" ]; then
+        if [ -d "$PROJECT_DIR/docs/specs" ]; then
+            echo "ok   PROJECT_DIR=$PROJECT_DIR (valid adopter project — autorun context expected)"
+        else
+            echo "WARN PROJECT_DIR=$PROJECT_DIR (no docs/specs/ — resolver auto-unsets at runtime)"
+            echo "     This is likely shell pollution from another tool. To silence: unset PROJECT_DIR"
+            POLL_FOUND=1
+        fi
+    fi
+    if [ -n "${MONSTERFLOW_DISABLE_BUDGET:-}" ]; then
+        echo "WARN MONSTERFLOW_DISABLE_BUDGET=$MONSTERFLOW_DISABLE_BUDGET (kill switch — full roster dispatched)"
+        echo "     To restore budget: unset MONSTERFLOW_DISABLE_BUDGET"
+        POLL_FOUND=1
+    fi
+    if [ -n "${MONSTERFLOW_OWNER:-}" ]; then
+        echo "WARN MONSTERFLOW_OWNER=$MONSTERFLOW_OWNER (forces owner-mode in install.sh — auto-yes prompts)"
+        echo "     Adopters should NOT have this set. To unset: unset MONSTERFLOW_OWNER"
+        POLL_FOUND=1
+    fi
+    if echo "$PATH" | grep -q "coreutils/libexec/gnubin"; then
+        echo "WARN coreutils/gnubin in PATH — GNU mktemp/timeout shadow BSD (macOS native)"
+        echo "     Our scripts pin .XXXXXX suffix so this is tolerated, but adopter tools may break"
+        POLL_FOUND=1
+    fi
+    if [ "$POLL_FOUND" = "0" ]; then
+        echo "ok   no env pollution detected"
+    fi
+    echo '```'
+    echo ""
+
     echo "## Workflow Clone State"
     echo '```'
     CLONE="$HOME/Projects/MonsterFlow"

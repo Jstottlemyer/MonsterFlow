@@ -96,6 +96,15 @@ codex_probe
 
 export MONSTERFLOW_REPO_DIR="$REPO_DIR"
 
+# Defensive PROJECT_DIR auto-correct (per feedback_install_sh_auto_install_then_tail_summary
+# spirit + friend's PARADOX bug 2026-05-15): when PROJECT_DIR is set but points at a path
+# without docs/specs/, it's shell pollution from another tool (e.g., friend's PatternCall
+# workflow). Auto-unset and warn. Real autorun callers always have docs/specs/ present.
+if [ -n "${PROJECT_DIR:-}" ] && [ ! -d "$PROJECT_DIR/docs/specs" ]; then
+    echo "resolve-personas: WARNING PROJECT_DIR=$PROJECT_DIR has no docs/specs/ — unsetting (likely shell pollution)" >&2
+    unset PROJECT_DIR
+fi
+
 # SEC-09: internal temp dir (cleaned on exit). Helpers must not leak temp state.
 # The Python helper does not write temp files yet in Slice 3, but the env var
 # is exported so future callers can rely on a per-invocation scratch path.
