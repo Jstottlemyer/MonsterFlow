@@ -168,6 +168,7 @@ stage_recommended_present() {
     make_stub shellcheck
     make_stub jq
     make_stub tmux
+    make_stub flock
 }
 
 # Pre-stage symlinks under $HOME/.claude as if a prior install ran.

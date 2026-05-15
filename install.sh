@@ -261,7 +261,25 @@ export HOMEBREW_NO_AUTO_UPDATE=1
 # SIGINT trap + scratch dir (W2 task 2.2): scoped scratch so cleanup_partial
 # can rm -rf without nuking attacker-staged files. All atomic writes use
 # $INSTALL_SCRATCH/<name>.tmp then mv -f to final.
-INSTALL_SCRATCH="$(mktemp -d -t monsterflow-install)"
+INSTALL_SCRATCH="$(mktemp -d -t monsterflow-install.XXXXXX 2>/dev/null)"
+# GNU mktemp on macOS via brew coreutils requires the .XXXXXX suffix (BSD mktemp
+# accepts bare prefix). If mktemp still failed, fall back to a deterministic
+# path under $TMPDIR so install.sh's atomic-write contract is preserved.
+if [ -z "$INSTALL_SCRATCH" ] || [ ! -d "$INSTALL_SCRATCH" ]; then
+    INSTALL_SCRATCH="${TMPDIR:-/tmp}/monsterflow-install.$$"
+    rm -rf "$INSTALL_SCRATCH" 2>/dev/null
+    mkdir -p "$INSTALL_SCRATCH" || {
+        echo "✗ Cannot create install scratch dir at $INSTALL_SCRATCH" >&2
+        exit 1
+    }
+fi
+
+# INSTALL_WARNINGS accumulator (per feedback_install_sh_auto_install_then_tail_summary):
+# auto-install attempts that fail push one-line entries here; printed as the FINAL output.
+INSTALL_WARNINGS=()
+add_install_warning() {
+    INSTALL_WARNINGS+=("$1")
+}
 cleanup_partial() {
     rm -rf "$INSTALL_SCRATCH"
     echo "" >&2
@@ -361,6 +379,7 @@ has_cmd gh         || RECOMMENDED_MISSING+=("gh (GitHub CLI, /autorun needs it f
 has_cmd shellcheck || RECOMMENDED_MISSING+=("shellcheck (PostToolUse hook on .sh edits — silently no-ops without it) — brew install shellcheck")
 has_cmd jq         || RECOMMENDED_MISSING+=("jq (PostToolUse hook on .json edits — silently no-ops without it) — brew install jq")
 has_cmd tmux       || RECOMMENDED_MISSING+=("tmux (recommended for overnight /autorun runs) — brew install tmux")
+has_cmd flock      || RECOMMENDED_MISSING+=("flock (required for scripts/autorun/_policy.sh + _followups_lock.py concurrent /build safety; stock macOS has no flock) — brew install flock")
 
 # PATH sanity — ~/.local/bin must be in PATH for `autorun` symlink to resolve
 if ! echo ":$PATH:" | grep -q ":$HOME/.local/bin:"; then
@@ -975,6 +994,30 @@ install_obsidian_app() {
     fi
 }
 
+# install_wiki_skills — auto-install wiki skills upstream via npx
+# Per feedback_install_sh_auto_install_then_tail_summary: auto-exec
+# what install.sh can; failures push to INSTALL_WARNINGS for tail summary.
+install_wiki_skills() {
+    if ! has_cmd npx; then
+        add_install_warning "wiki skills: npx not on PATH — install Node.js first, then run: npx skills add Ar9av/obsidian-wiki"
+        return 1
+    fi
+    echo "  RUNNING: npx skills add Ar9av/obsidian-wiki"
+    local rc=0
+    npx skills add Ar9av/obsidian-wiki >/dev/null 2>&1 || rc=$?
+    # EC17-style success oracle: re-detect after attempt
+    local post_status
+    post_status="$(detect_wiki_skills 2>/dev/null || echo "manual:0/6")"
+    if [ "$post_status" = "ready" ] || [ "$post_status" = "manual:6/6" ]; then
+        echo "  ✓ wiki skills installed (6/6)"
+        return 0
+    else
+        echo "  ✗ wiki skills install failed (npx exit=$rc, post-status=$post_status)"
+        add_install_warning "wiki skills: install attempt failed (npx exit=$rc). Retry manually: npx skills add Ar9av/obsidian-wiki"
+        return 1
+    fi
+}
+
 # Task 3.4 — print_manual_instructions
 # Single helper for both wiki and cmux print-only paths (per SD-01).
 # No exec — just emits the recommended command + fallback.
@@ -1036,8 +1079,13 @@ do_knowledge_layer() {
     [ "$g" = "can-install" ] && can_install+=("graphify CLI")
     [ "$e" = "can-install" ] && can_install+=("OBSIDIAN_VAULT_PATH")
     [ "$a" = "can-install" ] && can_install+=("Obsidian.app")
-    [[ "$w" == manual:* ]] && [ "$w" != "manual:6/6" ] && manual_pieces+=("wiki")
-    [ "$c" = "drift" ] && manual_pieces+=("cmux")
+    # wiki-skills auto-install (per feedback_install_sh_auto_install_then_tail_summary):
+    # moved from manual_pieces to can_install. install_wiki_skills() captures
+    # failures into INSTALL_WARNINGS for the tail summary.
+    [[ "$w" == manual:* ]] && [ "$w" != "manual:6/6" ] && can_install+=("wiki skills")
+    # cmux drift handled by the auto-install block below (NOT added to
+    # manual_pieces — would cause print_manual_instructions to be called
+    # with empty arg after pattern-substitution removal).
 
     # Only prompt when can-install bucket is non-empty
     if [ ${#can_install[@]} -gt 0 ]; then
@@ -1073,6 +1121,42 @@ do_knowledge_layer() {
             fi
             if [ "$a" = "can-install" ]; then
                 install_obsidian_app
+            fi
+            # Auto-install wiki-skills (failures go to INSTALL_WARNINGS for tail summary)
+            if [[ "$w" == manual:* ]] && [ "$w" != "manual:6/6" ]; then
+                install_wiki_skills || true
+            fi
+        fi
+    fi
+    # cmux drift fires regardless of install path — auto-attempt brew install if drift detected
+    if [ "$c" = "drift" ]; then
+        if has_cmd brew; then
+            echo ""
+            echo "  RUNNING: brew install --cask cmux (drift detected)"
+            local cmux_rc=0
+            brew install --cask cmux >/dev/null 2>&1 || cmux_rc=$?
+            if [ "$cmux_rc" -ne 0 ]; then
+                add_install_warning "cmux: brew install --cask cmux failed (exit=$cmux_rc). Retry: brew install --cask cmux"
+            else
+                echo "  ✓ cmux reinstalled"
+            fi
+        else
+            add_install_warning "cmux: drift detected and brew not on PATH. Install brew first, then: brew install --cask cmux"
+        fi
+    fi
+
+    # Wiki-skills fallback (per feedback_install_sh_auto_install_then_tail_summary):
+    # If wiki status is still manual:* after install attempt (or if auto-install
+    # didn't fire — e.g., non-interactive adopter mode with do_install=0), push
+    # to INSTALL_WARNINGS so the tail summary surfaces the manual command.
+    if [[ "$w" == manual:* ]] && [ "$w" != "manual:6/6" ]; then
+        local w_final
+        w_final="$(detect_wiki_skills 2>/dev/null || echo "manual:0/6")"
+        if [ "$w_final" != "ready" ] && [ "$w_final" != "manual:6/6" ]; then
+            if has_cmd npx; then
+                add_install_warning "wiki skills (${w_final}): not auto-installed. Run: npx skills add Ar9av/obsidian-wiki"
+            else
+                add_install_warning "wiki skills (${w_final}): npx not on PATH. Install Node.js + npm, then: npx skills add Ar9av/obsidian-wiki"
             fi
         fi
     fi
@@ -1386,5 +1470,24 @@ if [ "$NO_ONBOARD" != "1" ] && { [ "$NON_INTERACTIVE" = "0" ] || [ "$FORCE_ONBOA
         }
     fi
 fi
+
+# --- Final tail summary (per feedback_install_sh_auto_install_then_tail_summary) ---
+# Print accumulated warnings as the LAST output of install.sh so adopters
+# don't have to scroll back through verbose logs to find what didn't work.
+echo ""
+echo "=========================================="
+if [ "${#INSTALL_WARNINGS[@]}" -eq 0 ]; then
+    echo "✓ Install complete — no warnings."
+else
+    echo "⚠ Install complete with ${#INSTALL_WARNINGS[@]} warning(s):"
+    echo ""
+    for w in "${INSTALL_WARNINGS[@]}"; do
+        echo "  • $w"
+    done
+    echo ""
+    echo "Re-run 'bash install.sh' after addressing the items above to retry."
+fi
+echo "=========================================="
+echo ""
 
 echo "Run /flow in Claude Code to see the workflow reference card."

@@ -12,7 +12,11 @@ set -uo pipefail
 
 ENGINE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 UNINSTALL="$ENGINE_DIR/uninstall.sh"
-TMPROOT="$(mktemp -d -t monsterflow-uninstall-test)"
+TMPROOT="$(mktemp -d -t monsterflow-uninstall-test.XXXXXX)"
+if [ -z "$TMPROOT" ] || [ ! -d "$TMPROOT" ]; then
+    echo "FAIL: mktemp -d returned invalid path '$TMPROOT'" >&2
+    exit 1
+fi
 trap 'rm -rf "$TMPROOT"' EXIT
 
 PASS=0

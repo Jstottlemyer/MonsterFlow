@@ -27,4 +27,5 @@ brew "python@3.11"
 brew "gh"          # /autorun PR ops; gh auth login required after install
 brew "shellcheck"  # PostToolUse hook on .sh edits
 brew "jq"          # PostToolUse hook on .json edits
+brew "flock"       # File-locking; required by scripts/autorun/_policy.sh + scripts/_followups_lock.py for concurrent /build safety. Stock macOS has no flock.
 cask "cmux"  # Homebrew cask (not a formula); auto-updates per cask author

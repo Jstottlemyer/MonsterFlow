@@ -31,7 +31,11 @@ FAILED_CASES=()
 CASE_DIR=""
 
 setup_case() {
-    CASE_DIR="$(mktemp -d -t mf-codex-probe-test)"
+    CASE_DIR="$(mktemp -d -t mf-codex-probe-test.XXXXXX)"
+    if [ -z "$CASE_DIR" ] || [ ! -d "$CASE_DIR" ]; then
+        echo "  FAIL: mktemp -d returned invalid path '$CASE_DIR'" >&2
+        return 1
+    fi
     mkdir -p "$CASE_DIR/bin"
 }
 

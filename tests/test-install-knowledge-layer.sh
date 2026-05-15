@@ -219,12 +219,13 @@ make_stub_required() {
     make_stub_brew
 }
 
-# make_stub_recommended — stage gh, shellcheck, jq, tmux as present stubs
+# make_stub_recommended — stage gh, shellcheck, jq, tmux, flock as present stubs
 make_stub_recommended() {
     make_stub gh
     make_stub shellcheck
     make_stub jq
     make_stub tmux
+    make_stub flock
 }
 
 ##############################################################################
@@ -457,10 +458,12 @@ case_AC1() {
     # Prompt does NOT fire under --non-interactive
     assert_no_match "AC1 no install prompt" "Install.*pieces.*\[y/N\]" "$CASE_OUT" || return 1
 
-    # Manual-action text for wiki still prints (print-only, always)
-    assert_match "AC1 npx instruction printed" "npx skills add Ar9av/obsidian-wiki" "$CASE_OUT" || return 1
+    # Tail-summary surfaces the manual npx command (post-2026-05-14 auto-install pivot:
+    # wiki-skills auto-install only fires under do_install=1; non-interactive adopter
+    # mode falls back to tail-summary warning per feedback_install_sh_auto_install_then_tail_summary)
+    assert_match "AC1 npx instruction in tail summary" "npx skills add Ar9av/obsidian-wiki" "$CASE_OUT" || return 1
 
-    # npx was NOT invoked (it's print-only)
+    # npx was NOT invoked (non-interactive adopter mode means do_install=0)
     assert_no_match "AC1 npx not invoked" "npx" "$STUB_LOG" || return 1
 
     teardown_test
@@ -694,15 +697,17 @@ case_AC7() {
 
     # Drift row present
     assert_match "AC7 drift row" "cmux drift:.*⚠.*config present but binary absent" "$CASE_OUT" || return 1
-    # brew cmux recommendation printed
-    assert_match "AC7 brew cmux recommendation" "brew install --cask cmux" "$CASE_OUT" || return 1
+    # brew cmux RUNNING line printed (post-2026-05-14 auto-install pivot per
+    # feedback_install_sh_auto_install_then_tail_summary — was print-only)
+    assert_match "AC7 brew cmux auto-install RUNNING" "RUNNING: brew install --cask cmux" "$CASE_OUT" || return 1
 
-    # brew NOT invoked for cmux (drift is print-only)
-    assert_no_match "AC7 brew cmux not invoked" "brew.*--cask cmux" "$STUB_LOG" || return 1
+    # brew IS now invoked for cmux drift (auto-install pivot)
+    assert_match "AC7 brew cmux invoked" "brew.*--cask cmux" "$STUB_LOG" || return 1
 
-    # Second run: byte-identical drift output
+    # Second run: byte-identical drift output (KL status rows only — auto-install
+    # adds variable lines after the section that depend on prior install state)
     local first_kl_section
-    first_kl_section="$(grep -A 10 '=== Knowledge Layer ===' "$CASE_OUT" || true)"
+    first_kl_section="$(grep -A 6 '=== Knowledge Layer ===' "$CASE_OUT" || true)"
     : > "$CASE_OUT"
 
     local rc2
@@ -710,7 +715,7 @@ case_AC7() {
     assert_exit_code "AC7 second exit 0" "0" "$rc2" || return 1
 
     local second_kl_section
-    second_kl_section="$(grep -A 10 '=== Knowledge Layer ===' "$CASE_OUT" || true)"
+    second_kl_section="$(grep -A 6 '=== Knowledge Layer ===' "$CASE_OUT" || true)"
 
     if [ "$first_kl_section" != "$second_kl_section" ]; then
         echo "ASSERT FAIL: AC7 drift output not idempotent between runs" >&2

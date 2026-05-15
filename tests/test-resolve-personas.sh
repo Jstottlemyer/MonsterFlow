@@ -37,7 +37,11 @@ CASE_OUT=""
 CASE_ERR=""
 
 setup_case() {
-    CASE_DIR="$(mktemp -d -t mf-resolve-test)"
+    CASE_DIR="$(mktemp -d -t mf-resolve-test.XXXXXX)"
+    if [ -z "$CASE_DIR" ] || [ ! -d "$CASE_DIR" ]; then
+        echo "FAIL: mktemp -d returned invalid path '$CASE_DIR'" >&2
+        return 1
+    fi
     CASE_HOME="$CASE_DIR/home"
     CASE_OUT="$CASE_DIR/out"
     CASE_ERR="$CASE_DIR/err"
