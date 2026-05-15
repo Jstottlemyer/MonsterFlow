@@ -261,30 +261,95 @@ print(hashlib.sha256('\n'.join(canon).encode('utf-8')).hexdigest())
     echo "## Environment Pollution Check"
     echo '```'
     POLL_FOUND=0
+
+    # Inherited routing vars — most common adopter footgun
     if [ -n "${PROJECT_DIR:-}" ]; then
         if [ -d "$PROJECT_DIR/docs/specs" ]; then
             echo "ok   PROJECT_DIR=$PROJECT_DIR (valid adopter project — autorun context expected)"
         else
             echo "WARN PROJECT_DIR=$PROJECT_DIR (no docs/specs/ — resolver auto-unsets at runtime)"
-            echo "     This is likely shell pollution from another tool. To silence: unset PROJECT_DIR"
+            echo "     Likely shell pollution from another tool. Best practice: unset PROJECT_DIR in your shell rc OR set it only inside scripts that need it."
             POLL_FOUND=1
         fi
     fi
+
+    # Kill switches — should never be permanently set
     if [ -n "${MONSTERFLOW_DISABLE_BUDGET:-}" ]; then
         echo "WARN MONSTERFLOW_DISABLE_BUDGET=$MONSTERFLOW_DISABLE_BUDGET (kill switch — full roster dispatched)"
-        echo "     To restore budget: unset MONSTERFLOW_DISABLE_BUDGET"
+        echo "     Best practice: unset MONSTERFLOW_DISABLE_BUDGET. Only set inline (\`MONSTERFLOW_DISABLE_BUDGET=1 bash …\`) when intentionally bypassing the agent_budget cap."
         POLL_FOUND=1
     fi
+
+    # Owner-mode override — adopters should NEVER set this
     if [ -n "${MONSTERFLOW_OWNER:-}" ]; then
-        echo "WARN MONSTERFLOW_OWNER=$MONSTERFLOW_OWNER (forces owner-mode in install.sh — auto-yes prompts)"
-        echo "     Adopters should NOT have this set. To unset: unset MONSTERFLOW_OWNER"
+        if [ "$PWD" = "$HOME/Projects/MonsterFlow" ]; then
+            echo "ok   MONSTERFLOW_OWNER=$MONSTERFLOW_OWNER (cwd matches repo — expected for owner)"
+        else
+            echo "WARN MONSTERFLOW_OWNER=$MONSTERFLOW_OWNER but cwd is not the MonsterFlow repo"
+            echo "     install.sh will auto-yes adopter prompts. Best practice: unset MONSTERFLOW_OWNER. install.sh detects ownership from \$PWD == \$REPO_DIR — the env var is for tests only."
+            POLL_FOUND=1
+        fi
+    fi
+
+    # Test/dev-only overrides — flag if set in normal shells
+    if [ -n "${MONSTERFLOW_HASCMD_OVERRIDE:-}" ]; then
+        echo "WARN MONSTERFLOW_HASCMD_OVERRIDE=$MONSTERFLOW_HASCMD_OVERRIDE (test stub PATH — narrows has_cmd checks)"
+        echo "     Best practice: this is for tests only. unset MONSTERFLOW_HASCMD_OVERRIDE in interactive shells."
         POLL_FOUND=1
     fi
+    if [ -n "${MONSTERFLOW_TEST_MODE:-}" ] || [ -n "${MONSTERFLOW_INSTALL_TEST:-}" ]; then
+        echo "WARN MONSTERFLOW_TEST_MODE/MONSTERFLOW_INSTALL_TEST set (test-mode hooks active)"
+        echo "     Best practice: tests set these; production shells should not. unset both."
+        POLL_FOUND=1
+    fi
+    if [ -n "${MONSTERFLOW_FORCE_INTERACTIVE:-}" ] && [ -n "${MONSTERFLOW_NON_INTERACTIVE:-}" ]; then
+        echo "CONFLICT MONSTERFLOW_FORCE_INTERACTIVE and MONSTERFLOW_NON_INTERACTIVE are BOTH set"
+        echo "     Best practice: pick one. Force-interactive takes precedence in install.sh, but unsetting both lets the TTY check decide."
+        POLL_FOUND=1
+    fi
+
+    # Codex auth override
+    if [ -n "${MONSTERFLOW_CODEX_AUTH:-}" ]; then
+        echo "WARN MONSTERFLOW_CODEX_AUTH=$MONSTERFLOW_CODEX_AUTH (codex auth override — bypasses real codex login status check)"
+        echo "     Best practice: unset in interactive shells. Only tests/CI should set this."
+        POLL_FOUND=1
+    fi
+
+    # Repo-dir override — fine if set deliberately, warn if mismatched
+    if [ -n "${MONSTERFLOW_REPO_DIR:-}" ]; then
+        if [ -d "$MONSTERFLOW_REPO_DIR/.git" ] && [ -f "$MONSTERFLOW_REPO_DIR/install.sh" ]; then
+            echo "ok   MONSTERFLOW_REPO_DIR=$MONSTERFLOW_REPO_DIR (valid MonsterFlow checkout)"
+        else
+            echo "WARN MONSTERFLOW_REPO_DIR=$MONSTERFLOW_REPO_DIR does not look like a MonsterFlow checkout"
+            echo "     Best practice: unset or point to actual clone path. Defaults to scripts/.. of the running resolver."
+            POLL_FOUND=1
+        fi
+    fi
+
+    # Install-time flags — should not survive into interactive shells
+    for flag in NO_INSTALL NO_ONBOARD FORCE_ONBOARD CMUX_DEMOTE; do
+        val="$(eval echo "\${$flag:-}")"
+        if [ -n "$val" ]; then
+            echo "WARN $flag=$val (install.sh flag — should not be a permanent shell export)"
+            echo "     Best practice: pass inline at install time (\`$flag=1 bash install.sh\`), not in ~/.zshrc."
+            POLL_FOUND=1
+        fi
+    done
+
+    # AUTORUN flag in non-autorun context
+    if [ -n "${AUTORUN:-}" ] && [ -z "${AUTORUN_STAGE:-}" ]; then
+        echo "WARN AUTORUN=$AUTORUN set but AUTORUN_STAGE unset (incomplete autorun context)"
+        echo "     Best practice: autorun's run.sh sets both. If you set AUTORUN by hand: unset it."
+        POLL_FOUND=1
+    fi
+
+    # PATH ordering — gnubin shadowing BSD
     if echo "$PATH" | grep -q "coreutils/libexec/gnubin"; then
         echo "WARN coreutils/gnubin in PATH — GNU mktemp/timeout shadow BSD (macOS native)"
-        echo "     Our scripts pin .XXXXXX suffix so this is tolerated, but adopter tools may break"
+        echo "     Best practice: our scripts pin .XXXXXX suffix so MonsterFlow is unaffected, but adopter tools that use \`mktemp -t prefix\` without suffix WILL fail. Either remove gnubin from PATH or ensure all tools use portable mktemp forms."
         POLL_FOUND=1
     fi
+
     if [ "$POLL_FOUND" = "0" ]; then
         echo "ok   no env pollution detected"
     fi
