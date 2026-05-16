@@ -835,6 +835,31 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Spec-change invalidation guard
+# ---------------------------------------------------------------------------
+# If the spec.md hash changed since the last run wrote stage artifacts,
+# invalidate those artifacts so each stage re-runs against the current spec.
+# Otherwise the resume guards below (review-findings.md present → skip) would
+# silently consume stale prior-run output and the pipeline would build against
+# obsolete decisions. See feedback_autorun_resume_stale_artifacts.
+SPEC_SHA_FILE="$ARTIFACT_DIR/.spec-sha"
+if [ -f "$SPEC_SHA_FILE" ]; then
+  PRIOR_SPEC_SHA="$(cat "$SPEC_SHA_FILE" 2>/dev/null || echo "")"
+  if [ -n "$PRIOR_SPEC_SHA" ] && [ "$PRIOR_SPEC_SHA" != "$SPEC_SHA" ]; then
+    echo "[autorun] $SLUG: spec.md changed since last run (prior=$PRIOR_SPEC_SHA current=$SPEC_SHA) — invalidating stage artifacts" >&2
+    # Delete the resume-trigger files; preserve .spec-sha (about to be overwritten)
+    # and .gate-mode-warned / other sentinels. Stage artifacts only.
+    for f in review-findings.md risk-findings.md design.md check.md \
+             check-synthesis.raw design-codex-findings.md build-log.md \
+             verify-gaps.md pre-build-sha.txt failure.md pr-url.txt \
+             run-state.json state.json; do
+      [ -f "$ARTIFACT_DIR/$f" ] && rm -f "$ARTIFACT_DIR/$f"
+    done
+  fi
+fi
+printf "%s\n" "$SPEC_SHA" > "$SPEC_SHA_FILE"
+
+# ---------------------------------------------------------------------------
 # Stage 1: spec-review
 # ---------------------------------------------------------------------------
 check_stop
