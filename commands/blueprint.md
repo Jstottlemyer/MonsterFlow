@@ -82,7 +82,7 @@ RESOLVER_EXIT=$?
 
 **Dispatch parsing.** Iterate each line of `$SELECTED`:
 
-1. **`codex-adversary`** (bare, no colon) → Codex path (Codex runs separately; do not dispatch via Agent tool). Per /plan policy, Codex is disabled at this gate by default — pass through unchanged.
+1. **`codex-adversary`** (bare, no colon) → Codex path (Codex runs separately; do not dispatch via Agent tool). Codex runs at Phase 2b AFTER the designers have synthesized — adversarial review of the freshly-written `design.md` against the spec + the codebase. Enabled by default as of 2026-05-16 (was historically disabled; flipped after wiki-write-migrate V3 ran /blueprint and the synthesizing personas needed an adversarial pass to catch the kind of architectural drift Codex caught at /spec-review V2 and at /check).
 2. **`<persona>:<tier>`** (e.g. `api:opus`, `data-model:sonnet`) → split on `:`; load `personas/design/<persona>.md`; invoke the Agent tool with `model: "opus"` (when tier is `opus`) or `model: "sonnet"` (when tier is `sonnet`). The model tier is set per-persona, not stage-wide.
 3. **Bare persona that is not `codex-adversary`** (no colon suffix) → halt: `[dispatch] resolver emitted bare persona '<line>'; expected '<persona>:<tier>' — refusing to dispatch`. This indicates a `--with-tier` regression in the resolver; do not silently default a tier.
 
@@ -160,7 +160,7 @@ Each agent must return:
 
 ## Phase 2: Judge + Synthesize into Implementation Plan
 
-After all dispatched agents return (count = lines in `$SELECTED` from Phase 0b, minus the bare `codex-adversary` entry — at /blueprint Codex is disabled by default), apply two passes using the personas in `~/.claude/personas/`:
+After all dispatched agents return (count = lines in `$SELECTED` from Phase 0b, minus the bare `codex-adversary` entry — Codex runs at Phase 2b on the synthesized design.md), apply two passes using the personas in `~/.claude/personas/`:
 
 **Pass 1 — Judge** (read `personas/judge.md`):
 1. Remove duplicate recommendations across agents → merge into one
@@ -178,6 +178,25 @@ After all dispatched agents return (count = lines in `$SELECTED` from Phase 0b, 
    - Dependencies between tasks
    - Which tasks can run in parallel
    - Estimated complexity per task (S/M/L)
+
+## Phase 2b: Codex Adversarial Check (if available)
+
+Silent skip if Codex is not installed or not authenticated — no error, no prompt.
+
+```bash
+if command -v codex >/dev/null 2>&1 && codex login status >/dev/null 2>&1; then
+  cat docs/specs/<feature>/design.md | codex exec --full-auto --ephemeral \
+    --output-last-message /tmp/codex-blueprint-review.txt \
+    "Adversarial design review: this is the synthesized implementation plan after 3 designers ran in parallel. Challenge the design against the spec AND against the codebase. Look for: load-bearing assumptions that aren't testable, missing dependencies between tasks, wave-sequencing errors, algorithmic bugs in pseudocode, integration points that don't match the actual code, and any drift between the plan's claims and what the underlying scripts/modules actually do."
+fi
+```
+
+If `/tmp/codex-blueprint-review.txt` exists after the run:
+- If Codex surfaces findings not already in the Claude synthesis, add a **Codex Adversarial View** subsection to the plan presentation with those findings.
+- If Codex finds nothing new, note "Codex: no additional findings."
+- If Codex was skipped (not available), omit the section entirely — no mention of it.
+
+**Persist Codex output to disk** (parallel to per-designer raw outputs from Phase 1): if Codex ran successfully, copy `/tmp/codex-blueprint-review.txt` → `docs/specs/<feature>/plan/raw/codex-adversary.md` (atomic write). The `findings-emit` step at Phase 2c reads this file to attribute `codex-adversary` in `personas[]` for any cluster that includes Codex's contribution.
 
 ## Phase 2c: Persona Metrics emit
 
