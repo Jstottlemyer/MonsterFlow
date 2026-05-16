@@ -1112,6 +1112,32 @@ PRBODY
     exit 0
   fi
 
+  # ---------------------------------------------------------------------------
+  # Stale-base guard: refuse to create a PR when origin/main has advanced past
+  # the branch's merge-base. GitHub's squash-merge sets the merged commit's
+  # tree to the BRANCH's tree, silently reverting any main commits that landed
+  # while autorun was building. Caught the hard way on PR #17 (2026-05-15): a
+  # post-fork c7ff079 commit was reverted by the squash and had to be
+  # cherry-picked back. See backlog: autorun-rebase-or-warn-on-stale-base.
+  # ---------------------------------------------------------------------------
+  STALE_BASE_AHEAD=0
+  if git -C "$PROJECT_DIR" fetch origin main --quiet 2>/dev/null; then
+    STALE_BASE_MERGE_BASE="$(git -C "$PROJECT_DIR" merge-base "autorun/$SLUG" origin/main 2>/dev/null || echo "")"
+    if [ -n "$STALE_BASE_MERGE_BASE" ]; then
+      STALE_BASE_AHEAD="$(git -C "$PROJECT_DIR" rev-list --count "$STALE_BASE_MERGE_BASE..origin/main" 2>/dev/null || echo 0)"
+    fi
+  fi
+  if [ "$STALE_BASE_AHEAD" -gt 0 ] 2>/dev/null; then
+    echo "[autorun] $SLUG: STALE BASE — origin/main is $STALE_BASE_AHEAD commit(s) ahead of branch merge-base ($STALE_BASE_MERGE_BASE)" >&2
+    echo "[autorun] $SLUG:   Squash-merging now would silently revert those commits. Refusing to open PR." >&2
+    echo "[autorun] $SLUG:   To recover: cd $PROJECT_DIR && git fetch origin main && git checkout autorun/$SLUG && git rebase origin/main && git push -f && rm $ARTIFACT_DIR/failure.md && autorun start $SLUG" >&2
+    log_run "pr-creation" 1
+    log_merge_action_completed "$RUN_LOG_PATH" "$SLUG" merge_failed stale_base_ahead "" "" "$RUN_ID"
+    write_failure_item "pr-creation" "branch base is $STALE_BASE_AHEAD commit(s) behind origin/main; squash-merge would revert them. Rebase autorun/$SLUG onto origin/main and re-queue."
+    FINAL_STATE="completed-no-pr"
+    exit 0
+  fi
+
   PR_URL_VAL="$(gh pr create \
       --repo "$PR_REPO" \
       --title "$PR_TITLE" \

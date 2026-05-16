@@ -135,8 +135,10 @@ Two events per slug, both on `queue/run.log` (JSONL), joinable on
   closed-set `reason ∈ {warnings_present, verdict_no_go,
   codex_high_severity, run_degraded, validated_fallback, branch_protection,
   merge_call_failed, manual_review_requested, recycle_demoted_findings,
-  pr_create_failed, codex_absent}` (required when action is `fell_back` or
-  `merge_failed`, null otherwise).
+  pr_create_failed, codex_absent, stale_base_ahead}` (required when action
+  is `fell_back` or `merge_failed`, null otherwise). `stale_base_ahead` fires
+  pre-PR when origin/main has advanced past the branch's merge-base; GitHub's
+  squash-merge would silently revert those commits.
 
 ### Drift Detector
 
