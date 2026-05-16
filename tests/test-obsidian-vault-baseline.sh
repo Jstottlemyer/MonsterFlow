@@ -495,9 +495,9 @@ case_9() {
     vault_dir="$(stage_empty_vault)"
     export OBSIDIAN_VAULT_PATH="$vault_dir"
     # First run
-    run_install --non-interactive --no-onboard --no-theme
+    rc=$(run_install --non-interactive --no-onboard --no-theme)
     # Second run — idempotency check
-    run_install --non-interactive --no-onboard --no-theme
+    rc=$(run_install --non-interactive --no-onboard --no-theme)
     local claude_md="$HOME/CLAUDE.md"
     assert_file_exists "case_9 ~/CLAUDE.md exists" "$claude_md" || return 1
     local sentinel_count
