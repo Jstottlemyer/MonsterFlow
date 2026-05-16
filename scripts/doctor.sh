@@ -15,6 +15,41 @@ WORKFLOW_VERSION="$(cat "$SCRIPT_DIR/../VERSION" 2>/dev/null | tr -d '[:space:]'
 DIAG_FILE=$(mktemp -t doctor-diagnostic.XXXXXX.md)
 trap 'rm -f "$DIAG_FILE"' EXIT
 
+# --- CLI flags ---
+FIX_RESOLVER=0
+NO_ISSUE=0
+for arg in "$@"; do
+    case "$arg" in
+        --fix-resolver) FIX_RESOLVER=1 ;;
+        --no-issue)     NO_ISSUE=1 ;;
+        -h|--help)
+            cat <<'EOF'
+doctor.sh — diagnostic report + auto-fix helpers
+
+Usage:
+  ./scripts/doctor.sh                   # gather diagnostic, file GitHub issue
+  ./scripts/doctor.sh --no-issue        # gather diagnostic, print to stdout only
+  ./scripts/doctor.sh --fix-resolver    # interactive fix for resolver/persona drift
+  ./scripts/doctor.sh -h | --help       # this message
+
+Resolver Health checks (always run, mirrored to stdout):
+  - scripts/resolve-personas.sh present + executable
+  - scripts/_resolve_personas.py present
+  - ~/.config/monsterflow/config.json parses + has agent_budget in [1,8]
+  - personas/{review,design,check}/ count matches expected (7/7/6)
+  - resolver dispatches non-empty stdout per gate
+  - emitted persona count == min(on_disk, agent_budget)
+
+--fix-resolver attempts these in order, prompting before each:
+  - chmod +x on resolver scripts
+  - git pull --ff-only in the clone (if behind upstream)
+  - re-run install.sh to refresh symlinks
+EOF
+            exit 0
+            ;;
+    esac
+done
+
 # --- Gather diagnostics into $DIAG_FILE ---
 
 {
@@ -225,6 +260,141 @@ print(hashlib.sha256('\n'.join(canon).encode('utf-8')).hexdigest())
         echo "Persona Metrics: all checks passed ✓"
     else
         echo "Persona Metrics: $PM_FAILS check(s) failed — see above"
+    fi
+    echo '```'
+    echo ""
+
+    echo "## Resolver Health"
+    echo '```'
+    RH_FAILS=0
+    REPO_PATH="$SCRIPT_DIR/.."
+    RESOLVER_SH="$SCRIPT_DIR/resolve-personas.sh"
+    RESOLVER_PY="$SCRIPT_DIR/_resolve_personas.py"
+    BUDGET_JSON="$HOME/.config/monsterflow/config.json"
+
+    # 1. Script presence + exec bit
+    if [ -f "$RESOLVER_SH" ]; then
+        if [ -x "$RESOLVER_SH" ]; then
+            echo "ok   resolve-personas.sh present + executable"
+        else
+            echo "FAIL resolve-personas.sh present but NOT executable"
+            echo "     fix: chmod +x $RESOLVER_SH"
+            RH_FAILS=$((RH_FAILS+1))
+        fi
+    else
+        echo "FAIL resolve-personas.sh MISSING at $RESOLVER_SH"
+        echo "     This triggers the recovery banner. Fix: re-run install.sh from a fresh git pull."
+        RH_FAILS=$((RH_FAILS+1))
+    fi
+    if [ -f "$RESOLVER_PY" ]; then
+        echo "ok   _resolve_personas.py present"
+    else
+        echo "FAIL _resolve_personas.py MISSING at $RESOLVER_PY"
+        echo "     fix: re-run install.sh from a fresh git pull."
+        RH_FAILS=$((RH_FAILS+1))
+    fi
+
+    # 2. Budget config parse + range
+    CONFIGURED_BUDGET=""
+    if [ -f "$BUDGET_JSON" ]; then
+        CONFIGURED_BUDGET=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$BUDGET_JSON'))
+    b = d.get('agent_budget')
+    if b is None:
+        print('')
+    elif not isinstance(b, int) or b < 1 or b > 8:
+        print('INVALID')
+    else:
+        print(b)
+except Exception as e:
+    print('PARSE_ERROR:' + str(e))
+" 2>&1)
+        case "$CONFIGURED_BUDGET" in
+            INVALID)
+                echo "FAIL $BUDGET_JSON has agent_budget out of range [1,8]"
+                RH_FAILS=$((RH_FAILS+1))
+                CONFIGURED_BUDGET=""
+                ;;
+            PARSE_ERROR:*)
+                echo "FAIL $BUDGET_JSON does not parse as JSON: ${CONFIGURED_BUDGET#PARSE_ERROR:}"
+                RH_FAILS=$((RH_FAILS+1))
+                CONFIGURED_BUDGET=""
+                ;;
+            "")
+                echo "ok   $BUDGET_JSON parses (no agent_budget — full roster expected)"
+                ;;
+            *)
+                echo "ok   $BUDGET_JSON parses (agent_budget=$CONFIGURED_BUDGET)"
+                ;;
+        esac
+    else
+        echo "ok   $BUDGET_JSON absent (full roster expected — no budget configured)"
+    fi
+
+    # 3. Persona-dir counts (catches Tom's "all 6 reviewers" drift — pre-2026-05-14 stale clone)
+    # Expected counts as of v0.15.x (review=7 after docs-clarity, design=7, check=6 after security-architect)
+    for gate_pair in "review:7" "design:7" "check:6"; do
+        gate="${gate_pair%:*}"
+        expected="${gate_pair##*:}"
+        gate_dir="$REPO_PATH/personas/$gate"
+        if [ -d "$gate_dir" ]; then
+            actual=$(find "$gate_dir" -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$actual" = "$expected" ]; then
+                echo "ok   personas/$gate/ count=$actual (expected $expected)"
+            else
+                echo "WARN personas/$gate/ count=$actual (expected $expected — clone may be stale)"
+                echo "     fix: cd $REPO_PATH && git pull && bash install.sh"
+                RH_FAILS=$((RH_FAILS+1))
+            fi
+        else
+            echo "FAIL personas/$gate/ MISSING at $gate_dir"
+            RH_FAILS=$((RH_FAILS+1))
+        fi
+    done
+
+    # 4. Per-gate dispatch probe (the actual "does the resolver work end-to-end" check).
+    # Maps user-facing gate names to resolver gate names (spec-review→spec-review, blueprint→design, check→check).
+    if [ -x "$RESOLVER_SH" ] && [ -f "$RESOLVER_PY" ]; then
+        for gate in spec-review design check; do
+            stderr_file=$(mktemp -t doctor-resolver.XXXXXX)
+            stdout=$(bash "$RESOLVER_SH" "$gate" 2>"$stderr_file")
+            exit_code=$?
+            # Count non-empty, non-codex-adversary lines for the persona total
+            persona_count=$(printf '%s\n' "$stdout" | grep -cve '^[[:space:]]*$' -e '^codex-adversary$')
+            if [ "$exit_code" -ne 0 ]; then
+                echo "FAIL resolver $gate → exit=$exit_code"
+                echo "     stderr: $(tr '\n' ' ' < "$stderr_file" | cut -c1-200)"
+                RH_FAILS=$((RH_FAILS+1))
+            elif [ -z "$stdout" ]; then
+                echo "FAIL resolver $gate → empty stdout (would trigger recovery banner)"
+                RH_FAILS=$((RH_FAILS+1))
+            else
+                # Validate count against budget (if configured)
+                if [ -n "$CONFIGURED_BUDGET" ]; then
+                    if [ "$persona_count" -gt "$CONFIGURED_BUDGET" ]; then
+                        echo "FAIL resolver $gate → emitted $persona_count personas, exceeds budget=$CONFIGURED_BUDGET"
+                        RH_FAILS=$((RH_FAILS+1))
+                    else
+                        echo "ok   resolver $gate → $persona_count personas (budget=$CONFIGURED_BUDGET)"
+                    fi
+                else
+                    echo "ok   resolver $gate → $persona_count personas (no budget — full roster)"
+                fi
+            fi
+            rm -f "$stderr_file"
+        done
+    else
+        echo "skip per-gate dispatch probe (resolver scripts missing — see above)"
+    fi
+
+    echo ""
+    if [ "$RH_FAILS" -eq 0 ]; then
+        echo "Resolver Health: all checks passed ✓"
+    else
+        echo "Resolver Health: $RH_FAILS check(s) failed."
+        echo "Auto-fix: ./scripts/doctor.sh --fix-resolver"
     fi
     echo '```'
     echo ""
@@ -477,12 +647,19 @@ print(hashlib.sha256('\n'.join(canon).encode('utf-8')).hexdigest())
     echo '```'
 } > "$DIAG_FILE"
 
-# --- Mirror the autorun policy health + R18 line to stdout so the user sees it
-#     during normal doctor.sh runs (not just in the filed GitHub issue). ---
+# --- Mirror Resolver Health + Autorun Policy Health to stdout so the user sees
+#     them during normal doctor.sh runs (not just in the filed GitHub issue). ---
+
+echo ""
+echo "=== Resolver Health (mirrored from diagnostic) ==="
+awk '
+    /^## Agent Budget/ { exit }
+    /^## Resolver Health/ { in_section=1 }
+    in_section { print }
+' "$DIAG_FILE"
 
 echo ""
 echo "=== Autorun Policy Health (mirrored from diagnostic) ==="
-# Extract the section between the two markers from $DIAG_FILE.
 awk '
     /^## Known Limitations/ { exit }
     /^## Autorun Policy Health/ { in_section=1 }
@@ -493,6 +670,63 @@ echo ""
 echo "=== Known Limitations (autorun v1) ==="
 echo "[doctor] autorun v1 ships with known prompt-injection residual class (single-fence-spoof). See BACKLOG.md → autorun-verdict-deterministic. For untrusted spec sources, set \`verdict_policy=block\` and disable unattended auto-merge."
 echo ""
+
+# --- --fix-resolver: interactive auto-resolve for the most common drift cases. ---
+if [ "$FIX_RESOLVER" = "1" ]; then
+    echo "=== --fix-resolver ==="
+    REPO_PATH="$SCRIPT_DIR/.."
+    RESOLVER_SH="$SCRIPT_DIR/resolve-personas.sh"
+    RESOLVER_PY="$SCRIPT_DIR/_resolve_personas.py"
+
+    # Step 1: chmod
+    if [ -f "$RESOLVER_SH" ] && [ ! -x "$RESOLVER_SH" ]; then
+        echo "Fixing exec bit on resolve-personas.sh ..."
+        chmod +x "$RESOLVER_SH" && echo "  ok"
+    fi
+
+    # Step 2: git pull (only if clone is behind upstream — never reset)
+    if [ -d "$REPO_PATH/.git" ]; then
+        git -C "$REPO_PATH" fetch --quiet 2>&1 || true
+        BEHIND=$(git -C "$REPO_PATH" rev-list --count HEAD..@{u} 2>/dev/null || echo 0)
+        if [ "$BEHIND" -gt 0 ] 2>/dev/null; then
+            echo "Clone is $BEHIND commits behind upstream."
+            echo -n "Run 'git pull --ff-only' in $REPO_PATH? [y/N] "
+            read -r ans
+            if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                git -C "$REPO_PATH" pull --ff-only 2>&1 || echo "  pull failed (uncommitted changes? aborted)"
+            fi
+        else
+            echo "Clone is up to date with upstream ✓"
+        fi
+    fi
+
+    # Step 3: re-run install.sh to refresh symlinks (most common fix for missing helpers)
+    if [ ! -f "$RESOLVER_PY" ] || [ ! -L "$HOME/.claude/personas/review" ] && [ ! -d "$HOME/.claude/personas/review" ]; then
+        echo "Persona symlinks or resolver helper appear stale."
+        echo -n "Re-run $REPO_PATH/install.sh? [y/N] "
+        read -r ans
+        if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+            bash "$REPO_PATH/install.sh" || echo "  install.sh exited non-zero — review output above"
+        fi
+    fi
+
+    # Step 4: re-probe
+    echo ""
+    echo "Re-probing resolver after fixes..."
+    for gate in spec-review design check; do
+        out=$(bash "$RESOLVER_SH" "$gate" 2>&1)
+        rc=$?
+        count=$(printf '%s\n' "$out" | grep -cve '^[[:space:]]*$' -e '^codex-adversary$')
+        echo "  $gate → exit=$rc, personas=$count"
+    done
+    echo ""
+fi
+
+# --no-issue short-circuit: caller wants diagnostic to stdout only, not a GitHub issue.
+if [ "$NO_ISSUE" = "1" ]; then
+    cat "$DIAG_FILE"
+    exit 0
+fi
 
 # --- File the issue via gh ---
 
