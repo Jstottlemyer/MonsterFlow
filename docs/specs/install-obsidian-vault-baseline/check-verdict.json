@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "prompt_version": "check-verdict@2.0",
+  "verdict": "GO_WITH_FIXES",
+  "blocking_findings": [
+    {"persona": "risk-assessment", "finding_id": "ck-3d8c5e0f2a", "summary": "Unverified global ~/CLAUDE.md loader contract — feature silently fails if not loaded"},
+    {"persona": "gaps", "finding_id": "ck-b6a1d9f4c2", "summary": "Wave 1.1 and 1.2 parallel but both modify install.sh — race condition"},
+    {"persona": "risk-assessment", "finding_id": "ck-e5c8b3a7d0", "summary": "Duplicated scaffold predicate in bash and prose guarantees drift"},
+    {"persona": "gaps", "finding_id": "ck-91f6d2c8a5", "summary": "VERSION file increment not in any Wave task"},
+    {"persona": "scope", "finding_id": "ck-4b0e7a3f9d", "summary": "Spec says MonsterFlow CLAUDE.md; plan targets ~/CLAUDE.md — build agents may diverge"},
+    {"persona": "gaps", "finding_id": "ck-c2d5f8e1a6", "summary": "No tests for append_wiki_preflight_instruction() idempotency or edge cases"}
+  ],
+  "security_findings": [
+    {"persona": "risk-assessment", "finding_id": "ck-7f2e9a4b1c", "summary": "Global ~/CLAUDE.md mutation lacks consent, backup, and uninstall path", "tag": "sev:security"}
+  ],
+  "generated_at": "2026-05-15T08:42:17Z",
+  "iteration": 1,
+  "iteration_max": 2,
+  "mode": "permissive",
+  "mode_source": "default",
+  "class_breakdown": {"architectural": 2, "security": 1, "contract": 2, "documentation": 1, "tests": 1, "scope-cuts": 0, "unclassified": 0},
+  "class_inferred_count": 0,
+  "followups_file": null,
+  "cap_reached": false,
+  "stage": "check"
+}

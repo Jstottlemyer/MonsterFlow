@@ -144,6 +144,8 @@ TESTS=(
   test-session-cost-cumulative-only.sh
   test-build-md-autorun-shell-reviewer-hook.sh
   test-changelog-v0.14.0-entry.sh
+  # install-obsidian-vault-baseline — marker write/sweep + ~/CLAUDE.md append (AC1-AC12)
+  test-obsidian-vault-baseline.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).
