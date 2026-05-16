@@ -280,6 +280,16 @@ INSTALL_WARNINGS=()
 add_install_warning() {
     INSTALL_WARNINGS+=("$1")
 }
+
+# Run-scoped guard for wiki-conventions ~/CLAUDE.md backup (per ck-backup-dedupe).
+# Three writers can touch ~/CLAUDE.md during a single install.sh run:
+#   1. append_wiki_preflight_instruction (Zone B)
+#   2. claude-md-merge.py (baseline merge, post-knowledge-layer)
+#   3. _install_wiki_conventions_claude_md_block (post-baseline)
+# Without the guard, each writer takes its own ~/CLAUDE.md.bak.<epoch>, leaving
+# 3 backups per run. The guard ensures only the FIRST writer to touch the file
+# in a given run creates the backup; subsequent writers skip it.
+WIKI_CONV_CLAUDE_MD_BACKED_UP=0
 cleanup_partial() {
     rm -rf "$INSTALL_SCRATCH"
     echo "" >&2
@@ -974,7 +984,135 @@ This preflight does NOT fire on session start or for non-wiki work — only when
 <!-- END MonsterFlow wiki-preflight -->
 WIKI_PREFLIGHT_INSTRUCTION
         echo "  APPENDED: $claude_md — wiki-preflight instruction. Remove BEGIN/END block to revert. Backup at ${claude_md}.bak.${backup_ts}."
+        WIKI_CONV_CLAUDE_MD_BACKED_UP=1
     fi
+}
+
+# _install_vault_conventions — seed <vault>/{projects,concepts,entities}/_convention.md.
+# Invoked from do_knowledge_layer Zone B (last step), per wiki-write-conventions spec AC #7.
+# Skips silently when vault is not configured or scaffold-pending marker present.
+# Backs up any pre-existing _convention.md files to .bak.<epoch> (belt-and-suspenders;
+# wiki-write.py --write-conventions also backs up internally).
+_install_vault_conventions() {
+    local vault_path
+    vault_path="$(parse_obsidian_config 2>/dev/null)" || vault_path=""
+    if [ -z "$vault_path" ]; then
+        echo "  [knowledge layer] wiki conventions: skip — vault not configured"
+        return 0
+    fi
+    if [ ! -d "$vault_path" ]; then
+        echo "  [knowledge layer] wiki conventions: skip — vault path missing ($vault_path)"
+        return 0
+    fi
+    if [ -f "$vault_path/.scaffold-pending" ]; then
+        echo "  [knowledge layer] wiki conventions: skip — vault scaffold pending"
+        return 0
+    fi
+
+    # Install-layer backup of any existing _convention.md (belt-and-suspenders for
+    # user-edited files; wiki-write.py also performs its own backup).
+    local cat ts existing
+    ts="$(date +%s)"
+    for cat in projects concepts entities; do
+        existing="$vault_path/$cat/_convention.md"
+        if [ -f "$existing" ]; then
+            cp "$existing" "${existing}.bak.${ts}" 2>/dev/null || true
+        fi
+    done
+
+    local rc=0
+    python3 "$REPO_DIR/scripts/wiki-write.py" --write-conventions "$vault_path" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        echo "  [knowledge layer] wiki conventions: wrote 3 _convention.md files (vault: $vault_path)"
+    else
+        add_install_warning "wiki conventions: wiki-write.py --write-conventions failed (exit=$rc). Retry: python3 $REPO_DIR/scripts/wiki-write.py --write-conventions $vault_path"
+    fi
+    return 0
+}
+
+# _install_wiki_conventions_claude_md_block — inject sentinel-bracketed wiki-conventions
+# block into ~/CLAUDE.md. MUST be invoked AFTER claude-md-merge.py baseline merge
+# (per Codex P1 #1: the baseline merge runs after do_knowledge_layer; injecting earlier
+# would let the merge interact with or strip the sentinels).
+#
+# Idempotent: _replace_sentinel_block.py replaces existing block content between
+# the sentinels on re-runs; first install appends; matching content is a no-op write.
+#
+# Backup-dedupe: respects WIKI_CONV_CLAUDE_MD_BACKED_UP run-scoped guard so we
+# don't accumulate multiple ~/CLAUDE.md.bak.<epoch> files in a single run.
+_install_wiki_conventions_claude_md_block() {
+    local claude_md="$HOME/CLAUDE.md"
+    local start="<!-- WIKI-CONVENTIONS-START -->"
+    local end="<!-- WIKI-CONVENTIONS-END -->"
+
+    # Backup is created by _replace_sentinel_block.py ONLY when it actually
+    # changes the file (helper is idempotent — same content → no write, no
+    # backup). This prevents .bak.<epoch> accretion on idempotent re-runs
+    # (test-install-knowledge-layer AC3 asserts no .bak files on re-install).
+    [ -f "$claude_md" ] || touch "$claude_md"
+    local backup_flag=""
+    if [ "$WIKI_CONV_CLAUDE_MD_BACKED_UP" != "1" ]; then
+        backup_flag="--backup ${claude_md}.bak.$(date +%s)"
+    fi
+
+    # Block content goes through a tmp file (NOT stdin) per the heredoc-stdin memory.
+    # mktemp -t requires the .XXXXXX suffix to work on GNU mktemp (coreutils).
+    local tmp_dir tmp_file
+    tmp_dir="$(mktemp -d -t mf-wiki-conv.XXXXXX)" || {
+        add_install_warning "wiki-conventions block: mktemp -d failed; ~/CLAUDE.md block not injected."
+        return 0
+    }
+    tmp_file="$tmp_dir/block.md"
+    cat > "$tmp_file" << 'WIKI_CONV_BLOCK'
+
+## Obsidian wiki write conventions
+
+When writing to the Obsidian vault under `projects/`, `concepts/`, or `entities/`, use the deterministic helper instead of computing the path freehand in a wiki-update call:
+
+```bash
+python3 ~/Projects/MonsterFlow/scripts/wiki-write.py \
+  --category {project,concept,entity} --title "..." \
+  [--topic "..."] [--summary "..."] [--tags "a,b,c"] \
+  [--body "..." | --body-stdin]
+```
+
+The helper:
+- Computes a deterministic kebab-ASCII slug (Unicode dashes normalized to `-`, mixed case forced lowercase, 80-char cap)
+- Writes the complete file (frontmatter + body) atomically in one shot — do NOT follow with an Edit call to add body content
+- Refuses overwrite without `--force`
+
+Layout: projects get folder + `index.md`; concepts and entities stay flat. Full rules in `templates/wiki-conventions.md` and each category's `_convention.md` in the vault.
+
+WIKI_CONV_BLOCK
+
+    local rc=0
+    local output
+    # backup_flag is intentionally unquoted so empty expands to nothing.
+    # shellcheck disable=SC2086
+    output=$(python3 "$REPO_DIR/scripts/_replace_sentinel_block.py" \
+        "$claude_md" "$start" "$end" --content-file "$tmp_file" $backup_flag 2>&1) || rc=$?
+
+    rm -rf "$tmp_dir" 2>/dev/null || true
+
+    if [ "$rc" -eq 0 ]; then
+        # Helper prints "replaced" | "appended" | "unchanged"; set guard only
+        # when a real write happened (backup was created or the file changed).
+        case "$output" in
+            replaced|appended)
+                WIKI_CONV_CLAUDE_MD_BACKED_UP=1
+                echo "  [post-baseline] wiki-conventions block injected into $claude_md"
+                ;;
+            unchanged)
+                echo "  [post-baseline] wiki-conventions block unchanged (idempotent)"
+                ;;
+            *)
+                echo "  [post-baseline] wiki-conventions block result: $output"
+                ;;
+        esac
+    else
+        add_install_warning "wiki-conventions block: _replace_sentinel_block.py failed (exit=$rc). Retry: python3 $REPO_DIR/scripts/_replace_sentinel_block.py $claude_md '$start' '$end' --content-file <block-file>"
+    fi
+    return 0
 }
 
 # Task 3.2 — install_obsidian_env
@@ -1223,6 +1361,11 @@ do_knowledge_layer() {
     manage_scaffold_marker
     append_wiki_preflight_instruction
 
+    # Zone B last step (wiki-write-conventions spec AC #7): seed
+    # <vault>/{projects,concepts,entities}/_convention.md. Vault writes only —
+    # the matching ~/CLAUDE.md block is injected AFTER the baseline merge.
+    _install_vault_conventions
+
     # cmux drift fires regardless of install path — auto-attempt brew install if drift detected
     if [ "$c" = "drift" ]; then
         if has_cmd brew; then
@@ -1437,8 +1580,20 @@ elif [ "${MONSTERFLOW_INSTALL_TEST:-0}" != "1" ]; then
     # Skip under MONSTERFLOW_INSTALL_TEST=1: a python3 subprocess per case adds
     # up across the 20-case suite. The merge logic has its own tests
     # (test-allowlist*, etc.) that exercise the merger directly.
+    #
+    # claude-md-merge.py manages its own backup-on-change behavior. No eager
+    # backup here — idempotent re-runs must not create .bak.<epoch> files
+    # (test-install-knowledge-layer AC3). The post-baseline wiki-conventions
+    # writer also defers its backup to _replace_sentinel_block.py's --backup
+    # flag, which only fires on actual content change.
     python3 "$REPO_DIR/scripts/claude-md-merge.py" --target "$GLOBAL_CLAUDE" --template "$REPO_DIR/templates/CLAUDE.md"
 fi
+
+# Post-baseline (wiki-write-conventions spec AC #7 + Codex P1 #1): inject the
+# wiki-conventions sentinel block into ~/CLAUDE.md AFTER the baseline merge.
+# Splitting this from do_knowledge_layer prevents the baseline merge from
+# interacting with or stripping the sentinels.
+_install_wiki_conventions_claude_md_block
 
 # Per D12: graphify claude install runs AFTER the baseline merger so its CLAUDE.md additions are
 # the last write and survive. Gated on (has_cmd graphify OR direct ~/.local/bin/graphify exists)
