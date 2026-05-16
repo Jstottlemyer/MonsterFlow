@@ -41,115 +41,56 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
-# Module-level constants
+# Shared primitives — imported from _wiki_common so wiki-write.py (CLI run
+# as __main__) and _wiki_migrate.py (loaded as a helper module) share the
+# SAME class object identities for exceptions and the SAME slug-transform
+# constants. See ck-import-exception-identity for the underlying issue.
 # ---------------------------------------------------------------------------
 
-UNICODE_DASHES = ['‐', '‑', '‒', '–', '—', '―', '−']
-# U+2010 hyphen, U+2011 non-breaking hyphen, U+2012 figure-dash, U+2013 en-dash,
-# U+2014 em-dash, U+2015 horizontal-bar, U+2212 minus-sign
+# Make `from _wiki_common import ...` work regardless of how this file is
+# invoked: directly via shebang (__main__), imported as `wiki_write` after
+# external sys.path manipulation (tests' first-try path), or loaded via
+# importlib.util.spec_from_file_location (which does NOT add the script's
+# directory to sys.path automatically — tests' fallback path).
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
 
-SLUG_MAX_LEN = 80
-SLUG_VALID = re.compile(r'^[a-z0-9][a-z0-9-]{0,79}$')
-
-RESERVED_TOPIC_NAMES = {'_convention', 'index', 'log', '_archives', '_raw'}
-
-CATEGORIES = ('project', 'concept', 'entity')
-ENTITY_TYPES = ('person', 'organization', 'tool', 'other')
-STATUS_VALUES = ('active', 'paused', 'shipped', 'archived')
-
-PROJECT_INDEX_ORDER = ['title', 'created', 'summary', 'status', 'tags']
-PROJECT_TOPIC_ORDER = ['title', 'created', 'parent', 'summary', 'tags']
-CONCEPT_ORDER = ['title', 'created', 'summary', 'tags']
-ENTITY_ORDER = ['title', 'created', 'type', 'summary', 'tags']
+from _wiki_common import (  # noqa: E402
+    UNICODE_DASHES,
+    SLUG_MAX_LEN,
+    SLUG_VALID,
+    RESERVED_TOPIC_NAMES,
+    CATEGORIES,
+    ENTITY_TYPES,
+    STATUS_VALUES,
+    PROJECT_INDEX_ORDER,
+    PROJECT_TOPIC_ORDER,
+    CONCEPT_ORDER,
+    ENTITY_ORDER,
+    slugify,
+    humanize_topic_slug,
+    emit_yaml_scalar,
+    build_frontmatter,
+    WikiWriteError,
+    VaultNotConfiguredError,
+    VaultNotConfiguredSkip,
+    VaultPathMissingError,
+    EmptySlugError,
+    MutuallyExclusiveError,
+    MissingRequiredArgError,
+    ReservedTopicError,
+    FileExistsNoForceError,
+    MigrationCollisionError,
+    MigrationJournalCorruptError,
+)
 
 VAULT_CONFIG_PATH = '~/.obsidian-wiki/config'
 
 
 # ---------------------------------------------------------------------------
-# Exception hierarchy (Python 3.9 syntax — no parenthesized inheritance)
+# Tag parsing (wiki-write.py-local — not shared with _wiki_migrate.py)
 # ---------------------------------------------------------------------------
-
-class WikiWriteError(Exception):
-    exit_code = 1
-
-
-class VaultNotConfiguredError(WikiWriteError):
-    exit_code = 1  # default-write path
-
-
-class VaultNotConfiguredSkip(WikiWriteError):
-    exit_code = 0  # --lint silent-skip path (per ck-vault-not-cfg)
-
-
-class VaultPathMissingError(WikiWriteError):
-    exit_code = 2
-
-
-class EmptySlugError(WikiWriteError, ValueError):
-    exit_code = 3
-
-
-class MutuallyExclusiveError(WikiWriteError):
-    exit_code = 1
-
-
-class MissingRequiredArgError(WikiWriteError):
-    exit_code = 1
-
-
-class ReservedTopicError(WikiWriteError):
-    exit_code = 1
-
-
-class FileExistsNoForceError(WikiWriteError):
-    exit_code = 1
-
-
-# ---------------------------------------------------------------------------
-# Slug + title helpers
-# ---------------------------------------------------------------------------
-
-def slugify(title: str) -> str:
-    """Deterministic slug transform per spec Data & State section.
-
-    See spec fixture cases — all 8 must pass.
-    """
-    # 1. Strip + lowercase
-    t = title.strip().lower()
-    # 2. Normalize Unicode dashes to ASCII hyphen-minus BEFORE kebab transform
-    for d in UNICODE_DASHES:
-        t = t.replace(d, '-')
-    # 3. Spaces and forward slashes to hyphens
-    t = re.sub(r'[\s/]+', '-', t)
-    # 4. Strip all non-[a-z0-9-]
-    t = re.sub(r'[^a-z0-9-]', '', t)
-    # 5. Collapse double-hyphens
-    t = re.sub(r'-+', '-', t)
-    # 6. Strip leading/trailing hyphens
-    t = t.strip('-')
-    # 7. Truncate to 80 chars, then re-strip trailing hyphen
-    t = t[:SLUG_MAX_LEN].rstrip('-')
-    # 8. Validate; refuse empty
-    if not t:
-        raise EmptySlugError(
-            "slug computation produced empty string; pick a different title"
-        )
-    return t
-
-
-def humanize_topic_slug(slug: str) -> str:
-    """For auto-derived topic titles when --topic <slug> has no explicit title.
-
-    Split on '-', join with space, capitalize first word only.
-    'open-questions' -> 'Open questions'.
-    """
-    words = slug.split('-')
-    if not words:
-        return slug
-    first = words[0].capitalize() if words[0] else ''
-    rest = words[1:]
-    return ' '.join([first] + rest).strip()
-
 
 def parse_tags(raw: Optional[str]) -> List[str]:
     """Parse --tags 'a,b,c' into a normalized list.
@@ -175,89 +116,67 @@ def parse_tags(raw: Optional[str]) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# Frontmatter emission
+# Frontmatter emission — build_frontmatter is imported from _wiki_common above.
 # ---------------------------------------------------------------------------
-
-def emit_yaml_scalar(value) -> str:
-    """JSON-compatible YAML emission.
-
-    - None: returns None (caller omits the key entirely, per ck-yaml-omit)
-    - list of strings: flow style [json.dumps(x), ...] joined with ', '
-    - str: collapse internal whitespace for one-liners is caller's job;
-           here we just json.dumps()
-    - other: json.dumps()
-    """
-    if value is None:
-        return None  # type: ignore[return-value]
-    if isinstance(value, list):
-        if len(value) == 0:
-            return '[]'
-        items = [json.dumps(x, ensure_ascii=False) for x in value]
-        return '[' + ', '.join(items) + ']'
-    if isinstance(value, str):
-        return json.dumps(value, ensure_ascii=False)
-    return json.dumps(value, ensure_ascii=False)
-
-
-def _field_order_for(category: str, has_topic: bool) -> List[str]:
-    if category == 'project':
-        return PROJECT_TOPIC_ORDER if has_topic else PROJECT_INDEX_ORDER
-    if category == 'concept':
-        return CONCEPT_ORDER
-    if category == 'entity':
-        return ENTITY_ORDER
-    raise MissingRequiredArgError("unknown category: {0}".format(category))
-
-
-def build_frontmatter(category: str, has_topic: bool, **fields) -> str:
-    """Build the complete frontmatter block (including leading + trailing ---).
-
-    Fields whose value is None are omitted entirely (per ck-yaml-omit).
-    Summary values are whitespace-collapsed to a single line before emission.
-    """
-    order = _field_order_for(category, has_topic)
-    # Collapse summary whitespace if present
-    if 'summary' in fields and isinstance(fields.get('summary'), str):
-        fields['summary'] = re.sub(r'\s+', ' ', fields['summary']).strip()
-        if not fields['summary']:
-            fields['summary'] = None
-
-    lines = ['---']
-    for key in order:
-        if key not in fields:
-            continue
-        value = fields[key]
-        if value is None:
-            continue  # omit key entirely
-        rendered = emit_yaml_scalar(value)
-        if rendered is None:
-            continue
-        lines.append('{0}: {1}'.format(key, rendered))
-    lines.append('---')
-    lines.append('')  # trailing newline after frontmatter block
-    return '\n'.join(lines) + '\n'
 
 
 # ---------------------------------------------------------------------------
 # Vault discovery
 # ---------------------------------------------------------------------------
 
-def discover_vault(for_lint: bool = False) -> Path:
+def discover_vault(
+    mode: str = 'lint',
+    for_lint: bool = False,  # deprecated; use mode= instead
+) -> Path:
     """Read ~/.obsidian-wiki/config, extract OBSIDIAN_VAULT_PATH, return absolute Path.
 
-    Raises VaultNotConfiguredError (default-write) or VaultNotConfiguredSkip (--lint)
-    when config is absent. Raises VaultPathMissingError when the resolved path
-    does not exist on disk.
+    ``mode`` controls vault-absent semantics:
+
+      'lint'              -> VaultNotConfiguredSkip (exit 0, silent-skip)
+      'migrate-dry-run'   -> VaultNotConfiguredSkip (exit 0, silent-skip)
+      'migrate-resume'    -> VaultNotConfiguredSkip (exit 0, silent-skip)
+      'write-conventions' -> VaultNotConfiguredError (exit 1)
+      'default-write'     -> VaultNotConfiguredError (exit 1)
+      'migrate-execute'   -> VaultNotConfiguredError (exit 1)
+
+    Raises VaultPathMissingError (exit 2) when the config resolves to a path
+    that does not exist on disk, regardless of mode.
+
+    ``for_lint`` is a deprecated boolean keyword retained for backward
+    compatibility only.  When True it forces mode to 'lint'.  New callers
+    must pass ``mode=`` directly and leave ``for_lint`` at its default False.
     """
+    _SKIP_MODES = frozenset({'lint', 'migrate-dry-run', 'migrate-resume'})
+    _ERROR_MODES = frozenset({'write-conventions', 'default-write', 'migrate-execute'})
+    _ALL_MODES = _SKIP_MODES | _ERROR_MODES
+
+    # Back-compat: for_lint=True overrides mode to 'lint'.
+    if for_lint:
+        mode = 'lint'
+    elif mode not in _ALL_MODES:
+        raise ValueError(
+            "discover_vault: unknown mode {0!r}; expected one of {1}".format(
+                mode, sorted(_ALL_MODES)
+            )
+        )
+
+    def _vault_absent_exc(detail: str) -> WikiWriteError:
+        if mode in _SKIP_MODES:
+            return VaultNotConfiguredSkip(
+                "[wiki-write] skip: vault not configured{0}".format(
+                    " ({0})".format(detail) if detail else ""
+                )
+            )
+        return VaultNotConfiguredError(
+            "[wiki-write] vault not configured{0}".format(
+                "; run setup.sh in obsidian-wiki repo first" if not detail
+                else ": {0}".format(detail)
+            )
+        )
+
     cfg_path = Path(os.path.expanduser(VAULT_CONFIG_PATH))
     if not cfg_path.exists():
-        if for_lint:
-            raise VaultNotConfiguredSkip(
-                "[wiki-write] skip: vault not configured"
-            )
-        raise VaultNotConfiguredError(
-            "[wiki-write] vault not configured; run setup.sh in obsidian-wiki repo first"
-        )
+        raise _vault_absent_exc("")
     vault_path: Optional[str] = None
     try:
         for line in cfg_path.read_text(encoding='utf-8').splitlines():
@@ -269,18 +188,10 @@ def discover_vault(for_lint: bool = False) -> Path:
                 vault_path = m.group(1).strip()
                 break
     except OSError as e:
-        if for_lint:
-            raise VaultNotConfiguredSkip(
-                "[wiki-write] skip: vault not configured ({0})".format(e)
-            )
-        raise VaultNotConfiguredError(
-            "[wiki-write] vault config unreadable: {0}".format(e)
-        )
+        raise _vault_absent_exc(str(e))
     if not vault_path:
-        if for_lint:
-            raise VaultNotConfiguredSkip("[wiki-write] skip: vault not configured")
-        raise VaultNotConfiguredError(
-            "[wiki-write] OBSIDIAN_VAULT_PATH missing from {0}".format(cfg_path)
+        raise _vault_absent_exc(
+            "OBSIDIAN_VAULT_PATH missing from {0}".format(cfg_path)
         )
     resolved = Path(os.path.expanduser(vault_path))
     if not resolved.is_dir():
@@ -361,7 +272,7 @@ def write_page(
 # ---------------------------------------------------------------------------
 
 def _today_str() -> str:
-    override = os.environ.get('WIKI_WRITE_DATE_OVERRIDE')
+    override = os.environ.get('DATE_OVERRIDE') or os.environ.get('WIKI_WRITE_DATE_OVERRIDE')
     if override:
         return override
     return date.today().isoformat()
@@ -408,8 +319,9 @@ def run_default_write(args: argparse.Namespace) -> int:
     # Frontmatter field assembly per category
     created = _today_str()
     tags = parse_tags(args.tags)
+    aliases = args.alias if args.alias else []
 
-    vault = discover_vault(for_lint=False)
+    vault = discover_vault(mode='default-write')
 
     if args.category == 'project':
         if topic_slug:
@@ -424,6 +336,7 @@ def run_default_write(args: argparse.Namespace) -> int:
                 parent=slug,
                 summary=args.summary,
                 tags=merged_tags,
+                aliases=aliases if aliases else None,
             )
         else:
             # Index page
@@ -437,6 +350,7 @@ def run_default_write(args: argparse.Namespace) -> int:
                 summary=args.summary,
                 status=status,
                 tags=merged_tags,
+                aliases=aliases if aliases else None,
             )
     elif args.category == 'concept':
         base_tags = ['concept']
@@ -447,6 +361,7 @@ def run_default_write(args: argparse.Namespace) -> int:
             created=created,
             summary=args.summary,
             tags=merged_tags,
+            aliases=aliases if aliases else None,
         )
     else:  # entity
         etype = args.entity_type if args.entity_type else 'other'
@@ -463,6 +378,7 @@ def run_default_write(args: argparse.Namespace) -> int:
             type=etype,
             summary=args.summary,
             tags=merged_tags,
+            aliases=aliases if aliases else None,
         )
 
     written = write_page(
@@ -498,7 +414,7 @@ def _has_uppercase(name: str) -> bool:
 
 def run_lint(args: argparse.Namespace) -> int:
     try:
-        vault = discover_vault(for_lint=True)
+        vault = discover_vault(mode='lint')
     except VaultNotConfiguredSkip as e:
         print(str(e.args[0]) if e.args else "[wiki-write] skip: vault not configured")
         return 0
@@ -576,6 +492,7 @@ def run_lint(args: argparse.Namespace) -> int:
         print('WARN {0} violations:'.format(len(violations)))
         for path, desc in violations:
             print('  {0} ({1})'.format(path, desc))
+        print('To preview a fix: python3 ~/Projects/MonsterFlow/scripts/wiki-write.py --migrate --dry-run')
     return 0
 
 
@@ -596,9 +513,9 @@ See `templates/wiki-conventions.md` in the MonsterFlow repo for the full convent
 
 **Slug rule:** lowercase ASCII, digits, and hyphens only. Unicode dashes (em-dash, en-dash, hyphens, minus-sign) are normalized to ASCII `-`. Max 80 chars.
 
-**Frontmatter (index.md):** `title`, `created`, `summary`, `status` (active|paused|shipped|archived), `tags`.
+**Frontmatter (index.md):** `title`, `created`, `summary`, `status` (active|paused|shipped|archived), `tags`. Optional: `aliases` — alternate names for Obsidian's quick-switcher; auto-added on migration to preserve old-name links.
 
-**Frontmatter (topic.md):** `title`, `created`, `parent` (the project slug), `summary`, `tags`.
+**Frontmatter (topic.md):** `title`, `created`, `parent` (the project slug), `summary`, `tags`. Optional: `aliases` — same semantics as index.md.
 
 Always write via `python3 ~/Projects/MonsterFlow/scripts/wiki-write.py --category project ...`.
 """
@@ -616,7 +533,7 @@ See `templates/wiki-conventions.md` in the MonsterFlow repo for the full convent
 
 **Slug rule:** lowercase ASCII, digits, and hyphens only. Unicode dashes normalized to ASCII `-`. Max 80 chars.
 
-**Frontmatter:** `title`, `created`, `summary`, `tags`.
+**Frontmatter:** `title`, `created`, `summary`, `tags`. Optional: `aliases` — alternate names for Obsidian's quick-switcher; auto-added on migration to preserve old-name links.
 
 Always write via `python3 ~/Projects/MonsterFlow/scripts/wiki-write.py --category concept ...`.
 """
@@ -634,7 +551,7 @@ See `templates/wiki-conventions.md` in the MonsterFlow repo for the full convent
 
 **Slug rule:** lowercase ASCII, digits, and hyphens only. Unicode dashes normalized to ASCII `-`. Max 80 chars.
 
-**Frontmatter:** `title`, `created`, `type` (person|organization|tool|other), `summary`, `tags`.
+**Frontmatter:** `title`, `created`, `type` (person|organization|tool|other), `summary`, `tags`. Optional: `aliases` — alternate names for Obsidian's quick-switcher; auto-added on migration to preserve old-name links.
 
 Always write via `python3 ~/Projects/MonsterFlow/scripts/wiki-write.py --category entity --entity-type <t> ...`.
 """
@@ -692,7 +609,11 @@ def run_write_conventions(vault_arg: str) -> int:
 
 class _MFArgumentParser(argparse.ArgumentParser):
     def error(self, message):
-        raise MissingRequiredArgError("[wiki-write] {0}".format(message))
+        # Override to emit exit code 1 (not argparse's default 2) and use our
+        # stderr format.  Mutual-exclusion errors from add_mutually_exclusive_group
+        # are also routed here so they surface through the same path.
+        sys.stderr.write(str(message) + '\n')
+        sys.exit(1)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -712,27 +633,92 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--body')
     p.add_argument('--body-stdin', dest='body_stdin', action='store_true')
     p.add_argument('--force', action='store_true')
+    p.add_argument('--alias', action='append', default=[],
+                   help='Alternate name for Obsidian quick-switcher. May be repeated.')
     p.add_argument('--lint', action='store_true',
                    help='Scan the vault for convention violations; exit 0 regardless.')
     p.add_argument('--write-conventions', dest='write_conventions',
                    metavar='VAULT_PATH',
                    help='Emit the three per-category _convention.md files into VAULT_PATH.')
+
+    # --migrate mode + modifiers
+    # --dry-run and --resume are mutually exclusive; both require --migrate.
+    p.add_argument('--migrate', action='store_true',
+                   help='Scan the vault for convention violations and migrate them. '
+                        'Two-step UX: use --dry-run first to preview, then run without it to execute.')
+    _migrate_mx = p.add_mutually_exclusive_group()
+    _migrate_mx.add_argument('--dry-run', dest='dry_run', action='store_true',
+                             help='Preview the migration plan without writing any files. '
+                                  'Requires --migrate. Mutually exclusive with --resume.')
+    _migrate_mx.add_argument('--resume', action='store_true',
+                             help='Resume an interrupted migration from the in-flight journal. '
+                                  'Requires --migrate. Mutually exclusive with --dry-run.')
+    p.add_argument('--force-overwrite', dest='force_overwrite', action='store_true',
+                   help='Archive existing targets and overwrite on target-exists collisions. '
+                        'Requires --migrate. Ignored when combined with --dry-run.')
+
     return p
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
+    # Note: _MFArgumentParser.error() calls sys.exit(1) directly, so the
+    # WikiWriteError catch below is kept only for future custom argument actions.
     try:
         args = parser.parse_args(argv)
     except WikiWriteError as e:
         sys.stderr.write(str(e.args[0] if e.args else e) + '\n')
         return e.exit_code
 
+    # Post-parse validation: --dry-run / --resume / --force-overwrite each require
+    # --migrate.  argparse handles the --dry-run + --resume mutual exclusion natively
+    # via add_mutually_exclusive_group().
+    if getattr(args, 'dry_run', False) and not args.migrate:
+        sys.stderr.write('--dry-run requires --migrate\n')
+        return 1
+    if getattr(args, 'resume', False) and not args.migrate:
+        sys.stderr.write('--resume requires --migrate\n')
+        return 1
+    if getattr(args, 'force_overwrite', False) and not args.migrate:
+        sys.stderr.write('--force-overwrite requires --migrate\n')
+        return 1
+
     try:
         if args.lint:
             return run_lint(args)
         if args.write_conventions:
             return run_write_conventions(args.write_conventions)
+        if args.migrate:
+            # Deferred import — _wiki_migrate is only loaded when --migrate is used,
+            # keeping lint/default-write/write-conventions startup cost zero.
+            import importlib.util
+            _here = Path(__file__).parent  # adjust if Path isn't already imported
+            _spec = importlib.util.spec_from_file_location(
+                "_wiki_migrate", str(_here / "_wiki_migrate.py")
+            )
+            _migrate = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_migrate)
+
+            # Resolve vault via existing discover_vault (W1-A4 added mode param).
+            # Vault-absent semantics differ by sub-mode:
+            if args.dry_run:
+                vault_mode = 'migrate-dry-run'
+            elif args.resume:
+                vault_mode = 'migrate-resume'
+            else:
+                vault_mode = 'migrate-execute'
+
+            try:
+                vault = discover_vault(mode=vault_mode)
+            except VaultNotConfiguredSkip as e:
+                print(f'[wiki-migrate] skip: {e}', file=sys.stderr)
+                sys.exit(0)
+            except VaultNotConfiguredError as e:
+                print(f'[wiki-migrate] {e}', file=sys.stderr)
+                sys.exit(1)
+
+            # Dispatch
+            sys.exit(_migrate.run(args, vault))
         return run_default_write(args)
     except WikiWriteError as e:
         msg = str(e.args[0]) if e.args else e.__class__.__name__

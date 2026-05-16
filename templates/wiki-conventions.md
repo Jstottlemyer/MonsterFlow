@@ -113,6 +113,8 @@ Fields in order: `title`, `created`, `summary`, `status`, `tags`.
 
 `status` must be one of: `active`, `paused`, `shipped`, `archived`.
 
+- `aliases: [name1, name2]` (optional) — alternate page names for Obsidian's quick-switcher and link resolver. For migrated pages, the canonical slug is auto-added so `[[old-name]]` references continue to resolve.
+
 ```yaml
 ---
 title: "PatternCall iOS Native Rewrite"
@@ -131,6 +133,8 @@ Fields in order: `title`, `created`, `parent`, `summary`, `tags`.
 (e.g., slug `open-questions` becomes title `"Open questions"`; caller can override with
 `--topic-title`).
 
+- `aliases: [name1, name2]` (optional) — alternate page names for Obsidian's quick-switcher and link resolver. For migrated pages, the canonical slug is auto-added so `[[old-name]]` references continue to resolve.
+
 ```yaml
 ---
 title: "Decisions"
@@ -144,6 +148,8 @@ tags: ["project", "topic"]
 ### 3c. `concepts/<slug>.md`
 
 Fields in order: `title`, `created`, `summary`, `tags`.
+
+- `aliases: [name1, name2]` (optional) — alternate page names for Obsidian's quick-switcher and link resolver. For migrated pages, the canonical slug is auto-added so `[[old-name]]` references continue to resolve.
 
 ```yaml
 ---
@@ -159,6 +165,8 @@ tags: ["concept"]
 Fields in order: `title`, `created`, `type`, `summary`, `tags`.
 
 `type` must be one of: `person`, `organization`, `tool`, `other`.
+
+- `aliases: [name1, name2]` (optional) — alternate page names for Obsidian's quick-switcher and link resolver. For migrated pages, the canonical slug is auto-added so `[[old-name]]` references continue to resolve.
 
 ```yaml
 ---
