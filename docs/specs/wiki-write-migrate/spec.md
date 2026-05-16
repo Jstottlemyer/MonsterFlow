@@ -1,13 +1,14 @@
 ---
 created: 2026-05-15
+revision: V2 (post-spec-review, F1 empirically verified)
 constitution: none
 confidence:
   scope: 0.95
   ux: 0.92
-  data: 0.92
+  data: 0.94
   integration: 0.92
-  edges: 0.88
-  acceptance: 0.92
+  edges: 0.92
+  acceptance: 0.95
 gate_mode: permissive
 tags: [api, data, docs, integration, migration, refactor, scalability, security, ux]
 tags_provenance:
@@ -19,9 +20,26 @@ tags_provenance:
 # wiki-write-migrate Spec
 
 **Created:** 2026-05-15
+**Revision:** V2 — folds /spec-review F1-F5 architectural findings + 11 contract refinements. F1 empirically verified via Obsidian spike at `~/Projects/_spike-f1-wiki-write-migrate/` (2026-05-16, all 5 link probes resolved purple).
 **Constitution:** none (MonsterFlow personal-tooling repo; pipeline owns roster)
-**Confidence:** scope 0.95, ux 0.92, data 0.92, integration 0.92, edges 0.88, acceptance 0.92
+**Confidence:** scope 0.95, ux 0.92, data 0.94, integration 0.92, edges 0.92, acceptance 0.95
 **gate_mode:** permissive
+
+## F1 Verification (added in V2)
+
+The spec's foundational assumption — that `[[slug]]` resolves to `projects/<slug>/index.md` in Obsidian — was tested empirically on 2026-05-16. A fixture vault under `~/Projects/_spike-f1-wiki-write-migrate/` created `projects/spike-target/index.md` (frontmatter `aliases: [spike-target, "Spike Target"]`) and `concepts/spike-link-tester.md` (containing 5 link-form probes). All 5 probes resolved in Obsidian's live preview:
+
+| Probe | Link form | Result |
+|-------|-----------|--------|
+| P1 | `[[spike-target]]` (bare slug) | resolved via alias |
+| P2 | `[[Spike Target]]` (Title Case) | resolved via alias |
+| P3 | `[[spike-target/index]]` (full path) | resolved via path |
+| P4 | `[[spike-target/]]` (folder+slash) | resolved via folder→index auto-fold |
+| P5 | `[[Spike-Target]]` (case variant) | resolved via case-insensitive alias |
+
+**Conclusion:** F1 holds, conditional on the migrated page's `aliases:` array including the **canonical slug** (not just the old human title). V2's AC #6 reflects this fix.
+
+**Bonus safety net (P4):** Obsidian auto-folds `[[folder/]]` to `folder/index.md` — robust against the rare user who writes folder-with-slash link forms.
 
 ## Summary
 
@@ -46,8 +64,13 @@ No backlog items merge into this spec. (The `wiki-write-migrate` entry in BACKLO
 - Migration code lives in `scripts/_wiki_migrate.py` (new module, ~400 LoC), imported and dispatched by wiki-write.py — single CLI surface, separated implementation.
 - **Wikilink rewriting** uses Obsidian's native shortest-unique-path resolver model: `[[Welcome]]` becomes `[[welcome]]` when the new slug is uniquely identifiable across the vault; ambiguous targets get the disambiguating folder prefix `[[projects/welcome|Welcome]]`. Computed against the POST-migration vault state for every link.
 - **Durable journal** at `<vault>/.migration-journal.jsonl` recording each rename tuple before the rename happens. On clean completion, journal archived to `<vault>/.migration-journal-<ts>.jsonl.done`. `--resume` reads the journal, completes any in-flight Phase A renames, then runs Phase B link rewrites against the journal's (old, new) mapping. Journal is correctness-mandatory — Phase B's rewriter cannot recover the (old → new) basename mapping from filesystem state alone, so the journal IS the durable mapping.
-- **Collision handling** — when a slug collision, target-exists, or folder-vs-file collision is detected during `--dry-run`, the conflicting file is SKIPPED (not migrated), recorded in `migration-report.md` with per-collision resolution instructions. Migration proceeds for all non-colliding files. `--force-overwrite` opts into clobbering target-exists collisions when the user has explicitly decided. Slug collisions and folder-vs-file collisions are never auto-resolved (the user must rename manually before re-running).
-- **Aliases preservation** — every migrated page's frontmatter gets `aliases: ["<old-basename-without-md>"]` auto-populated. Obsidian's quick-switcher uses `aliases` natively, so the old human-visible title remains discoverable. This extends the canonical frontmatter schema (set in `wiki-write-conventions`) with a new optional `aliases` field; `wiki-write.py` default-write also gains an optional `--alias <name>` flag (multi-value).
+- **Journal schema versioned (V2 — fixes F6)** — every journal row includes `schema_version: 1` so future `_wiki_migrate.py` upgrades can detect and refuse incompatible journals (`MigrationJournalCorruptError`, exit 5). Future schema bumps (e.g., new `phase:` variants beyond `rename`) get explicit version handling in the reader.
+- **Advisory lock against concurrent invocations (V2 — fixes F5)** — Phase A acquires an exclusive `fcntl.flock()` on `<vault>/.migration-journal.jsonl` before writing any row. A second `--migrate` invocation while the first is in flight fails to acquire the lock and exits 1 with `migration already in progress; wait for completion or rm <vault>/.migration-journal.jsonl if no other process is running`. The lock is released when the journal handle closes (on clean completion OR crash).
+- **Phase B post-run verification (V2 — fixes Codex C2 / F9)** — after Phase B completes, the rewriter does a final scan of the vault looking for any wikilinks whose target (per Obsidian's resolver model) is one of the journal's `old_basename` values that should have been rewritten. Any survivors are surfaced as warnings in stdout AND appended to `migration-report.md` under `## Verification Findings`. Non-blocking; informational. Helps detect rewriter bugs in development.
+- **Phase B idempotency (V2 — fixes F2)** — the rewriter checks each `[[X]]` reference against TWO sets from the journal: `old_basenames` (the slugs we migrated FROM) and `new_basenames` (the slugs we migrated TO). A reference is rewritten only when it matches `old_basenames` AND does NOT already match `new_basenames` (case-insensitive). This handles the Welcome→welcome case: after pass 1 the reference is `[[welcome]]`, which matches both old AND new in case-insensitive comparison — the new-form check fires first, skip. Re-runs are safe and idempotent.
+- **Split-brain reference resolution (V2 — fixes F3)** — before rewriting any `[[X]]` reference, the rewriter resolves X against the PRE-migration vault state (using the journal's `old_path` list + a scan of currently-unmigrated files for cross-check). If X uniquely resolves to one migrated file → rewrite. If X resolves to a SKIPPED file (collision) → leave alone, flag in `migration-report.md` under `## Ambiguous References`. If X resolves ambiguously to multiple files → leave alone, flag in `migration-report.md`. This protects users from losing references that intended skipped pages.
+- **Collision handling (V2 — fixes F4)** — when a slug collision, target-exists, or folder-vs-file collision is detected during `--dry-run`, the conflicting file is SKIPPED (not migrated), recorded in `migration-report.md` with per-collision resolution instructions. Migration proceeds for all non-colliding files. `--force-overwrite` opts into LOSSLESS clobbering of target-exists collisions: the existing target is FIRST moved to `<vault>/_archives/migration-conflicts/<UTC-ts>/<original-relative-path>` (preserving directory structure), THEN the source is renamed into the now-vacant target path. The archive copy is referenced in `migration-report.md`. Slug collisions and folder-vs-file collisions are never auto-resolved (the user must rename manually before re-running) — `--force-overwrite` does NOT affect them.
+- **Aliases preservation (V2 — fixes F1)** — every migrated page's frontmatter gets `aliases: ["<canonical-slug>", "<old-basename-without-md>"]` auto-populated. The canonical slug entry is what makes `[[slug]]` references resolve to the migrated page via Obsidian's alias resolver (empirically verified — see F1 Verification block at top). The old-basename entry preserves quick-switcher discoverability via the old human-visible title. Existing aliases in the source page's frontmatter are preserved; new aliases are appended and the array is deduplicated case-insensitively. This extends the canonical frontmatter schema (set in `wiki-write-conventions`) with a new optional `aliases` field; `wiki-write.py` default-write also gains an optional `--alias <name>` flag (multi-value).
 - **Two-step UX** — `--dry-run` prints the plan and writes `<vault>/migration-report.md`. Execute step is a separate `--migrate` invocation (no `--dry-run` flag). The plan is recomputed on execute — no stale-plan failure mode.
 - **No interactive prompts during execution** — fully deterministic. The user reviews the dry-run, decides, runs execute. Per-collision resolution happens out of band (manual rename + re-run, or `--force-overwrite`).
 - **Surfacing via existing lint** — `/wrap` Phase 2c Step 3b's existing `wiki-write.py --lint` output gets a one-line tail: `To preview a fix: python3 ~/Projects/MonsterFlow/scripts/wiki-write.py --migrate --dry-run`. No /wrap-time prompt — preserves /wrap's speed and avoids fat-finger risk on a destructive workflow.
@@ -175,14 +198,14 @@ No roster changes. The pipeline's default personas (api, data-model, ux, scalabi
 4. Run Phase B from scratch (Phase B is idempotent — already-rewritten links don't match the old-form pattern; re-running just walks the vault and confirms no remaining old refs).
 5. Archive journal on clean completion (same as the non-resume happy path).
 
-**Error paths (exit codes):**
+**Error paths (exit codes) — V2 collapses 4 and 5 per scope SC-007:**
 
-- `0` — success (including silent-skip when vault is absent under `--migrate --dry-run` — same behavior as `--lint`)
-- `1` — vault absent on `--migrate` (not `--dry-run`), or other helper-misuse (e.g., `--resume` without an existing journal when `MONSTERFLOW_MIGRATE_STRICT=1`)
+- `0` — success, including silent-skip when vault is absent under `--migrate --dry-run` or `--migrate --resume` (V2 — fixes F8)
+- `1` — vault absent on `--migrate` (no `--dry-run` or `--resume`); helper-misuse including: `--dry-run` + `--resume` combo (mutually exclusive — argparse rejects with `--dry-run and --resume are mutually exclusive`); `--migrate` lock contention (advisory lock held by another invocation — V2 F5); `--resume` without an existing journal when `MONSTERFLOW_MIGRATE_STRICT=1`; target-exists collision detected without `--force-overwrite` (`MigrationCollisionError` internally); journal schema mismatch on `--resume` (`MigrationJournalCorruptError` internally). Stderr message distinguishes the cause.
 - `2` — vault path resolved but directory does not exist
-- `3` — slug computation produced empty string for one or more files (vault content unmigrate-able without manual rename first)
-- `4` — `MigrationCollisionError` — target-exists collision detected without `--force-overwrite`; helper aborts after writing dry-run report
-- `5` — `MigrationJournalCorruptError` — `--resume` found a malformed journal
+- `3` — slug computation produced empty string for one or more files
+
+The exception classes `MigrationCollisionError` and `MigrationJournalCorruptError` are kept internally (testable by name + stderr-string matching) but the CLI uniformly returns 1 for both. Promote to distinct exit codes when a scripted consumer materializes.
 
 ## Data & State
 
@@ -199,16 +222,16 @@ No roster changes. The pipeline's default personas (api, data-model, ux, scalabi
 - `<vault>/.migration-journal-<UTC-ts>.jsonl.done` — archived journal after clean completion. Retained indefinitely (one per migration run; user can `rm` after reviewing).
 - `<vault>/migration-report.md` — written by every `--dry-run` and `--migrate` invocation. Overwritten on each run. Contains: collision details with per-collision resolution instructions, type-3b manual-create commands, full migration plan, link rewrite summary.
 
-**Journal schema (JSONL — one row per state transition, append-only):**
+**Journal schema (JSONL — one row per state transition, append-only) — V2 adds schema_version per F6:**
 
 ```jsonl
-{"phase":"rename","old_path":"projects/PatternCall — iOS Native Rewrite.md","new_path":"projects/patterncall-ios-native-rewrite/index.md","old_basename":"PatternCall — iOS Native Rewrite","new_basename":"patterncall-ios-native-rewrite","ts":"2026-05-15T07:25:31Z","status":"in_flight"}
-{"phase":"rename","old_path":"projects/PatternCall — iOS Native Rewrite.md","new_path":"projects/patterncall-ios-native-rewrite/index.md","old_basename":"PatternCall — iOS Native Rewrite","new_basename":"patterncall-ios-native-rewrite","ts":"2026-05-15T07:25:31Z","status":"completed"}
-{"phase":"rename","old_path":"projects/Welcome.md","new_path":"projects/welcome/index.md","old_basename":"Welcome","new_basename":"welcome","ts":"2026-05-15T07:25:32Z","status":"in_flight"}
+{"schema_version":1,"phase":"rename","old_path":"projects/PatternCall — iOS Native Rewrite.md","new_path":"projects/patterncall-ios-native-rewrite/index.md","old_basename":"PatternCall — iOS Native Rewrite","new_basename":"patterncall-ios-native-rewrite","ts":"2026-05-15T07:25:31Z","status":"in_flight"}
+{"schema_version":1,"phase":"rename","old_path":"projects/PatternCall — iOS Native Rewrite.md","new_path":"projects/patterncall-ios-native-rewrite/index.md","old_basename":"PatternCall — iOS Native Rewrite","new_basename":"patterncall-ios-native-rewrite","ts":"2026-05-15T07:25:31Z","status":"completed"}
+{"schema_version":1,"phase":"rename","old_path":"projects/Welcome.md","new_path":"projects/welcome/index.md","old_basename":"Welcome","new_basename":"welcome","ts":"2026-05-15T07:25:32Z","status":"in_flight"}
 ... 
 ```
 
-Readers take the LATEST row per `old_path` to determine current status. `phase: "rename"` is the only phase for v1 (Phase B's per-file rewrites don't get journaled — they're idempotent enough to re-run from scratch on resume). Future Phase A operations (move, delete) could add phase variants.
+Readers take the LATEST row per `old_path` to determine current status. Reader policy on unknown `schema_version`: refuse with `MigrationJournalCorruptError` (CLI exit 1). `phase: "rename"` is the only phase for v1; future variants get explicit reader-side handling.
 
 **Frontmatter schema extension (canonical, applies to ALL category schemas):**
 
@@ -317,28 +340,33 @@ Skip-collisions: 1 file
 
 ## Acceptance Criteria
 
-1. `scripts/_wiki_migrate.py` exists in the MonsterFlow repo. Python 3.9-compatible (no `|` union types, no `match` statements, no parenthesized context managers). Stdlib only. Module surface: `run(args, vault) -> int`, `compute_plan(vault) -> MigrationPlan` (namedtuple or dataclass), `execute_phase_a(plan, journal_path) -> None`, `execute_phase_b(journal_path, vault) -> None`, `resume(journal_path, vault) -> None`, `write_report(vault, plan) -> None`, `resolve_wikilink(old_basename, new_basename, vault_index) -> str`.
+1. `scripts/_wiki_migrate.py` exists in the MonsterFlow repo. Python 3.9-compatible (no `|` union types, no `match` statements, no parenthesized context managers). Stdlib only (including `fcntl` for the advisory lock). Module surface: `run(args, vault) -> int`, `compute_plan(vault) -> MigrationPlan` (namedtuple or dataclass), `execute_phase_a(plan, journal_path) -> None`, `execute_phase_b(journal_path, vault) -> None`, `resume(journal_path, vault) -> None`, `write_report(vault, plan) -> None`, `resolve_wikilink(old_basename, new_basename, vault_index) -> str`, `resolve_link_target_pre_migration(link, vault, journal) -> Optional[Path]` (V2 F3 split-brain resolver), `archive_collision_target(target_path, vault) -> Path` (V2 F4 lossless overwrite).
 
-2. `scripts/wiki-write.py` accepts new flags: `--migrate` (mode-switch), `--dry-run` (modifier; requires `--migrate`), `--resume` (modifier; requires `--migrate`; mutually exclusive with `--dry-run`), `--force-overwrite` (modifier; requires `--migrate`; not `--dry-run`), `--alias <name>` (default-write modifier; may repeat). New exception classes: `MigrationCollisionError` (exit 4), `MigrationJournalCorruptError` (exit 5). Migration routing dispatches to `_wiki_migrate.run(args, vault)`.
+2. `scripts/wiki-write.py` accepts new flags: `--migrate` (mode-switch), `--dry-run` (modifier; requires `--migrate`; mutually exclusive with `--resume`), `--resume` (modifier; requires `--migrate`), `--force-overwrite` (modifier; requires `--migrate`; ignored with `--dry-run`), `--alias <name>` (default-write modifier; may repeat). Internal exception classes `MigrationCollisionError` and `MigrationJournalCorruptError` map to CLI exit 1 in V2 (collapsed from 4/5 per scope SC-007). Migration routing dispatches to `_wiki_migrate.run(args, vault)`.
 
-3. Migration's wikilink rewriter uses shortest-unique-path: for each `[[old-basename]]` reference, after the corresponding file's rename, the rewriter computes the new form by checking `<new-basename>` uniqueness across the post-migration vault. If unique → emit `[[new-basename]]` (preserving piped-display, fragment, embed sigils). If non-unique → emit `[[<category>/<new-basename>|<old-basename-or-display>]]`. Tests cover the disambiguating-suffix case explicitly.
+3. Migration's wikilink rewriter uses Obsidian's shortest-unique-path model. Uniqueness predicate (V2 F7): a basename is unique when it appears exactly once across `<vault>/{projects,concepts,entities}/**/*.md` after the rename plan applies (the `_archives/`, `_raw/`, root-level files are NOT in the uniqueness denominator). Form-emission: unique → `[[new-basename]]` preserving piped-display, fragment, embed sigils; non-unique → `[[<category>/<new-basename>|<display-text-or-old-basename>]]`. Tests cover both branches. Wikilink edge cases (V2 F10 + F11): handles bare `[[X]]`, folder-qualified `[[folder/X]]`, `.md`-suffix `[[X.md]]`, fragment `[[X#section]]`, embed `![[X]]`, piped-display `[[X|label]]`, callout-block `> [!note] [[X]]`. HTML comments `<!-- [[X]] -->` are NOT rewritten (preserve verbatim).
 
-4. Migration's journal is durable JSONL at `<vault>/.migration-journal.jsonl`, append-only, with rows recording each Phase A rename's (`old_path`, `new_path`, `old_basename`, `new_basename`, `ts`, `status`) — written BEFORE the rename and updated AFTER. `--resume` reads the journal and completes any `status:"in_flight"` rows. On clean completion, journal is archived to `.migration-journal-<UTC-ts>.jsonl.done`.
+4. Migration's journal is durable JSONL at `<vault>/.migration-journal.jsonl`, append-only, with rows recording each Phase A rename's (`schema_version: 1`, `phase: "rename"`, `old_path`, `new_path`, `old_basename`, `new_basename`, `ts`, `status`) — written BEFORE the rename and updated AFTER. V2 adds `schema_version` field (F6) — reader refuses unknown versions with `MigrationJournalCorruptError`. V2 adds advisory `fcntl.flock()` on the journal file during Phase A (F5) — second concurrent invocation exits 1 with lock-contention message. `--resume` reads the journal and completes any `status:"in_flight"` rows. On clean completion, journal archived to `.migration-journal-<UTC-ts>.jsonl.done`.
 
-5. Collisions are skipped + reported by default; `--force-overwrite` opts into clobbering target-exists collisions only (slug collisions and folder-vs-file collisions are never auto-resolved — always require manual user action). All collisions are recorded in `<vault>/migration-report.md` with per-collision resolution instructions.
+5. Collisions are skipped + reported by default. `--force-overwrite` opts into LOSSLESS overwrite of target-exists collisions only (V2 F4): the existing target is FIRST moved to `<vault>/_archives/migration-conflicts/<UTC-ts>/<original-relative-path>` (preserving directory structure), THEN the source is renamed into the now-vacant target path. The archive copy path is recorded in `migration-report.md`. Slug collisions and folder-vs-file collisions are NEVER affected by `--force-overwrite` — they always require manual user action.
 
-6. Every migrated page's frontmatter gains `aliases: ["<old-basename-without-md>"]` (appended to existing aliases if any, deduplicated). The aliases field becomes a documented optional field in `templates/wiki-conventions.md` for all four category schemas (project-index, project-topic, concept, entity). `wiki-write.py` default-write gains a `--alias <name>` flag (multi-value; may repeat).
+6. Every migrated page's frontmatter gains `aliases: ["<canonical-slug>", "<old-basename-without-md>"]` (V2 fixes F1 — canonical slug entry enables `[[slug]]` resolution via Obsidian's alias resolver, empirically verified). Existing `aliases:` entries in the source page are preserved; new entries are appended and the array is deduplicated case-insensitively. The `aliases` field becomes a documented optional field in `templates/wiki-conventions.md` for all four category schemas (project-index, project-topic, concept, entity). `wiki-write.py` default-write gains a `--alias <name>` flag (multi-value; may repeat or comma-separate).
 
-7. `--dry-run` writes `<vault>/migration-report.md` and prints a stdout summary including the `Next step: python3 ~/Projects/MonsterFlow/scripts/wiki-write.py --migrate` line. The execute step (`--migrate` without `--dry-run`) recomputes the plan from scratch (no stale-plan failure mode). Both modes write the report; execute additionally writes the journal and performs the renames + rewrites.
+7. `--dry-run` writes `<vault>/migration-report.md` and prints a stdout summary including the `Next step: python3 ~/Projects/MonsterFlow/scripts/wiki-write.py --migrate` line. The execute step (`--migrate` without `--dry-run`) recomputes the plan from scratch (no stale-plan failure mode). Both modes write the report; execute additionally writes the journal, performs the renames + rewrites, and runs the Phase B post-run verification scan (V2 F9 — appends `## Verification Findings` section to the report if any old-form wikilinks survive).
 
 8. `wiki-write.py --lint` output adds a one-line tail when violations > 0: `To preview a fix: python3 ~/Projects/MonsterFlow/scripts/wiki-write.py --migrate --dry-run`. No `/wrap`-time prompt; the user reads and acts at their own pace.
 
-9. `tests/test-wiki-migrate.sh` covers at minimum: (a) slug-collision detection (two sources → same canonical slug, both skipped), (b) target-exists detection (skipped without `--force-overwrite`; clobbered with), (c) folder-vs-file detection (flat file skipped, folder retained), (d) type-3b manual-create case (helper prints the creation command), (e) journal-write-before-rename atomicity (journal row exists before `os.rename` completes — verified via in-process mock), (f) `--resume` from a journal with in-flight rows (rename completed, journal updated to `completed`), (g) `--resume` from a malformed journal (exits 5 `MigrationJournalCorruptError`), (h) Phase B shortest-unique-path resolver (unique → bare slug; ambiguous → disambiguating prefix), (i) code-fence wikilinks NOT rewritten, (j) frontmatter wikilinks NOT rewritten, (k) piped-display preserved, (l) fragment preserved, (m) embed sigil preserved, (n) alias auto-injection (single migration), (o) alias dedup (existing alias array preserved + extended), (p) `migration-report.md` content (sections + per-collision instructions), (q) `--dry-run` exit codes 0 / silent-skip-on-vault-absent, (r) `--migrate` exit codes 0 / 1 / 2 / 3 / 4 / 5, (s) case-insensitive filesystem no-op rename detection. Wired into `tests/run-tests.sh` (named task — `test-orchestrator-wiring-gap` memory).
+9. Phase B idempotency (V2 F2): the rewriter checks each `[[X]]` reference against both `old_basenames` and `new_basenames` sets from the journal (case-insensitive comparison). Rewrite fires only when X matches `old_basenames` AND does NOT already match `new_basenames`. Re-runs of Phase B are idempotent — already-rewritten references are detected and skipped.
+
+10. Split-brain reference resolution (V2 F3): before rewriting any `[[X]]`, the rewriter resolves X against the pre-migration vault state. If X uniquely resolves to a MIGRATED file → rewrite. If X resolves to a SKIPPED (collision) file → leave alone, append to `migration-report.md` under `## Ambiguous References`. If X resolves ambiguously to multiple files (some migrated, some not) → leave alone, append to `migration-report.md`.
+
+11. `tests/test-wiki-migrate.sh` covers at minimum: (a) slug-collision detection (two sources → same canonical slug, both skipped), (b) target-exists detection without `--force-overwrite` (skipped + reported), (c) target-exists WITH `--force-overwrite` (existing target archived to `_archives/migration-conflicts/<ts>/...` before rename; archive path recorded in report), (d) folder-vs-file detection (flat file skipped, folder retained), (e) type-3b manual-create case (helper prints the creation command), (f) journal `schema_version: 1` present on every row + reader rejects unknown versions, (g) journal pre-rename atomicity (V2 revised per F12 — test pre-plants an in-flight journal row matching plan, runs `--migrate --resume`, asserts rename completes and row status → completed), (h) advisory lock on journal during Phase A (V2 F5 — second concurrent invocation exits 1 with lock-contention stderr message), (i) Phase B shortest-unique-path resolver (unique → bare slug; ambiguous → disambiguating prefix), (j) Phase B idempotency on re-run (V2 F2 — rewriter detects already-canonical form, skip), (k) split-brain reference detection (V2 F3 — ambiguous link flagged in report, NOT auto-rewritten), (l) Phase B post-run verification (V2 F9 — verification scan surfaces any survivors), (m) code-fence wikilinks NOT rewritten, (n) frontmatter wikilinks NOT rewritten, (o) HTML-comment wikilinks NOT rewritten (V2 F11), (p) callout-block wikilinks ARE rewritten, (q) piped-display preserved, (r) fragment preserved, (s) embed sigil preserved, (t) `--alias` flag default-write multi-value handling, (u) alias auto-injection includes canonical slug + old basename (V2 F1), (v) alias dedup case-insensitive, (w) `migration-report.md` content (sections + per-collision instructions + archive paths + ambiguous-references + verification-findings), (x) `--dry-run` exit codes 0 / silent-skip-on-vault-absent, (y) `--migrate` exit codes 0 / 1 / 2 / 3, (z) `--migrate --dry-run --resume` rejected by argparse (exit 1; mutual exclusion per V2 F8), (aa) `--force-overwrite` does NOT bypass slug-collisions (V2 F14 — both files still skipped), (bb) orphan wikilink preservation (V2 F15 — `[[never-existed]]` reference not touched). Wired into `tests/run-tests.sh` (named task — `test-orchestrator-wiring-gap` memory). Case-sensitive-filesystem skip guard on the case-insensitive-rename test (V2 F13).
 
 ## Open Questions
 
-None at write time. The 4 originally documented in the BACKLOG entry are answered (Q1 wikilink resolver, Q2 journal, Q3 collision matrix, Q4 aliases). The 3 surfaced during Q&A are also answered (Q5 two-step recompute, Q6 module split, Q7 surfacing-via-lint-no-prompt).
+None at V2 write time. The 4 originally documented in the BACKLOG entry are answered (Q1 wikilink resolver, Q2 journal, Q3 collision matrix, Q4 aliases). The 3 surfaced during Q&A are answered (Q5 two-step recompute, Q6 module split, Q7 surfacing-via-lint-no-prompt). The 5 architectural findings from /spec-review (F1 alias-contains-slug, F2 idempotency, F3 split-brain, F4 lossless overwrite, F5 advisory lock) are folded inline. The 11 contract/tests/vault-discovery refinements (F6-F17 — schema_version, uniqueness predicate, --resume on vault-absent, post-run verification, expanded wikilink edges, bash-testable atomicity test, FS-sensitive test guard, --force + slug-collision test, orphan-link test, path-with-spaces, iCloud placeholders) are folded into Data & State and Acceptance Criteria.
 
 A future follow-up worth tracking, not blocking this spec:
 
 - **Bulk alias addition for already-conformant pages** — out of scope here; the `--alias` flag on default-write supports per-page addition. If a user later wants to retroactively add aliases to pages that were created without them, that's a separate `--add-alias` mode or a future migration sub-pass. Note in BACKLOG.md if the need surfaces.
+- **F1 empirical verification on Obsidian versions** — the spike (2026-05-16) verified resolution against the current installed Obsidian version. If Obsidian's resolver semantics change in a future version, the alias-based resolution could break. A version-pin test in `test-wiki-migrate.sh` is not feasible (can't run Obsidian headless); document the assumption in templates/wiki-conventions.md so future debuggers know where to look.
