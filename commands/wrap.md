@@ -456,6 +456,27 @@ Lint: no new issues   |   Lint: 2 new orphans, 1 broken wikilink (see wiki-lint 
 
 If lint surfaces new orphans or broken links, *don't* auto-fix — surface them for the user to decide next session. The goal of Step 3 is visibility, not resolution.
 
+### Step 3b — Convention Lint (wiki-write-conventions)
+
+**Skip this sub-step if:** `~/.obsidian-wiki/config` is absent (no vault to lint against — helper silent-skips with exit 0 in this case). The Phase 2c top-level quick-skip already covers `/wrap-quick`; no additional quick check is needed here.
+
+Otherwise, invoke the deterministic helper's lint mode and surface its output in the wrap summary. This runs regardless of whether Step 1 or Step 2 wrote vault content — convention drift comes from any session, not just this one.
+
+```bash
+python3 ~/Projects/MonsterFlow/scripts/wiki-write.py --lint 2>&1 || true
+```
+
+**Paste the helper's stdout verbatim** into your response as a fenced block immediately after the wiki-sync output:
+
+```
+=== Wiki Convention Lint ===
+<helper stdout>
+```
+
+Non-blocking: even if the helper reports `WARN <N> violations:`, /wrap proceeds to Phase 3 normally. The user can fix violations by re-writing affected pages via `wiki-write.py` (migration is tracked separately at BACKLOG.md → wiki-write-migrate).
+
+If the helper exits non-zero (unexpected — it should always exit 0 in --lint mode), surface a one-line warning `[wrap] wiki-write lint helper exited non-zero — see scripts/wiki-write.py` and continue.
+
 ### Step 4 — Graphify digest (conditional, no approval gate)
 
 **Trigger:** `graphify-out/GRAPH_REPORT.md` exists in cwd. Skip silently otherwise — covers projects not yet bootstrapped or explicitly excluded.

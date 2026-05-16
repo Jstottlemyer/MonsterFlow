@@ -146,6 +146,8 @@ TESTS=(
   test-changelog-v0.14.0-entry.sh
   # install-obsidian-vault-baseline — marker write/sweep + ~/CLAUDE.md append (AC1-AC12)
   test-obsidian-vault-baseline.sh
+  # wiki-write-conventions Wave 1 — slugify, exit codes, frontmatter, atomic-write, sentinel (T1.1-T1.5)
+  test-wiki-write.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).
