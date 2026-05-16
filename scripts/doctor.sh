@@ -399,6 +399,205 @@ except Exception as e:
     echo '```'
     echo ""
 
+    echo "## Resolver Runtime Probe (tier-aware --feature path)"
+    echo '```'
+    # Doctor's Resolver Health probe runs LEGACY mode (no --with-tier, no --feature).
+    # The skill prompts invoke TIER-AWARE mode which has different exit codes (4, 6).
+    # This section probes the same path the skill uses, against the newest existing
+    # spec on disk (no synthetic feature dir → no side effects in docs/specs/).
+    NEWEST_SPEC=$(find "$REPO_PATH/docs/specs" -mindepth 2 -maxdepth 2 -name 'spec.md' 2>/dev/null \
+                    -exec stat -f '%m %N' {} \; 2>/dev/null \
+                    | sort -rn | head -1 | cut -d' ' -f2-)
+    if [ -z "$NEWEST_SPEC" ] || [ ! -x "$RESOLVER_SH" ]; then
+        echo "skip no spec.md under docs/specs/ (or resolver missing) — tier-aware probe needs an existing feature"
+    else
+        PROBE_SLUG=$(basename "$(dirname "$NEWEST_SPEC")")
+        echo "Probe target: $PROBE_SLUG (newest spec on disk)"
+        echo ""
+        for gate in spec-review design check; do
+            out=$(bash "$RESOLVER_SH" "$gate" --feature "$PROBE_SLUG" --with-tier 2>&1)
+            rc=$?
+            # Count tier-aware lines (<persona>:<tier>). Excludes bare codex-adversary.
+            persona_count=$(printf '%s\n' "$out" | grep -cE '^[a-z][a-z0-9-]*:(opus|sonnet)$' 2>/dev/null)
+            case "$rc" in
+                0) echo "ok   $gate → exit=0, personas=$persona_count (tier-aware)" ;;
+                2) echo "FAIL $gate → exit=2 (config malformed)" ;;
+                3) echo "FAIL $gate → exit=3 (degenerate state — no personas selectable)" ;;
+                4) echo "FAIL $gate → exit=4 (feature dir absent OR SEC-01 tier_pin violation)"
+                   echo "     this is the most common 'banner with stale numbers' trigger" ;;
+                5) echo "FAIL $gate → exit=5 (internal error)" ;;
+                6) echo "FAIL $gate → exit=6 (SEC-04 tags_provenance.baseline drift)"
+                   echo "     fix: re-run /spec on $PROBE_SLUG to recompute baseline" ;;
+                *) echo "FAIL $gate → exit=$rc (unknown)" ;;
+            esac
+            if [ "$rc" -ne 0 ]; then
+                echo "     stderr (last line): $(printf '%s\n' "$out" | grep -v '^$' | tail -1 | cut -c1-180)"
+            elif [ -n "$CONFIGURED_BUDGET" ] && [ "$persona_count" -gt "$CONFIGURED_BUDGET" ] 2>/dev/null; then
+                echo "     WARN tier-aware emitted $persona_count > budget=$CONFIGURED_BUDGET (budget bypass — investigate)"
+            fi
+        done
+    fi
+    echo '```'
+    echo ""
+
+    echo "## Budget Config Audit (hunt for stale overrides)"
+    echo '```'
+    BCA_FAILS=0
+    GLOBAL_BUDGET="$CONFIGURED_BUDGET"  # captured in Resolver Health
+
+    # 1. .budget-lock.json — per-feature locked picks from earlier runs
+    lock_files=$(find "$REPO_PATH/docs/specs" -name '.budget-lock.json' 2>/dev/null)
+    if [ -z "$lock_files" ]; then
+        echo "ok   no .budget-lock.json files under docs/specs/"
+    else
+        echo "Lock files found:"
+        while IFS= read -r lockfile; do
+            [ -z "$lockfile" ] && continue
+            lock_budget=$(python3 -c "
+import json
+try:
+    d = json.load(open('$lockfile'))
+    print(d.get('agent_budget', '?'))
+except Exception:
+    print('?')
+" 2>/dev/null)
+            slug=$(basename "$(dirname "$lockfile")")
+            if [ -n "$GLOBAL_BUDGET" ] && [ "$lock_budget" != "$GLOBAL_BUDGET" ] && [ "$lock_budget" != "?" ]; then
+                echo "  WARN $slug/.budget-lock.json → agent_budget=$lock_budget (global=$GLOBAL_BUDGET) — DRIFT"
+                echo "       fix: rm $lockfile  (resolver will recompute on next gate run)"
+                BCA_FAILS=$((BCA_FAILS+1))
+            else
+                echo "  ok   $slug/.budget-lock.json → agent_budget=$lock_budget"
+            fi
+        done <<EOF
+$lock_files
+EOF
+    fi
+    echo ""
+
+    # 2. selection.json — per-gate audit rows; selected[] length must be ≤ global budget
+    sel_files=$(find "$REPO_PATH/docs/specs" -name 'selection.json' 2>/dev/null)
+    if [ -z "$sel_files" ]; then
+        echo "ok   no selection.json files (no specs have run gates yet)"
+    else
+        echo "selection.json files:"
+        sel_drift=0
+        while IFS= read -r selfile; do
+            [ -z "$selfile" ] && continue
+            sel_count=$(python3 -c "
+import json
+try:
+    print(len(json.load(open('$selfile')).get('selected', [])))
+except Exception:
+    print('?')
+" 2>/dev/null)
+            slug=$(basename "$(dirname "$(dirname "$selfile")")")
+            gate=$(basename "$(dirname "$selfile")")
+            if [ -n "$GLOBAL_BUDGET" ] && [ "$sel_count" != "?" ] && [ "$sel_count" -gt "$GLOBAL_BUDGET" ] 2>/dev/null; then
+                echo "  WARN $slug/$gate/selection.json → selected=$sel_count (exceeds global budget=$GLOBAL_BUDGET)"
+                echo "       stale audit row from before budget was tightened — informational only (next gate run overwrites)"
+                sel_drift=$((sel_drift+1))
+                BCA_FAILS=$((BCA_FAILS+1))
+            fi
+        done <<EOF
+$sel_files
+EOF
+        if [ "$sel_drift" = "0" ]; then
+            echo "  ok   all selection.json files within global budget"
+        fi
+    fi
+    echo ""
+
+    # 3. spec.md frontmatter agent_budget overrides
+    fm_hits=0
+    for spec in "$REPO_PATH"/docs/specs/*/spec.md; do
+        [ -f "$spec" ] || continue
+        # Frontmatter is between first two --- lines; only match within that block
+        fm_budget=$(awk '/^---$/{c++; next} c==1 && /^agent_budget:/' "$spec" 2>/dev/null \
+                      | head -1 | sed 's/agent_budget:[[:space:]]*//' | tr -d '[:space:]')
+        if [ -n "$fm_budget" ]; then
+            slug=$(basename "$(dirname "$spec")")
+            if [ -n "$GLOBAL_BUDGET" ] && [ "$fm_budget" != "$GLOBAL_BUDGET" ]; then
+                echo "WARN $slug/spec.md frontmatter → agent_budget=$fm_budget (overrides global=$GLOBAL_BUDGET)"
+                BCA_FAILS=$((BCA_FAILS+1))
+            else
+                echo "ok   $slug/spec.md frontmatter → agent_budget=$fm_budget"
+            fi
+            fm_hits=$((fm_hits+1))
+        fi
+    done
+    [ "$fm_hits" = "0" ] && echo "ok   no per-spec agent_budget frontmatter overrides"
+    echo ""
+
+    # 4. constitution.md agent_budget
+    constitution="$REPO_PATH/docs/specs/constitution.md"
+    if [ -f "$constitution" ]; then
+        con_budget=$(awk '/^---$/{c++; next} c==1 && /^agent_budget:/' "$constitution" 2>/dev/null \
+                       | head -1 | sed 's/agent_budget:[[:space:]]*//' | tr -d '[:space:]')
+        if [ -n "$con_budget" ]; then
+            if [ -n "$GLOBAL_BUDGET" ] && [ "$con_budget" != "$GLOBAL_BUDGET" ]; then
+                echo "WARN constitution.md → agent_budget=$con_budget (overrides global=$GLOBAL_BUDGET)"
+                BCA_FAILS=$((BCA_FAILS+1))
+            else
+                echo "ok   constitution.md → agent_budget=$con_budget"
+            fi
+        else
+            echo "ok   constitution.md present, no agent_budget override"
+        fi
+    else
+        echo "ok   no constitution.md (nothing to check)"
+    fi
+    echo ""
+
+    # 5. queue/autorun.config.json — autorun has its own config; budget could leak here
+    autorun_cfg="$REPO_PATH/queue/autorun.config.json"
+    if [ -f "$autorun_cfg" ]; then
+        ac_budget=$(python3 -c "
+import json
+try:
+    d = json.load(open('$autorun_cfg'))
+    print(d.get('agent_budget', 'none'))
+except Exception:
+    print('parse-error')
+" 2>/dev/null)
+        case "$ac_budget" in
+            none) echo "ok   queue/autorun.config.json has no agent_budget key" ;;
+            parse-error) echo "WARN queue/autorun.config.json failed to parse" ;;
+            *)
+                if [ "$ac_budget" != "$GLOBAL_BUDGET" ]; then
+                    echo "WARN queue/autorun.config.json → agent_budget=$ac_budget (global=$GLOBAL_BUDGET)"
+                    BCA_FAILS=$((BCA_FAILS+1))
+                else
+                    echo "ok   queue/autorun.config.json → agent_budget=$ac_budget (matches global)"
+                fi
+                ;;
+        esac
+    else
+        echo "ok   no queue/autorun.config.json"
+    fi
+    echo ""
+
+    # 6. Env-var overrides
+    env_hits=0
+    for var in MONSTERFLOW_DISABLE_BUDGET MONSTERFLOW_BUDGET MONSTERFLOW_AGENT_BUDGET; do
+        val=$(eval echo "\${$var:-}")
+        if [ -n "$val" ]; then
+            echo "WARN $var=$val (env override active — bypasses ~/.config/monsterflow/config.json)"
+            env_hits=$((env_hits+1))
+            BCA_FAILS=$((BCA_FAILS+1))
+        fi
+    done
+    [ "$env_hits" = "0" ] && echo "ok   no budget-related env vars set"
+
+    echo ""
+    if [ "$BCA_FAILS" -eq 0 ]; then
+        echo "Budget Config Audit: no drift detected ✓"
+    else
+        echo "Budget Config Audit: $BCA_FAILS drift source(s) — see above"
+    fi
+    echo '```'
+    echo ""
+
     echo "## Agent Budget"
     echo '```'
     BUDGET_CONFIG="$HOME/.config/monsterflow/config.json"
