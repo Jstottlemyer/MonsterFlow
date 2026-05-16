@@ -96,7 +96,7 @@ OVERALL_VERDICT: GO
 **Note:** Dry-run stub. No real reviewer dispatch occurred.
 
 \`\`\`check-verdict
-{"schema_version":2,"prompt_version":"check-verdict@2.0","verdict":"GO","blocking_findings":[],"security_findings":[],"generated_at":"$STUB_TS","iteration":1,"iteration_max":3,"mode":"permissive","mode_source":"default","class_breakdown":{"architectural":0,"security":0,"contract":0,"documentation":0,"tests":0,"scope-cuts":0,"unclassified":0},"class_inferred_count":0,"followups_file":null,"cap_reached":false,"stage":"check"}
+{"schema_version":2,"prompt_version":"check-verdict@2.0","verdict":"GO","blocking_findings":[],"security_findings":[],"generated_at":"$STUB_TS","iteration":1,"iteration_max":1,"mode":"permissive","mode_source":"default","class_breakdown":{"architectural":0,"security":0,"contract":0,"documentation":0,"tests":0,"scope-cuts":0,"unclassified":0},"class_inferred_count":0,"followups_file":null,"cap_reached":false,"stage":"check"}
 \`\`\`
 EOF
   exit 0
@@ -740,8 +740,8 @@ SYNTHESIS_PROMPT="You are the synthesis step of a plan checkpoint review. You ha
   \"blocking_findings\": [{\"persona\": \"<name>\", \"finding_id\": \"ck-<10hex>\", \"summary\": \"<short>\"}],
   \"security_findings\": [{\"persona\": \"<name>\", \"finding_id\": \"ck-<10hex>\", \"summary\": \"<short>\", \"tag\": \"sev:security\"}],
   \"generated_at\": \"<ISO-8601 UTC>\",
-  \"iteration\": <int 1+>,
-  \"iteration_max\": <int from spec frontmatter gate_max_recycles, default 3>,
+  \"iteration\": 1,
+  \"iteration_max\": 1,
   \"mode\": \"<permissive|strict>\",
   \"mode_source\": \"<frontmatter|cli|cli-force|default>\",
   \"class_breakdown\": {\"architectural\": 0, \"security\": 0, \"contract\": 0, \"documentation\": 0, \"tests\": 0, \"scope-cuts\": 0, \"unclassified\": 0},
