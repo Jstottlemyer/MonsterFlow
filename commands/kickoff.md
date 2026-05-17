@@ -95,19 +95,19 @@ Products found (N):
 These products appear [tightly coupled / loosely coupled / independent].
 
 How do you want to structure this?
-  a) One constitution, one spec — only if they're really one product wearing multiple hats
-  b) One constitution, N specs — shared principles, separate feature pipelines (RECOMMENDED for most cases)
-  c) N independent projects — split now; I'll kickoff the first one here and note the rest as future projects
-  d) Different framing — tell me
+- **a)** One constitution, one spec — only if they're really one product wearing multiple hats
+- **b)** One constitution, N specs — shared principles, separate feature pipelines (RECOMMENDED for most cases)
+- **c)** N independent projects — split now; I'll kickoff the first one here and note the rest as future projects
+- **d)** Different framing — tell me
 ```
 
 **My lean: (b)** when products share a domain, stakeholders, or stack but have separate scopes/lifecycles. **Lean (c)** when products have different stacks, different audiences, or will ship on different timelines. **Lean (a)** rarely — only if the "products" are really interchangeable framings of one system.
 
 Decision outcomes:
-- **(a)** — proceed to Phase 2 with a single constitution covering all products. Note each as a sub-system in the scope section.
-- **(b)** — proceed to Phase 2 with a single constitution. After Phase 4, display: "Ready for /spec. Run /spec N times — once per product: [list]." Record the product list in the constitution under `## Planned Specs` so later `/spec` runs can cross-reference.
-- **(c)** — ask which product to kickoff first. Proceed with Phase 2 for that one only. At Completion, list the remaining products as "Deferred kickoffs: [list]" and recommend a parent directory layout if they'll live as sibling repos.
-- **(d)** — capture the framing and adapt.
+- **a)** proceed to Phase 2 with a single constitution covering all products. Note each as a sub-system in the scope section.
+- **b)** proceed to Phase 2 with a single constitution. After Phase 4, display: "Ready for /spec. Run /spec N times — once per product: [list]." Record the product list in the constitution under `## Planned Specs` so later `/spec` runs can cross-reference.
+- **c)** ask which product to kickoff first. Proceed with Phase 2 for that one only. At Completion, list the remaining products as "Deferred kickoffs: [list]" and recommend a parent directory layout if they'll live as sibling repos.
+- **d)** capture the framing and adapt.
 
 ## Phase 2: Constitution Draft
 
@@ -148,9 +148,9 @@ Proposed additions (from repo signals):
 
 Add these?
 
-- **a) Yes** — install all proposed domain agents
-- **b) Customize** — pick a subset or add by name (`b mobile-accessibility-reviewer, mcp-protocol-expert`)
-- **c) Skip domain agents** — keep the default 28-persona roster only
+- **a)** Yes — install all proposed domain agents
+- **b)** Customize — pick a subset or add by name (`b mobile-accessibility-reviewer, mcp-protocol-expert`)
+- **c)** Skip domain agents — keep the default 28-persona roster only
 
 Reply with `a`, `b <list>`, or `c` + Enter.
 ```

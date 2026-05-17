@@ -35,11 +35,11 @@ You are a spec-building assistant. Your job is to run an interactive Q&A intervi
 Existing spec found for [feature-name].
 
 What are we doing?
-  a) Bug fix — skip spec, go straight to fix
-  b) Small change — quick brainstorm (3-4 questions), skip review/design/check
-  c) Feature addition — full pipeline, builds on existing spec
-  d) Revision / V2 — full pipeline, revises existing spec
-  e) New spec — start fresh
+- **a)** Bug fix — skip spec, go straight to fix
+- **b)** Small change — quick brainstorm (3-4 questions), skip review/design/check
+- **c)** Feature addition — full pipeline, builds on existing spec
+- **d)** Revision / V2 — full pipeline, revises existing spec
+- **e)** New spec — start fresh
 ```
 
 - **Bug fix**: Exit spec. Tell user to describe the bug and fix it directly.
@@ -165,10 +165,10 @@ Use this roster for this spec? (yes / adjust / defaults only)
 
 Present the backlog scan as a numbered table (item, source). For every item, require an explicit routing decision — do not proceed to Q1 until every item is routed:
 
-- **(a) In scope for this spec** — will be covered by the Q&A and written into the spec
-- **(b) Stays in its current home** — leave it where it lives (existing spec Open Questions, CLAUDE.md, memory)
-- **(c) New spec later** — carve off into its own future `/spec` run (note the working title)
-- **(d) Drop** — no longer wanted; remove from its source (and confirm the removal in the same turn)
+- **a)** In scope for this spec — will be covered by the Q&A and written into the spec
+- **b)** Stays in its current home — leave it where it lives (existing spec Open Questions, CLAUDE.md, memory)
+- **c)** New spec later — carve off into its own future `/spec` run (note the working title)
+- **d)** Drop — no longer wanted; remove from its source (and confirm the removal in the same turn)
 
 Offer a recommended routing per item (with one-line reasoning) to make batch approval easy. User can accept the defaults, amend individual rows, or reject the frame and redo.
 
@@ -184,10 +184,10 @@ Skip Phase 0.5 only for bug-fix work (work-size option a) and small changes wher
    ```
    **Q[N] — [dimension]: [question]?**
 
-   - **a) [option]** — [brief]
-   - **b) [option]** — [brief]
-   - **c) [option]** — [brief]
-   - **d) Different framing** — tell me
+   - **a)** [option] — [brief]
+   - **b)** [option] — [brief]
+   - **c)** [option] — [brief]
+   - **d)** Different framing — tell me
 
    **My lean: (b).** [2-3 sentences on why, including the tradeoff against the other options.]
    ```
@@ -245,9 +245,9 @@ Proposed additions:
 
 Add to roster?
 
-- **a) Yes** — install all proposed agents and append to the roster
-- **b) Pick subset** — name the agents to add (`b agent-1, agent-2`)
-- **c) Skip** — no roster changes this spec
+- **a)** Yes — install all proposed agents and append to the roster
+- **b)** Pick subset — name the agents to add (`b agent-1, agent-2`)
+- **c)** Skip — no roster changes this spec
 
 Reply with `a`, `b <subset>`, or `c` + Enter.
 ```

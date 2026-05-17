@@ -4,6 +4,10 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Pipeline Q&A lettered-choice blocks** across all 6 commands (`/spec`, `/spec-review`, `/blueprint`, `/check`, `/build`, `/kickoff`) now use canonical `- **a)** Text — description` form (bold extends only across the letter+paren, not across the option text). 38 lines normalized across 3 pre-existing variants (bold-bullet, paren-bolded, raw-indented). New test `tests/test-spec-qa-formatting.sh` enforces 3 anti-pattern checks against the scope files; failures report `file:line`. See `docs/specs/spec-qa-terminal-formatting/` for the design + check trail.
+
 ## [0.17.0] - 2026-05-16
 
 ### Added

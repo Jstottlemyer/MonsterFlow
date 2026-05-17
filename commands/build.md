@@ -108,8 +108,8 @@ Execution discipline:
 [AUTORUN MODE: If AUTORUN=1 is set in your environment, skip this approval prompt. Write all artifacts and proceed immediately to the next stage. Do not output the approval prompt text below.]
 Launch Wave 1?
 
-- **a) Launch** — dispatch Wave 1 agents now
-- **b) Hold** — pause and review the plan first (`b I want to adjust task X`)
+- **a)** Launch — dispatch Wave 1 agents now
+- **b)** Hold — pause and review the plan first (`b I want to adjust task X`)
 
 Reply with `a` or `b <reason>` + Enter.
 ```
