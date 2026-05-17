@@ -4,6 +4,21 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-05-16
+
+### Added
+
+- **`wiki-write-migrate`** — `scripts/wiki-write.py --migrate [--dry-run] [--resume] [--force-overwrite] [--alias <pair>]` migrates legacy vault content to the v0.16.0 canonical layout (folder+index for projects, flat for concepts/entities). Two-phase execution: Phase A renames + sidecars + archive-then-rename for `--force-overwrite` collisions; Phase B rewrites `[[wikilinks]]` outside skip-spans (code fences, frontmatter, HTML comments). Durable journal at `<vault>/.migration-journal.jsonl` (advisory `fcntl.flock`, schema_version=1, fsync-per-row + atomic-replace) supports `--resume` from crashes. Lossless `--force-overwrite` via `_archives/migration-conflicts/<UTC-ts-pid>/<rel>`. Pre-migration vault index sidecar at `<vault>/.migration-vault-index.json` keyed on `linkable_name` (distinct from filesystem basename — project's parent folder slug, not `index`) with synthetic aliases for old basenames so `[[PatternCall — iOS Native Rewrite]]` resolves before alias injection runs.
+- **`scripts/_wiki_common.py`** — extracted shared primitives (slug constants, slugify/humanize/emit_yaml_scalar, FIELD_ORDER per category with `aliases` field, 10-class exception hierarchy with `exit_code` attribute). Solves the importlib-id() duplicate-module exception identity issue Codex flagged at /blueprint Phase 2b: `_wiki_migrate.py` loads `_wiki_common.py` once via `importlib.util.spec_from_file_location`, and `wiki-write.py` imports from the same module — exception classes share identity across both entry points.
+- **`scripts/_wiki_migrate.py`** — the migration helper (~2363 LoC). 7 dataclasses (RenameOp, ArchiveThenRenameOp, Collision, LinkRewrite, AliasInjection, LinkResolution, MigrationPlan), 10 public functions (run, compute_plan, build_vault_index, execute_phase_a, execute_phase_b, resume, write_report, resolve_wikilink, resolve_link_target_pre_migration, archive_collision_target), 5-state `LinkResolution` enum (unique-migrated | unique-skipped | unique-unchanged | ambiguous | unresolvable), shortest-unique-path resolver model with `aliases:` frontmatter array populated by default. Markdown range scanner spec'd for backtick + tilde fences, HTML comments, frontmatter at byte 0.
+- **`commands/blueprint.md` Phase 2b — Codex adversarial pass enabled at /blueprint** (previously disabled by default with no principled basis). Now mirrors /spec-review and /check: Codex runs once per gate when authenticated; output appended to `design.md` as a labeled section so /check sees it via existing reads; failure non-fatal. The wiki-write-migrate /blueprint pass was the trigger — Codex found 6 P1 + 4 P2 findings on design v1 that the Claude reviewers missed (importlib-id mismatch, sidecar race, force-overwrite plan gaps, resume Ctrl-C gap, linkable_name basename collision on `index.md`, alias wiring missing). All 10 folded into V4 spec + design v2 inline.
+- **`tests/test-wiki-migrate.sh`** — 20-case harness across 6 modules: slugify migration fixtures (M1), journal lock + schema + fsync (M2), vault index synthetic alias + ambiguity (M3), link resolver 5-state (M4), markdown range scanner skip-spans (M5), Phase A end-to-end + archive-then-rename + collision refusal (M6). Wired into `tests/run-tests.sh`.
+
+### Fixed
+
+- **`scripts/wiki-write.py` DATE_OVERRIDE env-var mismatch** — tests set `DATE_OVERRIDE` but the helper read `WIKI_WRITE_DATE_OVERRIDE`, causing 4 frontmatter tests to fail on any date ≠ 2026-05-15. Helper now reads both (DATE_OVERRIDE preferred). Pre-existing v0.16.0 bug surfaced by the wiki-write-migrate test harness running on a different day.
+- **`scripts/wiki-write.py` argparse error exit code** — argparse's default `error()` exits 2 (POSIX usage error). Overridden to exit 1 so the 0/1/2/3 exception-class exit-code matrix is the single source of truth.
+
 ## [0.16.0] - 2026-05-15
 
 ### Added
