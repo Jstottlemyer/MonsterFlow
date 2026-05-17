@@ -233,8 +233,8 @@ Run `commands/_prompts/findings-emit.md`. It reads `docs/specs/<feature>/plan/ra
    [AUTORUN MODE: If AUTORUN=1 is set in your environment, skip this approval prompt. Write all artifacts and proceed immediately to the next stage. Do not output the approval prompt text below.]
    Approve to proceed to /check?
 
-   - **a) Approve** — accept the plan and continue
-   - **b) Adjust** — name what to change (`b split T6 into two waves`)
+   - **a)** Approve — accept the plan and continue
+   - **b)** Adjust — name what to change (`b split T6 into two waves`)
 
    Reply with `a` or `b <change>` + Enter.
    ```

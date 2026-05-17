@@ -150,6 +150,8 @@ TESTS=(
   test-wiki-write.sh
   # wiki-write-migrate — migration helper (T10-T12)
   test-wiki-migrate.sh
+  # spec-qa-terminal-formatting — V3 anti-pattern sweep
+  test-spec-qa-formatting.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).

@@ -242,8 +242,8 @@ If the metrics paths are tracked-and-not-gitignored AND `docs/specs/<feature>/.p
    [AUTORUN MODE: If AUTORUN=1 is set in your environment, skip this approval prompt. Write all artifacts and proceed immediately to the next stage. Do not output the approval prompt text below.]
    Approve to proceed to /blueprint?
 
-   - **a) Approve** — accept the review and continue
-   - **b) Refine** — name what to change (`b tighten AC4 wording`)
+   - **a)** Approve — accept the review and continue
+   - **b)** Refine — name what to change (`b tighten AC4 wording`)
 
    Reply with `a` or `b <change>` + Enter.
    ```
