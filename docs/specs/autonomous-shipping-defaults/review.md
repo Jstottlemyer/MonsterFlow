@@ -1,152 +1,103 @@
-# Review — autonomous-shipping-defaults
+# Review V2 — autonomous-shipping-defaults
 
-**Date:** 2026-05-16
+**Date:** 2026-05-17
 **Reviewers:** gaps:opus · requirements:sonnet · scope:sonnet · codex-adversary
 **Gate mode:** permissive (frontmatter)
-**Overall health:** **Significant Gaps** — architectural redesign + AC tightening required before /blueprint
+**Overall health:** **Concerns** — V2 closes V1's mechanical gaps cleanly, but Codex surfaced one load-bearing architectural question
 
 ---
 
 ## Verdict summary
 
-| Reviewer | Verdict | Headline |
-|---|---|---|
-| gaps (opus) | PASS WITH NOTES | 4 critical: post-compact detection, halt-needs-human surface, flow.md wording, constitution migration |
-| requirements (sonnet) | **FAIL** | 6 ACs unimplementable as written: AC4, AC6, AC8, AC9, AC10, helper missing `--constitution-path` |
-| scope (sonnet) | PASS WITH NOTES | AC8 unsatisfiable; LLM-scan is a security/trust-boundary issue, not just heuristic; item 4 + constitution are strong carve candidates |
-| codex-adversary | (effectively FAIL) | LLM-scan trust boundary is the load-bearing architectural concern; helper CLI does 5 jobs; JSONL pollution from every render |
+| Reviewer | V1 | V2 | Delta |
+|---|---|---|---|
+| gaps | PASS WITH NOTES | **PASS WITH NOTES** | 3 of 4 V1 blockers closed; 2 new contract gaps (last-user-message operational def + read mechanism) |
+| requirements | **FAIL** | **PASS WITH NOTES** | All 5 V1 blockers closed; 2 new surgical blockers (AC3 regex vs "first-level" contradiction; AC7/AC8 missing required `--gate`) |
+| scope | PASS WITH NOTES | **PASS WITH NOTES** | Carves clean; 2 documentation issues (file count 10 vs 12; AC9 "at least one" should be "all four") |
+| codex | de facto FAIL | **FAIL** | New architectural concern: last-user-message scan breaks the multi-gate autoship promise in interactive mode |
 
-**Consolidated verdict: FAIL.** The spec is well-rationalized but has architectural and contract issues that prevent deterministic /build. Recommend V2 revision.
-
----
-
-## Before You Build (Blocking — 7 items)
-
-### B1. LLM-scan /goal detection is a trust boundary, not a heuristic [security, architectural]
-**Convergent: scope + codex (codex stronger).**
-
-The spec collapses `AUTORUN=1` with "LLM detects active /goal in recent conversation." This is a *privilege transition* based on natural-language context scanning. Failure modes:
-- An adversarial spec, review, log, or PR comment containing the literal `/goal ... shipped via merged PR` triggers autorun.
-- Auto-compacted contexts may paraphrase the literal trigger away (false negative) or preserve a stale `/goal` while losing its `/goal clear` (false positive).
-- Multi-session persistence: if Claude Code persists goals across sessions, yesterday's stale goal could autoship today.
-- `/goal clear` detection is also LLM-scanned — same fragility.
-- Spec body contents themselves could bias gate behavior on the spec describing them.
-
-**Codex recommendation (which I endorse):** Use a deterministic state marker. Three viable surfaces:
-- `.monsterflow/state/active-goal.json` (repo-local)
-- `dashboard/data/active-goal.json`
-- `docs/specs/<feature>/.active-goal` sentinel
-
-Gate skills check the file, not the conversation. The state is written by either: (a) the user's `/goal` command if MonsterFlow can hook it (unlikely — built-in), or (b) a tiny `/ship-now <slug>` skill the user types instead of `/goal` that writes the marker + emits the `/goal` line.
-
-**At minimum (if deterministic marker is out of scope for v1):** narrow the LLM-scan to "the literal `/goal docs/specs/<slug>/spec.md is shipped via merged PR` substring appearing in the **last user message** only, not anywhere in recent context." This dramatically reduces injection surface — content the user pastes into a single prompt is high-trust.
-
-### B2. AC8 is unsatisfiable as written [contract]
-**Convergent: requirements + scope + codex.**
-
-AC8 says: "render-mode `block` output for the merge step omits `--delete-branch`; render-mode `block` with `--gate manual-merge` includes `--delete-branch`." But the helper CLI contract (spec lines 159–165) defines `--gate` as accepting only `spec-exit`, `spec-review`, `check-go`, `check-go-with-fixes`. There is no `manual-merge` gate. Also: the helper emits *render blocks for skill prompts*, not actual `gh pr merge` command strings.
-
-**Fix options:**
-- **(a)** Extend helper CLI to include `merge-command` subcommand or `--gate manual-merge` value; redesign AC8 to test it.
-- **(b)** Rewrite AC8 to test the actual surface: grep `commands/build.md` (or whichever skill issues the merge) for the presence/absence of `--delete-branch` in the two paths.
-- **(c)** Carve item 4 (autoship-merge-preserves-branch) to a follow-up spec entirely.
-
-### B3. AC9 references CLI flags that don't exist [contract]
-**Convergent: requirements + codex.**
-
-AC9 says: "fixture invocation with `--event autoship-halt --reason branch-protection-block` writes a row with the expected fields." But the helper CLI has no `--event`, `--reason`, or `--stage-at-halt` arguments. Divergence rows are written *by gate skills at runtime*, not by the helper. Either:
-- Add `--emit-divergence --event ... --reason ...` flags to the helper CLI contract, OR
-- Restructure AC9 to test whichever skill prompt actually writes divergence rows.
-
-### B4. AC6 — schema content is unspecified [contract]
-**requirements flagged.**
-
-AC6 validates JSONL rows against `schemas/autorun-suitability-outcomes.schema.json`, but the schema file is listed as *new* in Integration. The spec gives field names and types inline but never resolves: which fields are required vs optional, what the enum values are for `predicted_suitability` / `gate` / `event` / `reason`, or whether the two row shapes (render rows + divergence rows) are separate `$defs` or a discriminated union. **Fix:** inline the field-level constraints as normative spec content.
-
-### B5. AC4 grep pattern unspecified [contract]
-**requirements flagged.**
-
-AC4 says "verified by grep on output" without naming the grep patterns. UX examples at spec lines 82–87 contain candidate strings but they aren't canonicalized as the test contract. **Fix:** enumerate exact grep patterns in AC4 OR point to template constants in the helper as normative.
-
-### B6. flow.md wording is unspecified [contract]
-**Convergent: gaps + requirements ("Feature 2 has no AC").**
-
-The spec says "one-paragraph addition" / "~10-line paragraph" but never says *what* the paragraph says, *where in flow.md* it goes, or what anchor string AC10 should grep for. Each reviewer + build agent would invent different prose. **Fix:** lock the wording OR specify required anchor phrase + section heading.
-
-### B7. AC10 anchor strings not exhaustively enumerated [tests]
-**Convergent: requirements + scope.**
-
-AC10 uses `e.g.` framing — illustrative, not normative. Test author picks arbitrary strings, coverage varies by implementer. Also: AC10 covers only `spec.md`, `spec-review.md`, `check.md` but the spec edits 8 skill-prompt surfaces across 5 files (adds `blueprint.md`, `build.md` to that list). **Fix:** normative table mapping anchor strings → target files.
+**Consolidated verdict: PASS_WITH_NOTES with one architectural caveat.** V2 is a big improvement and most findings are surgical, but Codex's #1 raises a real question about whether the autoship UX as described can actually drive the pipeline autonomously.
 
 ---
 
-## Important But Non-Blocking (Major — 8 items)
+## The Load-Bearing Question (Codex #1)
 
-### I1. Post-compact /goal recovery (gaps)
-Edge case 12 covers multi-goal stacks but not the auto-compact case where the literal `/goal docs/.../spec.md is shipped via merged PR` is summarized away to "user set an autoship goal earlier." If B1 is resolved via deterministic state file, this dissolves. If LLM-scan is kept, need explicit "fail-closed if literal phrase not visible verbatim in current context" rule.
+The spec's happy path describes:
+1. User pastes `/goal docs/specs/<slug>/spec.md is shipped via merged PR ...`
+2. `/spec-review` fires next, detects trigger in last-user-message, autoship
+3. `/blueprint`, `/check`, `/build` each detect trigger in last-user-message, autoship
+4. PR opens, halt for admin auth, user authorizes, merge
 
-### I2. "Halt — needs human" surface beyond JSONL (gaps)
-Tonight's branch-protection-block case is what motivated this spec, yet the only halt signal defined is a JSONL row. The spec says "halt, surface 'needs --admin auth'" but never specifies *where* (stdout? terminal bell? PushNotification?). If the user is asleep, JSONL is silent. **Fix:** explicit halt-surface contract — at minimum, a visible stdout block. Consider PushNotification for /goal-driven autorun.
+**What's the actual mechanism for steps 2-3 to fire?** Claude Code skills don't auto-invoke each other. Three real scenarios:
 
-### I3. Bundle size is L, not M (scope)
-13 files touched, 1 new helper (~200 LoC), 1 new schema, 1 new test (~150 LoC), 5 skill edits, flow.md, constitution template, .gitignore, CHANGELOG, BACKLOG. At/over the "≤300 spec lines + ≤200 LoC" slicing threshold. /build should treat as 3 waves: (A) helper + schema + test; (B) `/spec` + `/spec-review` + `/blueprint` edits; (C) `/check` + `/build` autorun-detection + flow.md + housekeeping.
+- **Interactive (user typing each gate):** User pastes `/goal`. User then types `/spec-review`. Last-user-message is now `/spec-review`, NOT the /goal paste. Trigger detection fails. Manual mode resumes. ❌ Autoship promise broken.
+- **Assistant auto-invokes next gate within one response:** Assistant invokes `/spec-review` → during that invocation, scans context, sees /goal as the user's prior message, treats as AUTORUN, runs gate. Then invokes `/blueprint` within same response. ✓ But the spec doesn't pin this mechanism.
+- **Autorun overnight (scripts/autorun/*.sh driven):** External script invokes `claude -p` for each gate. Each invocation's "user message" is whatever the script sent. Script must include the trigger substring in its prompt. ✓ Works if scripts know to do this.
 
-### I4. Helper does 5 jobs (codex)
-The helper is simultaneously: renderer, suitability scorer, instrumentation logger, divergence logger, merge-command flag oracle. Too much for one CLI unless interface is expanded. **Fix options:** split into subcommands (`render`, `log-render`, `log-halt`, `merge-command`) OR narrow v1 to render+score only.
+V2's spec describes the detection rule but doesn't pin which mechanism actually advances the pipeline between gates. Codex called this "the autoship state model is underspecified."
 
-### I5. JSONL pollution from every render (codex)
-Naming says "outcomes" but rows get written on every render — including test runs, preview/cancel cycles, repeated /spec-review invocations. The file accumulates non-outcome events that drown the actual outcome signal. **Fix:** rename to `autorun-suitability-events.jsonl` OR only write on user-visible render (not on test-mode invocations) OR add an `event_type: render|outcome|halt` discriminator.
+**Three resolution paths for V3:**
 
-### I6. Constitution migration path missing (gaps)
-Spec adds optional `autorun_suitability:` block to constitution schema but says nothing about existing constitutions. Does `install.sh` touch existing `docs/specs/constitution.md`? Does `/kickoff` re-templating preserve user edits? Memory `install.sh: backup configs + ship uninstall.sh` is directly relevant.
-
-### I7. AC count parsing semantics (codex)
-"First-level items under `## Acceptance Criteria`" — needs exact Markdown rules. Are checkbox items counted? Nested bullets? `AC1 - ...` paragraphs? Numbered lists interrupted by text? **Fix:** specify or point to a regex.
-
-### I8. Constitution-path flag missing from helper CLI (requirements)
-AC7 tests constitution overrides but the helper CLI has no `--constitution-path` flag. Tests have no way to inject a controlled constitution without reading the real `docs/specs/constitution.md`. **Fix:** add `--constitution-path <path>` to CLI contract (or `--no-constitution` for tests).
+- **Path A — Narrow scope, ship UX only (recommended for tonight):** V3 drops the "implicit AUTORUN=1 from /goal detection" mechanism entirely. The bundle ships items 1-3 as pure UX: render the /goal line at gates, render suitability indicator, document the pattern in /flow. Gate skills still require `export AUTORUN=1` for autorun semantics. The /goal line is a copy-paste convenience for the *condition*, not a privilege transition. Future spec `autoship-pipeline-driver` (or similar) handles the actual sequential gate-advance mechanism. This makes V3 honest about what it ships, dissolves Codex #1 entirely, and is the cleanest path to a finished, tested feature tonight.
+- **Path B — Document the assistant-auto-invoke mechanism, AC-enforce it:** V3 commits to scenario 2 above. Gate skills (when detecting trigger in conversation context, NOT last-user-message-only) auto-invoke the next gate via the Skill tool in the same response. AC adds "skill X invokes skill Y within same turn when autoship is active." More architectural surface but matches the original bundle intent.
+- **Path C — State file:** Codex's original recommendation. `/ship-now <slug>` skill (new) writes `.monsterflow/state/active-goal.json` + emits the /goal line. Gate skills check file, not conversation. Cleanest semantics, most code surface.
 
 ---
 
-## Observations (Non-blocking notes)
+## Before You Build (V2 blockers — only if V3 doesn't carve)
 
-- **Carve recommendations (scope + codex):** Item 4 (autoship-merge-preserves-branch) and the constitution extension are both strong deferral candidates. Cutting both brings this to a clean M with 10 ACs and no cross-surface contract ambiguity. The `/branch-cleanup` BACKLOG callout the spec already mentions can absorb item 4 into a separate `autoship-merge-hygiene` spec.
+### B1. AC3 regex contradicts "first-level only" rule [contract — requirements]
+Parsing rule says `^[[:space:]]*(?:[-*]\s+|\d+\.\s+)` which matches ANY leading whitespace including nested bullets. AC3 fixture 4 ("section with only nested bullets → null") fails under that regex. **Fix:** drop `[[:space:]]*` from the regex OR drop "first-level only" from the prose. Either is a 1-line edit.
 
-- **LOW rendering conflict at downstream gates (codex):** if `gate_mode: strict` suppresses /goal-line at /spec exit, what about /spec-review and /check? Spec implies helper renders option-c everywhere, but LOW says no /goal-line rendered. Resolve.
+### B2. AC7/AC8 examples omit required `--gate` arg [contract — requirements + codex]
+The `log-event` CLI signature requires `--spec-path` and `--gate`, but AC7's example call is `log-event --event-type halt --reason ... --stage-at-halt merge` (no --gate). Same for AC8. Per Codex: "exactly the V1 class of problem: ACs that cannot be run as written." **Fix:** add `--gate <value>` to AC7/AC8 example calls. The `--gate` enum also needs to expand to include `build` and `merge` (halt-surface mentions `merge`; helper enum doesn't list it).
 
-- **GO_WITH_FIXES autoship semantics (codex):** if fixes are required, who applies and verifies before merge? Spec should state.
+### B3. Helper `--gate` enum missing pipeline stages [contract — codex]
+Halt-surface contract says halts can happen at `spec-review|blueprint|check|build|merge`, but the helper `--gate` enum is `{spec-exit, spec-review, check-go, check-go-with-fixes}`. A `build` halt can't call `log-event --gate build`. **Fix:** expand `--gate` enum OR split `--gate` (render-surface) from `--stage` (pipeline-stage).
 
-- **Spec slug derivation (codex):** from filename? Parent directory? H1? Helper says "computes feature slug" but doesn't define how.
+### B4. "Last user message" is not operationally defined [contract — gaps + codex]
+The detection rule is imperative prose but the gate-skill scan mechanism is ambiguous. Does it mean: (a) the message that triggered the current skill, (b) the immediately-preceding user message, or (c) the most recent user message of any kind in the session? Each yields different behavior. **Fix:** pin to scenario (b) explicitly OR document the auto-invoke mechanism (Path B above).
 
-- **JSONL row write atomicity (gaps):** macOS append-mode atomic only up to PIPE_BUF (~512 bytes). Long tags arrays could exceed. Use `fcntl.flock` or guarantee single-writer.
-
-- **`shipped via merged PR` substring collision (gaps):** "Contains the literal" is too loose. Anchor with regex `is shipped via merged PR with verifier reporting`.
-
-- **`_smoke-DELETE-ME` artifacts could land on main (requirements):** S1 cancel-before-commit is unenforceable. Add `_smoke-*` to `.gitignore` or pre-commit lint.
-
-- **JSONL schema future-queryability (gaps):** Missing likely-wished-for fields: `project_root`, `loc_estimate`, `wave_count`, `pr_number`, `duration_to_halt_seconds`. Cheap to add now; expensive to retrofit.
-
-- **Self-Learning Loop section risks over-investing /build (scope):** Section is detailed enough that /build might build v2 analysis tooling "while in there." One-line clarification that the section is read-only design intent for v2.
-
-- **No CI/pre-commit guard for the gitignore entry (scope):** If the line drifts, `git add .` stages project data. A one-line assertion would close this.
-
-- **Self-contained smoke fixture (requirements):** S4 depends on `wiki-write-conventions` being stable. A fixture spec would be more durable than relying on a live shipped spec.
+### B5. AC9 halt-block anchor disjunction [tests — requirements + scope, convergent]
+AC9 row 10 says "at least one of `commands/{spec-review,blueprint,check,build}.md`" but halt-surface §Data & State says "every gate skill MUST emit the block." **Fix:** change AC9 to assert presence in all four files.
 
 ---
 
-## Codex Adversarial View (cumulative)
+## Important But Non-Blocking
 
-Codex's load-bearing concern is **B1 (LLM-scan trust boundary)**. Codex's "bottom line":
+- **File count error (scope):** Integration header says "10 files total" but lists 12. Fix the header.
+- **Render subcommand still multi-responsibility (scope):** the I4 "split into 2 subcommands" claim overstates — render still parses frontmatter + scores + emits + logs. Not blocking; honestly relabel as "split merge-command oracle out; render and logging remain coupled within render."
+- **JSONL filename mismatch (gaps):** V1 was `autorun-suitability-outcomes.jsonl`, V2 is `autorun-suitability-events.jsonl`. If any V1 partial run left rows under the old name, /build orphans them. Add migration note OR document as new file (since V1 never shipped).
+- **JSONL schema strictness (codex):** "examples, not contract" — extra-keys policy, conditional required fields, `ts` format. Tighten to a strict table.
+- **`.gitignore` redundancy (codex):** `dashboard/data/*.jsonl` already covered by existing `.gitignore:12`. Drop the redundant line OR keep as anchor.
+- **AC6 universal vs `--no-log` (requirements):** "every invocation appends exactly one row" is false when `--no-log` is set. Scope the AC.
+- **Render-event scope (codex):** UX says "each gate writes a render row" but render UI only exists for spec-exit/spec-review/check. Blueprint/build don't render — what do they log? Resolve.
+- **AC5 exact-match wording (requirements):** option-line includes variable slug + AC count; "exact-match on first non-empty line" should be "prefix-match."
 
-> The product direction is reasonable, but v1 should not make freeform LLM context a source of autorun authority. Make active `/goal` state deterministic first, or keep `/goal` as a copy-paste convenience only.
+---
 
-Codex's recommended cleanup before implementation:
-1. Replace LLM-scan with deterministic state file (or narrow scan to last-user-message-only).
-2. Split helper CLI into subcommands matching its 5 responsibilities, OR narrow v1 to renderer+scorer only.
-3. Add CLI flags: `--constitution-path`, `--emit-divergence --event ... --reason ...`, or `merge-command` subcommand.
-4. Inline JSON schema content as normative spec text.
-5. Lock flow.md paragraph wording.
-6. Defer constitution extension to v2.
+## Observations
+
+- The V1→V2 closure table at the top of the spec is excellent. Reviewers can verify each finding without searching.
+- Codex's recommendation table near the end of its review (`--gate`, `--surface`, expanded enums, conditional fields) is implementation-ready — V3 can adopt it wholesale.
+- 3-wave shape for /build still holds: helper + tests → skill edits → housekeeping.
+- The narrowed scope (3 items, 11 ACs, ~180 LoC helper) is genuinely a clean M when measured by *code* surface. The remaining issues are spec-clarity, not feature scope.
+
+---
+
+## Codex Adversarial View (cumulative V1+V2)
+
+Codex's full output is at `spec-review/raw/codex-adversary.md`. Highlights:
+
+> "V2 is closer than V1, but I would not send it to /blueprint until the autoship state model and helper enums are corrected."
+
+Codex's specific implementation-ready recommendations:
+- `--gate`: `spec-exit|spec-review|blueprint|check|build|merge`
+- `--surface`: optional `spec-exit|spec-review-option|check-go-option|check-go-with-fixes-option`
+- AC7/AC8 include `--gate merge`
+- JSONL schema with strict conditional required/optional fields + extra-key policy
+
+Codex's architectural recommendation (path B/C above): "Use `/goal` as the durable authorization signal, not last-user-message as the whole state model. If V2 refuses a state file, define this precisely: 'the trigger check only bootstraps AUTORUN for the current assistant turn; subsequent gate invocations in that same assistant turn inherit an in-memory autoship flag.'"
 
 ---
 
@@ -154,43 +105,36 @@ Codex's recommended cleanup before implementation:
 
 | Dimension | Verdict | Key Finding |
 |-----------|---------|-------------|
-| gaps | PASS WITH NOTES | 4 blockers: post-compact detection, halt-needs-human surface, flow.md wording, constitution migration |
-| requirements | FAIL | 6 ACs unimplementable as written (AC4, AC6, AC8, AC9, AC10) + missing `--constitution-path` |
-| scope | PASS WITH NOTES | AC8 unsatisfiable; LLM-scan = trust boundary; item 4 + constitution carve candidates |
-| codex | FAIL (de facto) | LLM-scan trust boundary; helper does 5 jobs; JSONL pollution; ACs reference nonexistent CLI flags |
+| gaps | PASS WITH NOTES | 3 of 4 V1 blockers closed; 2 new contract gaps on last-user-message scan |
+| requirements | PASS WITH NOTES | All 5 V1 blockers closed; AC3 regex contradicts prose; AC7/AC8 missing --gate |
+| scope | PASS WITH NOTES | Carves clean; file count mistake; AC9 disjunction; render still multi-responsibility |
+| codex | FAIL | Autoship state model underspecified for multi-gate; helper enum missing stages; ACs reference unsupported gate values |
 
 ---
 
-## Conflicts Resolved
+## Recommended Path Forward — V3
 
-- **Item 4 fate** — gaps did not flag; scope + codex recommended carving. **Resolution:** carve recommendation goes into Important (I3), user decides at refine step.
-- **LLM-scan severity** — scope called it "security:major"; gaps called it "R1:medium" mitigated by acknowledgment line. Codex called it the #1 architectural concern. **Resolution:** promote to B1 (blocking).
-- **Bundle size** — scope said L, codex implied carve, gaps did not flag. **Resolution:** keep as Important (I3); user decides at refine.
+Given the interview tomorrow, **Path A (narrow scope to UX-only)** is the highest-EV move:
+- Drops Codex #1 (the architectural concern) by NOT claiming autoship implies AUTORUN
+- V3 ships items 1-3 as pure render UX: /goal-line at gates + suitability indicator + /flow doc
+- Existing `export AUTORUN=1` env-var path remains the autorun mechanism (unchanged)
+- The /goal copy-paste is a *convenience* for the goal-condition syntax, not a privilege transition
+- All remaining V2 findings (B1-B5 + Important) become small inline fixes in V3 — 15-20 min total
+- Permissive-mode handles the rest as build-inline followups
 
----
+**Path B (commit to auto-invoke mechanism)** is the most ambitious but the highest-value-when-shipped. It would actually deliver the "paste one line, walk away" promise. Probably ~2-3 more hours of design + build.
 
-## Recommended Path: V2 revision
-
-This is the same pattern as wiki-write-migrate V1→V2 (Codex-finding-folded-inline). Specifically:
-1. **Replace LLM-scan with last-user-message-only narrowing OR deterministic state file** (architectural — pick one in user discussion).
-2. **Fix ACs 4, 6, 8, 9, 10** with concrete contracts.
-3. **Lock flow.md wording** as a literal block in the spec.
-4. **Add helper CLI flags:** `--constitution-path`, divergence-emit flags, OR split into subcommands.
-5. **Inline JSON schema content** (or carve to its own schemas file with required-fields list inline).
-6. **Decide carve question:** keep item 4 + constitution in v1, or defer? Recommendation: carve both (10 ACs, clean M).
-7. **Add halt-surface contract** (B2 / I2): JSONL alone is insufficient.
-8. **Lock AC count parsing rules** + spec slug derivation rules.
-
-This is one Q&A round + spec rewrite (~30-40 min). Cheaper than discovering these issues mid-/build.
+**Path C (state file)** is the most architecturally correct but requires writing a new `/ship-now` skill. Out of scope for tonight.
 
 ---
 
-[AUTORUN MODE: If AUTORUN=1 is set, skip this approval prompt. Per spec OQ1 (resolved), outcomes JSONL is gitignored.]
+[AUTORUN MODE: If AUTORUN=1 is set, skip this approval prompt.]
 
-Approve to proceed to /blueprint?
+Approve to proceed?
 
-- **a)** Approve — accept the review and continue (will hit /blueprint with known blockers)
-- **b)** Refine — name what to change (`b discuss B1 trust-boundary fix + carve question`)
-- **c)** Ship autonomously — *not appropriate for FAIL verdict; LLM-scan architectural choice needs human decision*
+- **a)** Refine to V3 with Path A (UX-only, drop AUTORUN-collapse claim) — fast path to ship tonight
+- **b)** Refine to V3 with Path B (commit to auto-invoke mechanism) — full original promise, more work
+- **c)** Refine to V3 with Path C (state file via /ship-now skill) — cleanest architecture, more work
+- **d)** Accept V2 as-is, proceed to /blueprint — permissive mode lets remaining findings flow as build-inline followups (will rediscover at /check)
 
-Reply with `a` or `b <change>` + Enter.
+Reply with `a`, `b`, `c`, or `d` + Enter.
