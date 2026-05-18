@@ -154,6 +154,8 @@ TESTS=(
   test-spec-qa-formatting.sh
   # autonomous-shipping-defaults — V3 Path B chain-invoke
   test-goal-autoship-render.sh
+  # plot-document — _plot_annotations.py annotation helpers (Task 2)
+  test-plot-annotations.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).

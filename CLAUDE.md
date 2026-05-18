@@ -2,7 +2,7 @@
 
 Personal-tooling repo. Holds commands, personas, templates, and cross-project
 reference docs for Justin's 8-command pipeline (`/kickoff → /spec → /spec-review
-→ /blueprint → /check → /build`, plus `/flow` and `/wrap`).
+→ /blueprint → /check → /build`, plus `/flow`, `/wrap`, and `/plot`).
 
 (`/blueprint` is MonsterFlow's design-and-implementation-planning gate. The
 gate, the slash command, the persona directory (`personas/design/`), the
@@ -56,6 +56,10 @@ Kill switch: `MONSTERFLOW_DISABLE_BUDGET=1` bypasses the cap (full roster). Use 
 ## Backlog
 
 Unscheduled ideas live in [BACKLOG.md](BACKLOG.md). Add new items there, not in this file. Promote an item to a real spec via `/spec` when you're ready to work on it.
+
+## Plot Document
+
+The Plot Document (`plot/PLOT.md` + `plot/chapters/*.md`) is MonsterFlow's fifth knowledge store — narrative-level system context with inline code links. Managed by `/plot` (standalone, on-demand); consumed by `/wrap` Phase 2d (automated staleness detection) and `/spec` Phase 0.2c (prior-knowledge callout). Annotation helpers live at `scripts/_plot_annotations.py`. All annotation manipulation (inject/remove `[!STALE]`/`[!DRAFT]`) must go through the helper, never free-form LLM editing. This repo's code is heavily documented markdown — `/plot` is shipped here but the Plot Document is more valuable on source-code-heavy projects.
 
 ## graphify
 
