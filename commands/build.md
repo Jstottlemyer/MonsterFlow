@@ -86,6 +86,27 @@ For each open followup:
   Then abort `/build`. The user must re-run `/blueprint` to address structural findings before `/build` can proceed.
 - **`post-build`** — hold for the PR-body annotation phase. Do **NOT** add to wave 1.
 
+<!-- BEGIN autoship-detection -->
+## Autoship Detection (V3 Path B)
+
+Before this gate's work begins, scan all user messages in the current Claude Code session for the literal substring:
+
+  `is shipped via merged PR with verifier reporting`
+
+If found AND no subsequent `/goal clear` invocation since the most recent trigger:
+
+1. Extract the spec slug from the matched /goal line (regex: `docs/specs/([a-z0-9][a-z0-9-]{0,63})/spec\.md`).
+2. If the extracted slug matches this gate's feature argument:
+   - Emit exactly: `[autoship] active goal detected — proceeding autonomously through pipeline`
+   - Set internal flag: autoship-active = true
+   - Skip the manual approval prompt for this gate
+3. If slug mismatches:
+   - Emit: `[autoship] /goal active for <other-slug>, current gate is <this-slug> — manual mode`
+   - autoship-active = false
+
+Otherwise: autoship-active = false; existing AUTORUN=1 env-var check, then existing approval prompt.
+<!-- END autoship-detection -->
+
 ## Phase 1: Present Execution Plan
 
 Parse the plan's task breakdown and present:
@@ -127,7 +148,16 @@ On `a`:
    - DONE: mark task complete, unblock Wave 2 dependents
    - DONE_WITH_CONCERNS: review concerns, decide whether to proceed
    - NEEDS_CONTEXT: provide context and resume
-   - BLOCKED: investigate, unblock or reassign
+   - BLOCKED: investigate, unblock or reassign. If unresolvable, surface halt:
+     ```
+     ╔══ autoship halt ══════════════════════════════════════════════╗
+     ║ feature: <slug>
+     ║ stage:   build
+     ║ reason:  wave-N-blocked
+     ║ next:    resolve the blocking condition and re-run /build
+     ╚══════════════════════════════════════════════════════════════════╝
+     [AUTOSHIP-HALT]
+     ```
 
 3. **Launch subsequent waves** as dependencies resolve.
 
@@ -137,7 +167,16 @@ On `a`:
 
 After all waves complete:
 
-1. Run verification checks (build, tests, lint)
+1. Run verification checks (build, tests, lint). If `bash tests/run-tests.sh` exits non-zero, surface halt and stop:
+   ```
+   ╔══ autoship halt ══════════════════════════════════════════════╗
+   ║ feature: <slug>
+   ║ stage:   build
+   ║ reason:  test-suite-failed
+   ║ next:    fix failing tests, then re-run /build or resume from Phase 3
+   ╚══════════════════════════════════════════════════════════════════╝
+   [AUTOSHIP-HALT]
+   ```
 
 ## Phase 3a: Autorun-shell-reviewer dispatch (when scripts/autorun/*.sh modified)
 
@@ -212,6 +251,19 @@ When `AUTORUN_CHANGES` is non-empty, **you must**:
    - Code review: superpowers:requesting-code-review (quick) or /code-review (PR)
    - Wrap up: /wrap
    ```
+
+   **PR open step — branch-protection halt:** After opening the PR via `gh pr create`, attempt `gh pr merge --auto`. If branch protection blocks auto-merge (exit non-zero or `"must be made through a pull request"` / `"auto-merge is disabled"` in stderr), do NOT use `--admin` or force-push. Surface halt and stop — admin auth is required from Justin:
+   ```
+   ╔══ autoship halt ══════════════════════════════════════════════╗
+   ║ feature: <slug>
+   ║ stage:   merge
+   ║ reason:  branch-protection-block
+   ║ next:    open the PR URL in GitHub and merge manually, or grant admin auth
+   ╚══════════════════════════════════════════════════════════════════╝
+   [AUTOSHIP-HALT]
+   ```
+
+   /build is the chain terminus. Do NOT invoke /wrap or any downstream pipeline command automatically.
 
 ## Phase 4: Wave-Final Mark Addressed
 

@@ -117,7 +117,16 @@ RESOLVE_EXIT=$?
 GATE_MAX_RECYCLES=$(gate_max_recycles_clamp "$SPEC")
 ```
 
-- If `RESOLVE_EXIT != 0`: refuse the gate. `gate_mode_resolve` already wrote the canonical error to stderr (ambiguity / `--permissive` against `gate_mode: strict` / `--force-permissive` without reason / `--force-permissive` while `$CI`/`$AUTORUN_STAGE` is truthy). Exit without dispatching designers.
+- If `RESOLVE_EXIT != 0`: refuse the gate. `gate_mode_resolve` already wrote the canonical error to stderr (ambiguity / `--permissive` against `gate_mode: strict` / `--force-permissive` without reason / `--force-permissive` while `$CI`/`$AUTORUN_STAGE` is truthy). Exit without dispatching designers. Emit halt-surface block:
+  ```
+  ╔══ autoship halt ══════════════════════════════════════════════╗
+  ║ feature: <slug>
+  ║ stage:   blueprint
+  ║ reason:  gate_mode_resolve failed (see stderr above)
+  ║ next:    fix the gate-mode flag or spec frontmatter, then re-run /blueprint <slug>
+  ╚══════════════════════════════════════════════════════════════════╝
+  [AUTOSHIP-HALT]
+  ```
 - Banners (per `commands/_gate-mode.md` §6) — emit to **stderr**, then `touch` the matching sentinel:
   - `~/.claude/.gate-mode-default-flip-warned-v0.9.0` missing → emit the per-user verbose banner (§6.1) once, then touch.
   - Per-user sentinel exists AND frontmatter absent AND `docs/specs/<feature>/.gate-mode-warned` missing → emit the per-spec one-liner (§6.2), then touch the per-spec sentinel.
@@ -128,6 +137,27 @@ GATE_MAX_RECYCLES=$(gate_max_recycles_clamp "$SPEC")
   ```
   (`GATE_MODE_SOURCE` is captured from `gate_mode_resolve`'s side-channel — see helper docstring.)
 - The verdict sidecar written at Phase 3 records `mode`, `mode_source`, `iteration`, `iteration_max`, `cap_reached`, `class_breakdown`, `class_inferred_count`, `followups_file`, and `stage` per `schemas/check-verdict.schema.json` (v2). The `--force-permissive` reason string lands in `docs/specs/<feature>/.force-permissive-log` (audit trail), not in the verdict sidecar.
+
+<!-- BEGIN autoship-detection -->
+## Autoship Detection (V3 Path B)
+
+Before this gate's work begins, scan all user messages in the current Claude Code session for the literal substring:
+
+  `is shipped via merged PR with verifier reporting`
+
+If found AND no subsequent `/goal clear` invocation since the most recent trigger:
+
+1. Extract the spec slug from the matched /goal line (regex: `docs/specs/([a-z0-9][a-z0-9-]{0,63})/spec\.md`).
+2. If the extracted slug matches this gate's feature argument:
+   - Emit exactly: `[autoship] active goal detected — proceeding autonomously through pipeline`
+   - Set internal flag: autoship-active = true
+   - Skip the manual approval prompt for this gate
+3. If slug mismatches:
+   - Emit: `[autoship] /goal active for <other-slug>, current gate is <this-slug> — manual mode`
+   - autoship-active = false
+
+Otherwise: autoship-active = false; existing AUTORUN=1 env-var check, then existing approval prompt.
+<!-- END autoship-detection -->
 
 ## Phase 1: Dispatch Design Agents
 
@@ -260,3 +290,22 @@ Modify the plan as requested, re-run affected design agents if needed, re-presen
 - **Persistent artifacts** — design.md survives the session
 
 **Arguments**: $ARGUMENTS
+
+<!-- BEGIN autoship-chain-invoke -->
+## Autoship Chain-Invoke (V3 Path B)
+
+If autoship-active = true at this gate's completion:
+
+1. Emit a pre-handoff stdout marker (visible failure signal if chain breaks):
+   ```
+   [autoship] handing off to <next-gate> — if you see this without the next gate running, the Skill chain broke (paste `/<next-gate> <slug>` to resume)
+   ```
+2. Final action — invoke the next gate via the Skill tool:
+   - /spec-review final action: `Skill(skill="blueprint", args="<feature-slug>")`
+   - /blueprint final action: `Skill(skill="check", args="<feature-slug>")`
+   - /check final action on GO or GO_WITH_FIXES: `Skill(skill="build", args="<feature-slug>")`
+   - /check final action on NO_GO: STOP, emit halt-surface block (do not chain)
+   - /build final action: existing PR-open path; halt-surface block on branch-protection-block
+
+This MUST be the final action — no further work after the Skill invocation. Graceful degradation: if the Skill call fails or doesn't transfer control, the user sees the pre-handoff marker as the last visible signal and resumes manually.
+<!-- END autoship-chain-invoke -->

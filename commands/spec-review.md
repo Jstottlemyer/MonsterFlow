@@ -130,6 +130,27 @@ If `gate_mode_resolve` exits non-zero, surface its stderr verbatim to the user a
 
 **Downstream consumers** (judge / synthesis personas at Phase 2): read `commands/_gate-mode.md` for the classification precedence and verdict-sidecar field semantics. The `GATE_MODE`, `GATE_MODE_SOURCE`, and `GATE_MAX_RECYCLES` env-vars exported above flow into the synthesis call so the verdict sidecar (`verdict.json`) can record `mode`, `mode_source`, `iteration`, `iteration_max`, `cap_reached`, `class_breakdown`, `class_inferred_count`, `followups_file`, and `stage` per `schemas/check-verdict.schema.json` (v2).
 
+<!-- BEGIN autoship-detection -->
+## Autoship Detection (V3 Path B)
+
+Before this gate's work begins, scan all user messages in the current Claude Code session for the literal substring:
+
+  `is shipped via merged PR with verifier reporting`
+
+If found AND no subsequent `/goal clear` invocation since the most recent trigger:
+
+1. Extract the spec slug from the matched /goal line (regex: `docs/specs/([a-z0-9][a-z0-9-]{0,63})/spec\.md`).
+2. If the extracted slug matches this gate's feature argument:
+   - Emit exactly: `[autoship] active goal detected — proceeding autonomously through pipeline`
+   - Set internal flag: autoship-active = true
+   - Skip the manual approval prompt for this gate
+3. If slug mismatches:
+   - Emit: `[autoship] /goal active for <other-slug>, current gate is <this-slug> — manual mode`
+   - autoship-active = false
+
+Otherwise: autoship-active = false; existing AUTORUN=1 env-var check, then existing approval prompt.
+<!-- END autoship-detection -->
+
 ## Phase 1: Dispatch PRD Reviewer Agents
 
 For each `<persona>:<tier>` line surfaced by Phase 0b, read the persona file at `<REPO_DIR>/personas/review/<persona>.md`, then dispatch one parallel subagent using the Agent tool with `model: "<tier>"` (`opus` or `sonnet`). The legacy hardcoded list (requirements, gaps, ambiguity, feasibility, scope, stakeholders) is the resolver's full-roster fallback — when the user has no budget configured, all six dispatch as before, each at the tier the resolver assigned.
@@ -244,11 +265,35 @@ If the metrics paths are tracked-and-not-gitignored AND `docs/specs/<feature>/.p
 
    - **a)** Approve — accept the review and continue
    - **b)** Refine — name what to change (`b tighten AC4 wording`)
+   - **c)** Ship autonomously — paste this exact line:
+          /goal docs/specs/$FEATURE/spec.md is shipped via merged PR with verifier reporting $AC_COUNT/$AC_COUNT ACs PASS
+          (suitability: $SUITABILITY)
 
-   Reply with `a` or `b <change>` + Enter.
+   If suitability is LOW per the helper, suppress option **c)** entirely.
+
+   Reply with `a`, `b <change>`, or `c` + Enter.
    ```
 
 2. **Write `docs/specs/<feature>/review.md`** with the full consolidated review.
+
+<!-- BEGIN autoship-chain-invoke -->
+## Autoship Chain-Invoke (V3 Path B)
+
+If autoship-active = true at this gate's completion:
+
+1. Emit a pre-handoff stdout marker (visible failure signal if chain breaks):
+   ```
+   [autoship] handing off to <next-gate> — if you see this without the next gate running, the Skill chain broke (paste `/<next-gate> <slug>` to resume)
+   ```
+2. Final action — invoke the next gate via the Skill tool:
+   - /spec-review final action: `Skill(skill="blueprint", args="<feature-slug>")`
+   - /blueprint final action: `Skill(skill="check", args="<feature-slug>")`
+   - /check final action on GO or GO_WITH_FIXES: `Skill(skill="build", args="<feature-slug>")`
+   - /check final action on NO_GO: STOP, emit halt-surface block (do not chain)
+   - /build final action: existing PR-open path; halt-surface block on branch-protection-block
+
+This MUST be the final action — no further work after the Skill invocation. Graceful degradation: if the Skill call fails or doesn't transfer control, the user sees the pre-handoff marker as the last visible signal and resumes manually.
+<!-- END autoship-chain-invoke -->
 
 ## On Approve
 
@@ -260,6 +305,18 @@ Review approved. Spec updated. Ready for /blueprint.
 ## On Refine
 
 Address the feedback, update the spec, re-run affected reviewers if needed, re-present.
+
+If autoship-active = true and the user selects **b** (refine), the autonomous chain cannot continue. Emit the halt-surface block and stop:
+
+```
+╔══ autoship halt ══════════════════════════════════════════════╗
+║ feature: <slug>
+║ stage:   spec-review
+║ reason:  user requested refinement — autonomous chain requires manual intervention
+║ next:    address the refinement, then re-run /spec-review <slug> to resume the chain
+╚══════════════════════════════════════════════════════════════════╝
+[AUTOSHIP-HALT]
+```
 
 ## Key Principles
 

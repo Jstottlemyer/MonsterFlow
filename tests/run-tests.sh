@@ -152,6 +152,8 @@ TESTS=(
   test-wiki-migrate.sh
   # spec-qa-terminal-formatting — V3 anti-pattern sweep
   test-spec-qa-formatting.sh
+  # autonomous-shipping-defaults — V3 Path B chain-invoke
+  test-goal-autoship-render.sh
 )
 
 # Tests whose passing condition is exit non-zero (M8 inverted-assertion contract).

@@ -16,6 +16,11 @@ dashboard/data-bundle.js
 dashboard/judge-bundle.js
 dashboard/data/persona-roster.js
 dashboard/data/persona-rankings-bundle.js
+# autonomous-shipping-defaults V3 — explicit anchor for AC13 grep
+dashboard/data/autorun-suitability-events.jsonl
+# Smoke-test fixture artifacts from V3 manual smoke playbook (S1-S6)
+_smoke-*
+docs/specs/_smoke-DELETE-ME*/
 __pycache__/
 *.pyc
 

@@ -90,3 +90,20 @@
 ║  Plugins: specialized capabilities                           ║
 ║  You say WHAT. Claude handles HOW.                           ║
 ╚══════════════════════════════════════════════════════════════╝
+
+## Autonomous Shipping (autoship via /goal)
+
+When `/spec` exits with HIGH or MEDIUM suitability, it emits a copy-pasteable
+`/goal` line. Paste it as your next message; the next gate skill you invoke
+detects the active /goal in session context, skips approval, completes its
+work, and chain-invokes the next gate. The pipeline runs end-to-end through
+/spec-review → /blueprint → /check → /build → PR open in a single assistant
+turn.
+
+Halts surface as a visible stdout block with `feature`, `stage`, `reason`,
+and `next` fields. Branch-protection blocks require explicit per-PR `--admin`
+authorization from you. `/goal clear` opts out mid-flow.
+
+Suitability: HIGH (no security+migration combo, no strict gate); MEDIUM
+(security AND migration both tagged); LOW (gate_mode: strict — autoship
+suppressed; /goal line not rendered at any gate).

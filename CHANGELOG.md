@@ -4,6 +4,12 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`autonomous-shipping-defaults` (V3, Path B)** — autorun-suitability indicator + `/goal` autoship line at `/spec` exit, `/spec-review` Phase 3, `/check` GO/GO_WITH_FIXES. Gate skills (spec-review, blueprint, check, build) detect the literal trigger substring `is shipped via merged PR with verifier reporting` in session user messages and skip approval prompts when active. Each gate's final action is `Skill(skill="<next>", args="<slug>")` — pipeline runs end-to-end through `/spec-review → /blueprint → /check → /build → PR open` in a single assistant turn. Halt-surface contract emits a visible stdout block with `feature/stage/reason/next` fields + `[AUTOSHIP-HALT]` marker at every halt site. Helper `scripts/_goal_autoship_render.py` (~442 LoC, stdlib-only) owns suitability scoring (HIGH/MEDIUM/LOW per tag-based mapping), `/goal` line emission, and `dashboard/data/autorun-suitability-events.jsonl` instrumentation (gitignored). Canonical detection + chain-invoke blocks at `commands/_prompts/autoship-{detection,chain-invoke}.md` with sentinel comments for drift detection; byte-compared across all 4 gate skill files by AC14.
+- **`tests/test-goal-autoship-render.sh`** — 51 cases across 14 ACs (helper exit codes, suitability mapping, AC count parser including checkbox fixture, render-mode block + option-line, JSONL schema with `--no-log` gating, log-event halt/outcome rows, skill-prompt anchor table covering 11 anchors across 6 files, orchestrator wiring, canonical-block byte-compare).
+- **`commands/check.md` Phase 2.5** — manual `/check` now writes `check-verdict.json` + `followups.jsonl` from the synthesis output (previously only `scripts/autorun/check.sh` did this). Required so `/build` Phase 0c can consume followups when chained from manual `/check` under autoship.
+
 ### Changed
 
 - **Pipeline Q&A lettered-choice blocks** across all 6 commands (`/spec`, `/spec-review`, `/blueprint`, `/check`, `/build`, `/kickoff`) now use canonical `- **a)** Text — description` form (bold extends only across the letter+paren, not across the option text). 38 lines normalized across 3 pre-existing variants (bold-bullet, paren-bolded, raw-indented). New test `tests/test-spec-qa-formatting.sh` enforces 3 anti-pattern checks against the scope files; failures report `file:line`. See `docs/specs/spec-qa-terminal-formatting/` for the design + check trail.
