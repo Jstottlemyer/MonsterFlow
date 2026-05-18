@@ -366,7 +366,7 @@ Two-tier (per Q7).
     | `- **c)** Ship autonomously` | `commands/spec-review.md`, `commands/check.md` |
     | `[autoship] active goal detected` | `commands/spec-review.md`, `commands/blueprint.md`, `commands/check.md`, `commands/build.md` (ALL FOUR) |
     | `╔══ autoship halt` | `commands/spec-review.md`, `commands/blueprint.md`, `commands/check.md`, `commands/build.md` (ALL FOUR) |
-    | `## Autonomous Shipping (autoship via /goal)` | `commands/flow.md` |
+    | `## Autonomous Shipping (autoship via /goal)` | `commands/flow-card.txt` |
     | `Skill(skill="blueprint"` | `commands/spec-review.md` |
     | `Skill(skill="check"` | `commands/blueprint.md` |
     | `Skill(skill="build"` | `commands/check.md` |

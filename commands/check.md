@@ -121,6 +121,27 @@ export GATE_MODE GATE_MODE_SOURCE GATE_MAX_RECYCLES
 
 The active mode flows downstream: Phase 2 Synthesis routes findings via the `architectural > security > unclassified > contract > tests > documentation > scope-cuts` precedence (canonical in `commands/_gate-mode.md`); the verdict sidecar (`check-verdict.json`) records `mode`, `mode_source`, `iteration`, `iteration_max`, `cap_reached`, `class_breakdown`, `class_inferred_count`, `followups_file`, and `stage` per `schemas/check-verdict.schema.json` (v2). The `--force-permissive` reason string is captured separately in `docs/specs/<feature>/.force-permissive-log` (JSONL audit trail; NOT in the verdict sidecar).
 
+<!-- BEGIN autoship-detection -->
+## Autoship Detection (V3 Path B)
+
+Before this gate's work begins, scan all user messages in the current Claude Code session for the literal substring:
+
+  `is shipped via merged PR with verifier reporting`
+
+If found AND no subsequent `/goal clear` invocation since the most recent trigger:
+
+1. Extract the spec slug from the matched /goal line (regex: `docs/specs/([a-z0-9][a-z0-9-]{0,63})/spec\.md`).
+2. If the extracted slug matches this gate's feature argument:
+   - Emit exactly: `[autoship] active goal detected — proceeding autonomously through pipeline`
+   - Set internal flag: autoship-active = true
+   - Skip the manual approval prompt for this gate
+3. If slug mismatches:
+   - Emit: `[autoship] /goal active for <other-slug>, current gate is <this-slug> — manual mode`
+   - autoship-active = false
+
+Otherwise: autoship-active = false; existing AUTORUN=1 env-var check, then existing approval prompt.
+<!-- END autoship-detection -->
+
 ## Phase 1: Dispatch Plan Reviewer Agents
 
 For each line in `$SELECTED`, strip the `:<tier>` suffix to get the persona slug, read the persona file in `<REPO_DIR>/personas/check/<persona>.md`, then dispatch one parallel subagent using the Agent tool with the `model:` field set per the tier (see Phase 0b dispatch parsing). The legacy 5-reviewer roster (completeness, sequencing, risk, scope-discipline, testability) is the resolver's full-roster fallback. Each agent receives:
@@ -260,6 +281,31 @@ Run `commands/_prompts/findings-emit.md`. It reads `docs/specs/<feature>/check/r
 
 Schemas + `prompt_version: "findings-emit@1.0"` recorded as in `/spec-review`.
 
+## Phase 2.5: Write check-verdict.json + followups.jsonl (T6b)
+
+After Phase 2c writes the persona-metrics emit, write `docs/specs/$FEATURE/check-verdict.json` containing the JSON object from the ` ```check-verdict ` fenced block in the synthesis output. Use an atomic tmp-then-mv write:
+
+```bash
+TMP=$(mktemp /tmp/check-verdict-XXXXXX.json)
+# <extract the JSON object between the ```check-verdict and closing ``` fences>
+# Write extracted JSON to $TMP, then:
+mv "$TMP" docs/specs/<feature>/check-verdict.json
+```
+
+Then for each architectural finding in `blocking_findings[]` (and `security_findings[]` if non-empty), append one JSONL row to `docs/specs/<feature>/followups.jsonl` with:
+
+```json
+{ "finding_id": "<ck-id>", "persona": "<persona>", "summary": "<summary>", "state": "open", "target_phase": "build-inline", "gate": "check", "generated_at": "<ISO-8601 UTC>" }
+```
+
+Append mode — do not truncate existing rows.
+
+Echo exactly: `[t6b] wrote check-verdict.json + followups.jsonl`
+
+**If the synthesis output contains no ` ```check-verdict ` fence** (e.g., malformed output), emit:
+`[t6b] ERROR: no check-verdict fence found — skipping artifact write`
+and surface as a halt per the halt-surface block below.
+
 ## Phase 2d: Cap-reached next-steps (pipeline-gate-permissiveness)
 
 After Synthesis writes the verdict but BEFORE Phase 3 returns to the user, evaluate the verdict + recycle counter and conditionally emit the next-steps block.
@@ -313,16 +359,18 @@ The recommended-option lean (option 1) is canonical — do not reword. Architect
 
    - **a)** Go — proceed to /build
    - **b)** Hold — pause and discuss before /build
+   - **c)** Ship autonomously — invoke /build without further prompts (autoship)
 
-   Reply with `a` or `b` + Enter.
+   Reply with `a`, `b`, or `c` + Enter.
 
    [If GO WITH FIXES]: Address fixes above, then /build.
 
    - **a)** Fix now — apply must-fix items here, then /build
    - **b)** Defer to build — pass must-fix items into /build as inline TODOs
-   - **c)** Hold — pause and discuss before /build
+   - **c)** Ship autonomously — invoke /build without further prompts (autoship)
+   - **d)** Hold — pause and discuss before /build
 
-   Reply with `a`, `b`, or `c` + Enter.
+   Reply with `a`, `b`, `c`, or `d` + Enter.
 
    [If NO-GO]: Revise plan with /blueprint, then re-run /check.
    ```
@@ -356,5 +404,40 @@ Run /blueprint to revise, then /check again.
 - **Verdict-driven** — clear PASS/FAIL, not ambiguous
 - **Fix gaps here, not during build** — that's the whole point of this step
 - **Persistent artifacts** — check.md survives the session
+
+<!-- BEGIN autoship-chain-invoke -->
+## Autoship Chain-Invoke (V3 Path B)
+
+If autoship-active = true at this gate's completion:
+
+1. Emit a pre-handoff stdout marker (visible failure signal if chain breaks):
+   ```
+   [autoship] handing off to <next-gate> — if you see this without the next gate running, the Skill chain broke (paste `/<next-gate> <slug>` to resume)
+   ```
+2. Final action — invoke the next gate via the Skill tool:
+   - /spec-review final action: `Skill(skill="blueprint", args="<feature-slug>")`
+   - /blueprint final action: `Skill(skill="check", args="<feature-slug>")`
+   - /check final action on GO or GO_WITH_FIXES: `Skill(skill="build", args="<feature-slug>")`
+   - /check final action on NO_GO: STOP, emit halt-surface block (do not chain)
+   - /build final action: existing PR-open path; halt-surface block on branch-protection-block
+
+This MUST be the final action — no further work after the Skill invocation. Graceful degradation: if the Skill call fails or doesn't transfer control, the user sees the pre-handoff marker as the last visible signal and resumes manually.
+<!-- END autoship-chain-invoke -->
+
+## Halt-surface block (NO_GO under autoship)
+
+When `/check` returns NO_GO under autoship-active = true, do NOT chain to /build. Instead, emit a visible halt-surface block to stdout:
+
+```
+╔══ autoship halt ══════════════════════════════════════════════╗
+║ feature: <slug>
+║ stage:   check
+║ reason:  NO_GO verdict — blocking findings remain
+║ next:    Address blocking findings inline (edit spec.md), re-run /check
+╚══════════════════════════════════════════════════════════════════╝
+[AUTOSHIP-HALT]
+```
+
+Then call `_goal_autoship_render.py log-event --gate check-go --event-type halt --reason no-go-verdict --stage-at-halt check` to write the halt event. Wait for user input — do not auto-proceed.
 
 **Arguments**: $ARGUMENTS

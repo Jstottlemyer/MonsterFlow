@@ -366,6 +366,32 @@ When the gate is met (manual approval or auto-run criteria — see below):
 ## Phase 4: Present / Auto-Run
 
 **Manual mode (default):**
+
+Before rendering the approval block, emit the autorun-suitability indicator via:
+
+```bash
+# Emit suitability indicator + /goal line via helper
+python3 ~/Projects/MonsterFlow/scripts/_goal_autoship_render.py render \
+  --spec-path "docs/specs/$FEATURE/spec.md" \
+  --gate spec-exit
+```
+
+Emit the helper's stdout verbatim before the existing "Ready for /spec-review" message. If the helper exits non-zero, skip the indicator block (existing flow proceeds).
+
+The helper output for a HIGH-suitability spec looks like:
+
+```
+=== Spec Written: <feature-name> (<N> ACs) ===
+Autorun suitability: HIGH (no security/migration combo, no gate_mode: strict)
+
+Ship autonomously? Copy + paste this exact line:
+  /goal docs/specs/<feature-name>/spec.md is shipped via merged PR with verifier reporting <N>/<N> ACs PASS
+
+Or proceed manually: /spec-review <feature-name>
+```
+
+When suitability is MEDIUM, the helper adds a "Recommended: proceed with /spec-review (manual gates)" line. When LOW, the helper suppresses the /goal line entirely and only shows the manual proceed line.
+
 ```
 === Spec Written ===
 File: docs/specs/<feature-name>/spec.md
