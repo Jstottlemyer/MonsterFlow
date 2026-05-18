@@ -24,6 +24,12 @@ Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready
 
 ---
 
+## From autonomous-shipping-defaults V2 carve (2026-05-17)
+
+- **`autoship-merge-hygiene` (spec candidate, S)** — when `/goal`-driven autoship reaches PR-merge, drop `--delete-branch` from the `gh pr merge` invocation so the branch is preserved for forensics. Manual interactive merges retain `--delete-branch` (current behavior). Add a sibling `/branch-cleanup` housekeeping skill that sweeps merged-and-aged branches when the user wants hygiene back. **Why carved:** scope + codex reviewers both flagged this as a different runtime surface than items 1-3 of autonomous-shipping-defaults (skill-prompt + helper layer vs `gh pr merge` invocation layer). AC8 in V1 referenced a `--gate manual-merge` value that didn't exist in the helper CLI — clean carve removes the contract ambiguity. **Size:** S. **Touches:** `commands/build.md` (or wherever autoship merge command lives — locate the actual call site), `commands/_pipeline_banner.sh` or `scripts/autorun/build.sh` if merge command is centralized, new `commands/branch-cleanup.md` for the housekeeping skill, tests. **Entry point:** `/spec autoship-merge-hygiene` next session.
+
+---
+
 ## From wiki-write-migrate V2 session (2026-05-16)
 
 - **`pipeline-goal-wrap-default` (spec candidate, S)** — `/spec-review`'s Phase 3 approval gate (and parallel surface in `/check`) auto-emits a copy-pasteable "ship under /goal" option alongside the existing approve / refine choices. The skill computes the feature slug from cwd and the AC count from the spec's `## Acceptance Criteria` section, producing a ready-to-paste line:
