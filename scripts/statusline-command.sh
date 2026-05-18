@@ -136,6 +136,6 @@ result="$ctx_seg"
 [ -n "$model_seg" ] && result="$result $sep $model_seg"
 [ -n "$perm_seg" ]  && result="$result $sep $perm_seg"
 [ -n "$age_str" ]   && result="$result $sep $(printf '\033[36m%s\033[0m' "$age_str")"
-result="$result $sep $(printf '\033[34m%s\033[0m' "$short_cwd")"
+result="$result $sep $(printf '\033[94m%s\033[0m' "$short_cwd")"
 
 printf "%b\n" "$result"

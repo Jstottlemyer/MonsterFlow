@@ -44,6 +44,7 @@
 ║  docs/specs/<feature>/review.md (PRD review findings)        ║
 ║  docs/specs/<feature>/design.md (implementation design)        ║
 ║  docs/specs/<feature>/check.md  (gap checkpoint)             ║
+║  plot/PLOT.md + plot/chapters/  (narrative context)           ║
 ║                                                              ║
 ║  KNOWLEDGE LAYER                   [graphify + obsidian]     ║
 ║  Fires automagically at /wrap — no typing, no friction:      ║
@@ -51,9 +52,11 @@
 ║    session → projects/<name>/   (wiki-update)                ║
 ║    graph export + lint          (wiki-export · wiki-lint)    ║
 ║    graphify digest → _raw/      (silent arch snapshot)       ║
+║    plot staleness check         (Phase 2d plot gate)         ║
 ║  Manual (rare):                                              ║
 ║    /graphify [path]    build code knowledge graph            ║
 ║    /graphify query "Q" graph traversal answer                ║
+║    /plot               bootstrap/check/update Plot Document  ║
 ║    "what do I know about X"  wiki-query                      ║
 ║    "capture this: X"         wiki-capture → _raw/            ║
 ║  Compile, don't retrieve. Capture cheap, distill at /wrap.   ║

@@ -9,17 +9,17 @@ You are an end-of-session assistant. Justin is wrapping up a Claude Code session
 
 Discoverable entry points (subcommands — preferred, tab-completable):
 
-- `/wrap` — default. Phases 1, 1a, 1b, 1c, 2, 2b, 2c, 3, 3b, 4, 5 fire per their own conditions.
-- `/wrap-quick` — fast path. Phases 1, 2, 3, 4 only. Skips 1a, 1b, 1c, 2b, 2c, 3b, 5.
+- `/wrap` — default. Phases 1, 1a, 1b, 1c, 2, 2b, 2c, 2d, 3, 3b, 4, 5 fire per their own conditions.
+- `/wrap-quick` — fast path. Phases 1, 2, 3, 4 only. Skips 1a, 1b, 1c, 2b, 2c, 2d, 3b, 5.
 - `/wrap-insights` — alias for `/wrap` (same behavior; kept for tab-complete discoverability).
 - `/wrap-full` — thorough mode. Forces Phase 2b and 5 even when their soft skip-rules fire.
 
 Recognized arguments (still supported for direct invocation, bare words, any order):
 
-- `quick` — skip Phases 1a, 1b, 1c, 2b, 2c, 3b, 5.
+- `quick` — skip Phases 1a, 1b, 1c, 2b, 2c, 2d, 3b, 5.
 - `full` — override the soft skip-rules in Phase 2b ("if no screenshot reviews") and Phase 5 ("if session was trivial").
 
-If arguments include "quick", skip Phases 1a, 1b, 1c, 2b, 2c, 3b, and 5 entirely. If arguments include "full", ignore soft skip-rules in Phase 2b and 5 (hard prerequisites still apply).
+If arguments include "quick", skip Phases 1a, 1b, 1c, 2b, 2c, 2d, 3b, and 5 entirely. If arguments include "full", ignore soft skip-rules in Phase 2b and 5 (hard prerequisites still apply).
 
 ---
 
@@ -546,6 +546,53 @@ This is the graphify → wiki bridge. Rather than let the code-graph structure l
 
 ---
 
+## Phase 2d: Plot Gate (conditional, no interaction)
+
+**Skip this phase if:**
+- Arguments include "quick"
+- `plot/PLOT.md` does not exist
+
+This phase is silent and automatic — no human interaction. Runs after Phase 2c (Wiki) and before Phase 3 (Loose Ends).
+
+### Two-tier staleness check
+
+**Tier 1 (deterministic, always runs):**
+
+1. Extract all link targets from every chapter using:
+   ```bash
+   python3 scripts/_plot_annotations.py extract-links --file <chapter>
+   ```
+2. Compute the session diff — files changed in this session:
+   ```bash
+   git diff --name-only HEAD~$(git log --since='6 hours ago' --oneline | wc -l | tr -d ' ')..HEAD 2>/dev/null
+   ```
+3. Intersect the two sets. If empty → report "Plot: intact." and STOP (skip Tier 2).
+
+**Tier 2 (LLM, conditional — only fires when Tier 1 finds overlap):**
+
+1. Read only the chapters whose links intersect the diff, plus their linked source files.
+2. Apply staleness criteria (see `commands/plot.md` for the criteria and calibration examples).
+3. For each stale section found, inject an annotation:
+   ```bash
+   python3 scripts/_plot_annotations.py inject-stale --file F --section S --reason "R" --date YYYY-MM-DD
+   ```
+4. Check Layer 1 (`plot/PLOT.md`) against `graphify-out/GRAPH_REPORT.md` if graphify is available. If graphify is absent, skip the Layer 1 check in Phase 2d.
+
+### What Phase 2d does NOT do
+
+- Never drafts narrative content (detect and annotate only)
+- Never asks questions (silent)
+- Never removes existing annotations (`[!STALE]` stays until human resolves via `/plot`; `[!DRAFT]` stays until human reviews)
+
+### Report line (always present when `plot/PLOT.md` exists)
+
+One of:
+- "Plot: intact."
+- "Plot: 2 stale sections annotated in payments.md, 1 in auth.md."
+- "Plot: Layer 1 may need review — [reason]."
+
+---
+
 ## Phase 3: Loose Ends (conditional, one approval gate)
 
 **Consolidation rule:** Phase 3 (git loose ends) and Phase 3b (dependency audit) share a single approval gate when both apply. Run all checks first, present findings together under `=== Loose Ends ===`, then ask once. If only one of the two fires, present and ask normally as a single gate.
@@ -600,7 +647,7 @@ Uncommitted files:
   [status] path/to/file  → orphan to clean
 
 === Active Specs ===
-[If docs/specs/ exists: list features and their latest artifact (spec/review/plan/check)]
+[If docs/specs/ exists: list features and their latest artifact (spec/review/design/check)]
 [If no specs directory: omit this section]
 ```
 

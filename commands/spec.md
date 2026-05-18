@@ -131,7 +131,34 @@ If the config exists, invoke the `wiki-query` skill to surface prior compiled kn
 
 5. **On error.** If `wiki-query` errors out, silently skip the callout. No inline error message — unlike `/wrap`'s write path, the read-side user didn't explicitly opt into this; it's background enrichment.
 
-6. Phase 1 Q1 begins with both the context summary AND the prior-wiki callout (if rendered) in scope.
+6. Phase 1 Q1 begins with the context summary AND all rendered callouts (graphify, wiki, plot) in scope.
+
+#### 0.2c — Plot Document callout
+
+**Skip this sub-phase if** `plot/PLOT.md` does not exist in cwd. Silent no-op — no prompt, no error.
+
+If `plot/PLOT.md` exists:
+
+1. **Read `plot/PLOT.md` and all `plot/chapters/*.md`.** These form the project's narrative layer — a human-maintained story of the system's architecture, history, and intent.
+
+2. **Get annotation status.** Run `python3 scripts/_plot_annotations.py status --file plot/PLOT.md` from cwd. This returns `total`, `stale`, `draft`, `clean` counts.
+
+3. **Apply tag-aware confidence:**
+   - **Clean prose** (no tags): reliable context, use with confidence.
+   - **`[!STALE]` sections**: narrative is known to be wrong. Flag it: *"Note: the Plot Document's description of [feature] is stale — [reason]. I'll ground this part of the spec in the code directly rather than the narrative."*
+   - **`[!DRAFT]` sections**: AI-generated, useful but unverified. Use as context but don't treat as authoritative.
+
+4. **Render the callout** between the context summary and Phase 0.25 / Phase 0.5:
+   ```markdown
+   ### Prior narrative context (Plot Document)
+   - Layer 1: [1-sentence system story summary]
+   - [N] chapters: [list titles]
+   - [N stale, N draft, N clean]
+
+   Source: plot/PLOT.md + plot/chapters/ ([N] chapters)
+   ```
+
+5. **On error.** Silent skip. Same precedent as 0.2a and 0.2b — background enrichment, not user-initiated.
 
 ### Phase 0.25: Session Roster (no-constitution fallback)
 
