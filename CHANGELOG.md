@@ -4,6 +4,16 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-05-17
+
+### Added
+
+- **`plot-document` (PR #10, tbilsborrow)** — fifth knowledge store: narrative-level system context with inline code links. Layer 1 (`plot/PLOT.md`) is the system's story; Layer 2 (`plot/chapters/*.md`) is per-feature walkthroughs. New `/plot` standalone command (auto-routing bootstrap/check/update). `/wrap` Phase 2d (Plot Gate) runs every session-end with cheap two-tier staleness detection (extract chapter links, intersect with session diff, only invoke LLM on overlap). `/spec` Phase 0.2c reads PLOT.md as a tag-aware prior-knowledge source. Annotation manipulation (`[!STALE]`/`[!DRAFT]`) goes through `scripts/_plot_annotations.py` only — never free-form LLM editing. Silent no-op when `plot/PLOT.md` doesn't exist, so existing projects are unaffected.
+- **`scripts/_plot_annotations.py`** — deterministic helper (~700 LoC). 6 operations: inject-stale, remove-stale, inject-draft, remove-draft, extract-links, status. Atomic writes via tempfile + os.replace, 3-reason cap with oldest-drop, D6 dual-annotation ordering. Path-scope validated to chapter-files relative to repo root.
+- **`tests/test-plot-annotations.sh`** — 11 cases / 49 assertions across all helper operations + Tier 1 diff-scope intersection fixture.
+
+## [0.17.1] - 2026-05-17
+
 ### Added
 
 - **`autonomous-shipping-defaults` (V3, Path B)** — autorun-suitability indicator + `/goal` autoship line at `/spec` exit, `/spec-review` Phase 3, `/check` GO/GO_WITH_FIXES. Gate skills (spec-review, blueprint, check, build) detect the literal trigger substring `is shipped via merged PR with verifier reporting` in session user messages and skip approval prompts when active. Each gate's final action is `Skill(skill="<next>", args="<slug>")` — pipeline runs end-to-end through `/spec-review → /blueprint → /check → /build → PR open` in a single assistant turn. Halt-surface contract emits a visible stdout block with `feature/stage/reason/next` fields + `[AUTOSHIP-HALT]` marker at every halt site. Helper `scripts/_goal_autoship_render.py` (~442 LoC, stdlib-only) owns suitability scoring (HIGH/MEDIUM/LOW per tag-based mapping), `/goal` line emission, and `dashboard/data/autorun-suitability-events.jsonl` instrumentation (gitignored). Canonical detection + chain-invoke blocks at `commands/_prompts/autoship-{detection,chain-invoke}.md` with sentinel comments for drift detection; byte-compared across all 4 gate skill files by AC14.
