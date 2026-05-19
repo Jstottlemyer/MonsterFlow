@@ -88,3 +88,6 @@ dashboard/data/persona-insights-bundle.js
 docs/specs/*/.compact-mode
 docs/specs/*/.last-compact-suggestion
 # END pipeline-pacing-and-prefill
+
+# Personal config (CLAUDE.md, etc.) — tracked in a separate private repo
+personal/
