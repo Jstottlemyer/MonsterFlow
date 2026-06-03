@@ -249,6 +249,7 @@ if [ "${AUTORUN_DRY_RUN:-0}" != "1" ] && [ "${CODEX_REQUESTED:-0}" = "1" ]; then
 
     CODEX_DESIGN_EXIT=0
     timeout "$TIMEOUT_CODEX" codex exec \
+        --disable image_generation \
         --full-auto --ephemeral \
         --output-last-message "$CODEX_DESIGN_OUT" \
         "You are an adversarial design reviewer. The Claude synthesis above produced a Plan to satisfy the Spec. Identify design problems Claude missed.

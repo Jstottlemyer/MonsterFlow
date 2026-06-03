@@ -1238,6 +1238,7 @@ else
         tail -100 "$ARTIFACT_DIR/build-log.md" 2>/dev/null || true
       } > "$CODEX_CONTEXT"
       timeout "$TIMEOUT_CODEX" codex exec \
+          --disable image_generation \
           --full-auto --ephemeral \
           --output-last-message "$CODEX_OUTPUT_FILE" \
           "Review this PR for correctness, security issues, and adherence to spec.
