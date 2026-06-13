@@ -771,7 +771,7 @@ def a15_crosscheck(
     annotation `tokens` (tolerance 0).
 
     On any mismatch: if `best_effort` log + proceed; else SystemExit(1) with
-    a stderr pointer at /plan to re-open Q1.
+    a stderr pointer at /blueprint to re-open Q1.
 
     Missing transcripts are skipped (still cheap path; cost_only stays
     cheap). Returns True iff every present transcript matched.
@@ -833,7 +833,7 @@ def a15_crosscheck(
         sys.stderr.write(
             "[persona-value] A1.5 cross-check failed: {n} dispatch(es) had "
             "parent-annotation total_tokens != final-subagent-row broad "
-            "sum. Spike Q1 must be re-opened via /plan before this build "
+            "sum. Spike Q1 must be re-opened via /blueprint before this build "
             "can ship. Re-run with --best-effort to downgrade to a "
             "warning.\n".format(n=mismatches)
         )
