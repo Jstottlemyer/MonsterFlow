@@ -1,4 +1,5 @@
 ---
+status: shipped
 created: 2026-05-15
 constitution: none
 revision: V2 (post-spec-review)

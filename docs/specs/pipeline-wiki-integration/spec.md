@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # Pipeline ↔ Obsidian-Wiki Integration Spec
 
 **Created:** 2026-04-17

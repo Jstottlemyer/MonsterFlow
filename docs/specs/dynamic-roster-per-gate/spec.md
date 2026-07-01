@@ -2,7 +2,7 @@
 name: dynamic-roster-per-gate
 description: Content-aware best-fit persona selection per gate — tag-matching + load-bearing-rate + (≥1 Opus, ≥1 Sonnet, 50/50 remainder) tier-mix rule with additive Codex, layered constitution + spec.md + CLI overrides
 created: 2026-05-06
-status: draft
+status: in-flight
 session_roster: defaults-only (no constitution)
 gate_mode: permissive
 tags: [pipeline, integration, scalability, data]

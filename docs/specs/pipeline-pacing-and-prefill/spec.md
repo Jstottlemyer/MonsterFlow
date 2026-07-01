@@ -1,4 +1,5 @@
 ---
+status: shipped
 created: 2026-05-14
 revised: 2026-05-14 (post-/check iter1, mobile-verify carved to v0.14.1 + 11 mechanical fixes)
 constitution: absent
