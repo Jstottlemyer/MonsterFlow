@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # Autorun Overnight Policy Spec
 
 **Created:** 2026-05-04

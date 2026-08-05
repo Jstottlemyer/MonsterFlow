@@ -4,7 +4,7 @@ description: Per-persona cost + retention + downstream-survival + uniqueness ins
 created: 2026-05-03
 revised: 2026-05-04
 revision: 4.2
-status: ready-for-build
+status: in-flight
 session_roster: defaults-only (no constitution)
 ---
 

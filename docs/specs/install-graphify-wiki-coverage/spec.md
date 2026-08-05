@@ -1,4 +1,5 @@
 ---
+status: shipped
 name: install-graphify-wiki-coverage
 description: Add a Knowledge Layer stage to install.sh that detects graphify CLI, the six obsidian-wiki skills, OBSIDIAN_VAULT_PATH, Obsidian.app, and cmux config-without-binary drift; offers to install only the missing pieces; splits offerings into can-install-now vs manual-action-required so the prompt never overpromises; re-runs cleanly when state is already correct.
 created: 2026-05-13

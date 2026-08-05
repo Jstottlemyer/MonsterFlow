@@ -1,4 +1,5 @@
 ---
+status: shipped
 name: install-rewrite
 description: Pivot install.sh from a checker into a detect → install → verify → onboard flow with brew-bundle install, owner-vs-adopter theme baseline, version-aware migration, non-interactive auto-detect, and a regression-proofed test harness.
 created: 2026-05-03

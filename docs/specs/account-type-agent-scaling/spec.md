@@ -2,7 +2,7 @@
 name: account-type-agent-scaling
 description: Per-gate agent budget cap — scale persona roster by user-configured budget, with rankings-based selection and Codex as an additive reviewer
 created: 2026-05-04
-status: draft
+status: shipped
 session_roster: defaults-only (no constitution)
 ---
 

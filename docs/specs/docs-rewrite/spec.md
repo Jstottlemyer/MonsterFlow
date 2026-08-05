@@ -1,4 +1,5 @@
 ---
+status: parked
 gate_mode: permissive
 gate_max_recycles: 2
 ---

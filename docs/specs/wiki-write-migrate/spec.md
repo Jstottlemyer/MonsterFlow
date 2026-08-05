@@ -1,4 +1,5 @@
 ---
+status: shipped
 created: 2026-05-15
 revision: V4 (post-/blueprint-Codex; 6 P1 + 4 P2 findings folded inline)
 constitution: none

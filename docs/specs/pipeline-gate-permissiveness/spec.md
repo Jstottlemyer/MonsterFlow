@@ -1,4 +1,5 @@
 ---
+status: shipped
 feature: pipeline-gate-permissiveness
 created: 2026-05-05
 revised: 2026-05-05 (post-/spec-review v1; 3 architectural blockers fixed inline + 5 warn-route items applied)

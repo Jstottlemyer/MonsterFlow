@@ -2,7 +2,7 @@
 name: dynamic-roster-1-tags
 description: Slice 1 of dynamic-roster-per-gate — tag schema + fit_tags backfill on 19 existing personas. Foundation for content-aware persona selection.
 created: 2026-05-08
-status: draft
+status: in-flight
 session_roster: defaults-only (no constitution)
 gate_mode: permissive
 tags: [data, integration, security]

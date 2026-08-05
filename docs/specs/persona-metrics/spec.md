@@ -1,3 +1,7 @@
+---
+status: shipped
+---
+
 # Persona Metrics Spec
 
 **Created:** 2026-04-26
