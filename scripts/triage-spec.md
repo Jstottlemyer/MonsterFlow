@@ -8,10 +8,16 @@ Scan for new Claude Code surface area (built-in slash commands, hook events, plu
 
 ## Step 1 — Skip-check (effective bi-weekly cadence)
 
-Use the `gh` CLI for **every** GitHub operation in this spec (Step 1 and Step 5). Do NOT substitute the `mcp__github__*` tools — `gh` is this repo's convention, it is covered by the `Bash(gh ...)` allowlist in `settings/settings.json`, and it reports auth failures as plain stderr you can act on.
+**Tooling note — the cloud sandbox has no `gh`.** Verified 2026-09-22 in env `env_01YByf8LEituZXVfX9YAAJVn`: `which gh` returns nothing and `gh` is `command not found`. `gh` is the convention on Justin's laptop, NOT here. In this environment use `git` for branch/commit/push and the `mcp__github__*` tools for anything requiring the GitHub API (PR search, PR creation). Do not invoke `gh`; do not add an install step for it.
 
-```bash
-gh pr list --search 'chore(triage): in:title' --state all --limit 5 --json title,createdAt,mergedAt
+For the Step 1 skip-check call `mcp__github__search_pull_requests`:
+
+```
+owner: Jstottlemyer
+repo:  MonsterFlow
+query: repo:Jstottlemyer/MonsterFlow chore(triage): in:title
+sort:  created   order: desc   perPage: 5
+fields: number,title,created_at,merged_at,state
 ```
 
 If any matching PR was created within the last 13 days, exit with the single message:
@@ -70,16 +76,19 @@ If one or more new items:
 
   Existing pre-triage anomalies at lines 2, 9, 65 (width 63) are pre-existing and must be left alone.
 - Update the `## Built-in Claude Code commands` paragraph in `CLAUDE.md` (root) to reflect new policy. Keep it to 2–3 sentences total.
-- Commit, push, and open the PR with `git` + `gh` (NOT `mcp__github__*`):
+- Commit and push with `git`, then open the PR with `mcp__github__create_pull_request`:
 
   ```bash
   git checkout -b triage/YYYY-MM-DD-claude-code-release-scan
   git commit commands/flow-card.txt CLAUDE.md -m "chore(triage): claude-code release scan YYYY-MM-DD"
   git push -u origin triage/YYYY-MM-DD-claude-code-release-scan
-  gh pr create --base main --title "chore(triage): claude-code release scan YYYY-MM-DD" --body "<body>"
   ```
 
-  If `git push` or `gh pr create` fails with a 403 or an auth error, do NOT fall back to the `mcp__github__*` tools and do NOT retry in a loop — they fail the same way and burn the run. Stop, and report the verbatim stderr plus the local branch name so the commit can be recovered.
+  Then `mcp__github__create_pull_request` with `owner: Jstottlemyer`, `repo: MonsterFlow`, `base: main`, `head: triage/YYYY-MM-DD-claude-code-release-scan`.
+
+  **If `git push` fails with a 403**, the Claude GitHub App is missing write access on the repo. Do NOT retry the push in a loop, and do NOT try `mcp__github__create_branch` or `mcp__github__push_files` as a fallback — they authenticate with the same installation token and return `403 Resource not accessible by integration` every time. This exact dead end burned three runs on 2026-09-22. Instead: STOP, and report (1) the verbatim stderr, (2) the local branch name, and (3) the commit SHA, so the work can be recovered from the run log.
+
+  Note the repo is **public**, so a successful `git clone` / `git ls-remote` proves nothing about write access — public reads need no installation at all. Only the push is a real test.
 - PR title `chore(triage): claude-code release scan YYYY-MM-DD`, body sections:
   - `## Findings` — one bullet per new item: name, type, proposed policy, one-line rationale.
   - `## Sources` — URLs scanned in Step 3. If a fetch failed, list it here with `(failed)`.
