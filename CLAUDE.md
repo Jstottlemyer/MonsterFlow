@@ -21,7 +21,7 @@ Apply in addition to user-level `~/CLAUDE.md`.
 
 ## Built-in Claude Code commands
 
-`/blueprint` is MonsterFlow's design gate. It stays in the terminal and writes `docs/specs/<feature>/design.md`. Avoid `/ultraplan` for pipeline work; it dispatches a remote browser session and produces no local artifact. `/insights` is opt-in via `/wrap-insights` (measurement mode); `/powerup` is ad-hoc educational and not wired into any flow. **`/plan` is Claude Code's built-in plan-mode** — different tool, different intent. If you want MonsterFlow's design pass, use `/blueprint`.
+`/blueprint` is MonsterFlow's design gate. It stays in the terminal and writes `docs/specs/<feature>/design.md`. Avoid `/ultraplan` for pipeline work; it dispatches a remote browser session and produces no local artifact. `/insights` is opt-in via `/wrap-insights` (measurement mode); `/powerup` is ad-hoc educational and not wired into any flow. **`/plan` is Claude Code's built-in plan-mode** — different tool, different intent. If you want MonsterFlow's design pass, use `/blueprint`. Use `/effort high` at the start of each gate for consistent quality output (stays in terminal, no pipeline duplication). `/deep-research` is OPT-IN for spec research phases; `/rewind` is OPT-IN for checkpoint rollback at build; `/autofix-pr` is AVOID — it spawns a remote session like `/ultraplan`.
 
 `/wrap` has three tab-completable variants: `/wrap-quick` (fast triage only), `/wrap-insights` (adds Phase 1b `/insights`), `/wrap-full` (insights + force-run conditional phases). Bare-word args (`quick`, `insights`, `full`) still work for direct invocation; the subcommands exist so the variants show up in tab completion.
 
