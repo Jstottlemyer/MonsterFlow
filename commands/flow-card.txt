@@ -73,6 +73,11 @@
 ║  /ultraplan  cloud planner - AVOID (browser handoff)         ║
 ║  /insights   cross-session report - opt-in /wrap-insights    ║
 ║  /powerup    interactive feature lessons - ad-hoc            ║
+║  /effort    set per-gate quality level - USE at each gate    ║
+║  /deep-research  web research workflow - OPT-IN via /spec    ║
+║  /goal       autonomous pipeline - EDUCATIONAL (prose below) ║
+║  /rewind     roll back code+history to checkpoint - OPT-IN   ║
+║  /autofix-pr  cloud PR watcher - AVOID (remote session)      ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  AGENTS (on-disk): review(7) design(7) check(6) cr(9)          ║
