@@ -69,7 +69,7 @@ from _followups_lock import followups_lock, FollowupsLockTimeout  # noqa: E402
 
 
 COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$|^PR#[0-9]+$")
-FINDING_ID_RE = re.compile(r"^(sr|pl|ck)-[0-9a-f]{10,}$")
+FINDING_ID_RE = re.compile(r"^(sr|pl|ck)-[0-9a-z][0-9a-z-]{2,}$")
 LOCK_TIMEOUT_SECONDS = 60
 
 
