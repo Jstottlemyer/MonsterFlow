@@ -8,6 +8,8 @@ Scan for new Claude Code surface area (built-in slash commands, hook events, plu
 
 ## Step 1 — Skip-check (effective bi-weekly cadence)
 
+Use the `gh` CLI for **every** GitHub operation in this spec (Step 1 and Step 5). Do NOT substitute the `mcp__github__*` tools — `gh` is this repo's convention, it is covered by the `Bash(gh ...)` allowlist in `settings/settings.json`, and it reports auth failures as plain stderr you can act on.
+
 ```bash
 gh pr list --search 'chore(triage): in:title' --state all --limit 5 --json title,createdAt,mergedAt
 ```
@@ -68,7 +70,17 @@ If one or more new items:
 
   Existing pre-triage anomalies at lines 2, 9, 65 (width 63) are pre-existing and must be left alone.
 - Update the `## Built-in Claude Code commands` paragraph in `CLAUDE.md` (root) to reflect new policy. Keep it to 2–3 sentences total.
-- Open a PR with title `chore(triage): claude-code release scan YYYY-MM-DD` and body sections:
+- Commit, push, and open the PR with `git` + `gh` (NOT `mcp__github__*`):
+
+  ```bash
+  git checkout -b triage/YYYY-MM-DD-claude-code-release-scan
+  git commit commands/flow-card.txt CLAUDE.md -m "chore(triage): claude-code release scan YYYY-MM-DD"
+  git push -u origin triage/YYYY-MM-DD-claude-code-release-scan
+  gh pr create --base main --title "chore(triage): claude-code release scan YYYY-MM-DD" --body "<body>"
+  ```
+
+  If `git push` or `gh pr create` fails with a 403 or an auth error, do NOT fall back to the `mcp__github__*` tools and do NOT retry in a loop — they fail the same way and burn the run. Stop, and report the verbatim stderr plus the local branch name so the commit can be recovered.
+- PR title `chore(triage): claude-code release scan YYYY-MM-DD`, body sections:
   - `## Findings` — one bullet per new item: name, type, proposed policy, one-line rationale.
   - `## Sources` — URLs scanned in Step 3. If a fetch failed, list it here with `(failed)`.
   - `## What changed` — file diffs summarized.
