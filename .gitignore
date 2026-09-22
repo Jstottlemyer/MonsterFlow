@@ -91,3 +91,6 @@ docs/specs/*/.last-compact-suggestion
 
 # Personal config (CLAUDE.md, etc.) — tracked in a separate private repo
 personal/
+
+# followups.jsonl flock files — intentionally not unlinked on release (see scripts/_followups_lock.py)
+docs/specs/*/.followups.jsonl.lock
