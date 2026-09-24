@@ -28,9 +28,12 @@ or skill name. `/plan` was MonsterFlow's original planning gate; it
 collided with Claude Code's built-in plan-mode (`EnterPlanMode`/
 `ExitPlanMode`) and caused real ambiguity in adopter sessions — a typed
 `/plan` was unclear between the two. Resolution (2026-05-12): ceded `/plan`
-back to the host entirely — no deprecated alias — and shipped MonsterFlow's
-gate as `/design` only. Before adding a new command name, grep the current
-session's skills/tool listing and its system reminders for collisions.
+back to the host entirely — no deprecated alias — and renamed the command
+to `/blueprint` (`commands/blueprint.md`). `design` is the internal stage
+name only (`personas/design/`, `docs/specs/<feature>/design.md`,
+`stage: "design"` in JSONL) — there is no `/design` slash command; don't
+introduce one. Before adding a new command name, grep the current session's
+skills/tool listing and its system reminders for collisions.
 
 ## Shared canonical blocks across command files — splice pattern
 
