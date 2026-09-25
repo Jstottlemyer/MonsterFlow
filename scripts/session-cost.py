@@ -18,6 +18,16 @@ from pathlib import Path
 
 
 PRICING = {
+    # Claude 5 family. in/out from the published per-MTok table; cache-write and
+    # cache-read derived at the standard 1.25x / 0.1x of input (same ratio every
+    # row below uses). 'fast' is the fast-mode price multiplier: Opus 5 fast mode
+    # is $10/$50 vs $5/$25 standard = 2x.
+    'claude-fable-5':    {'in': 10e-6,   'out': 50e-6, 'cw': 12.5e-6,  'cr': 1.0e-6,   'fast': 1},
+    'claude-mythos-5':   {'in': 10e-6,   'out': 50e-6, 'cw': 12.5e-6,  'cr': 1.0e-6,   'fast': 1},
+    'claude-opus-5':     {'in': 5e-6,    'out': 25e-6, 'cw': 6.25e-6,  'cr': 0.5e-6,   'fast': 2},
+    'claude-sonnet-5':   {'in': 2e-6,    'out': 10e-6, 'cw': 2.5e-6,   'cr': 0.2e-6,   'fast': 1},
+    'claude-opus-4-8':   {'in': 5e-6,    'out': 25e-6, 'cw': 6.25e-6,  'cr': 0.5e-6,   'fast': 2},
+    'claude-opus-4-7':   {'in': 5e-6,    'out': 25e-6, 'cw': 6.25e-6,  'cr': 0.5e-6,   'fast': 1},
     'claude-opus-4-6':   {'in': 5e-6,    'out': 25e-6, 'cw': 6.25e-6,  'cr': 0.5e-6,   'fast': 6},
     'claude-opus-4-5':   {'in': 5e-6,    'out': 25e-6, 'cw': 6.25e-6,  'cr': 0.5e-6,   'fast': 1},
     'claude-opus-4-1':   {'in': 15e-6,   'out': 75e-6, 'cw': 18.75e-6, 'cr': 1.5e-6,   'fast': 1},
@@ -73,11 +83,17 @@ def parse_entries(path):
                 continue
 
 
+UNPRICED_MODELS = set()
+
+
 def entry_cost(entry):
     msg = entry.get('message') or {}
     usage = msg.get('usage') or {}
     p = get_pricing(msg.get('model'))
     if not p:
+        # An unpriced model must NOT look like a free call. Record it so the
+        # caller can mark the total partial and warn on stderr.
+        UNPRICED_MODELS.add(canonical_model(msg.get('model')) or '<unknown>')
         return 0.0
     mult = p['fast'] if usage.get('speed') == 'fast' else 1
     base = (
@@ -184,6 +200,10 @@ def main():
         today_summary = summarize(today_entries)
         cents = int(round(today_summary['cost'] * 100))
         print(cents)
+        if UNPRICED_MODELS:
+            names = ', '.join(sorted(UNPRICED_MODELS))
+            print(f"[session-cost] PARTIAL total; unpriced model(s): {names}", file=sys.stderr)
+            return 3
         return 0
 
     session_path = files[-1]  # most recently modified
@@ -198,7 +218,13 @@ def main():
         out = {'session': session_summary, 'session_file': str(session_path)}
         if today_summary is not None:
             out['today'] = today_summary
+        out['partial'] = bool(UNPRICED_MODELS)
+        out['unpriced_models'] = sorted(UNPRICED_MODELS)
         print(json.dumps(out, indent=2))
+        if UNPRICED_MODELS:
+            names = ', '.join(sorted(UNPRICED_MODELS))
+            print(f"[session-cost] PARTIAL total; unpriced model(s): {names}", file=sys.stderr)
+            return 3
         return 0
 
     s = session_summary
@@ -212,6 +238,12 @@ def main():
     if today_summary is not None:
         t = today_summary
         print(f"Today:   {fmt_cost(t['cost']):>8}  ({t['calls']} calls)")
+    if UNPRICED_MODELS:
+        names = ', '.join(sorted(UNPRICED_MODELS))
+        print(f"WARNING: totals are PARTIAL - no pricing row for: {names}")
+        print("         Calls on those models counted as $0. Add them to PRICING.")
+        print(f"[session-cost] unpriced model(s): {names}", file=sys.stderr)
+        return 3
     return 0
 
 
