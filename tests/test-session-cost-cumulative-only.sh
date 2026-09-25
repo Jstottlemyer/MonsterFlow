@@ -113,6 +113,60 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# (d) Unknown models: machine-readable modes must never silently report success.
+#     Build an isolated CLAUDE_CONFIG_DIR fixture for the current cwd so this
+#     test is deterministic and does not depend on the developer's sessions.
+# ---------------------------------------------------------------------------
+
+fixture_root=$(mktemp -d)
+trap 'rm -rf "$fixture_root"' EXIT
+sanitized_cwd=$(pwd | sed 's#/#-#g')
+fixture_project="$fixture_root/projects/$sanitized_cwd"
+mkdir -p "$fixture_project"
+now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+cat >"$fixture_project/unknown-model.jsonl" <<EOF
+{"timestamp":"$now","message":{"id":"unknown-model-test","role":"assistant","model":"claude-zeta-9","usage":{"input_tokens":1000,"output_tokens":100}}}
+EOF
+
+set +e
+json_out=$(CLAUDE_CONFIG_DIR="$fixture_root" python3 "$SCRIPT" --json 2>"$fixture_root/json.err")
+json_exit=$?
+set -e
+if [ "$json_exit" -eq 3 ] && printf '%s' "$json_out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["partial"] is True; assert d["unpriced_models"] == ["claude-zeta-9"]'; then
+    pass "(d) --json marks unknown-model totals partial and exits 3"
+else
+    fail "(d) --json did not expose partial unknown-model pricing (exit=$json_exit, output='$json_out')"
+fi
+if grep -q 'PARTIAL total; unpriced model(s): claude-zeta-9' "$fixture_root/json.err"; then
+    pass "(d) --json emits unknown-model warning on stderr"
+else
+    fail "(d) --json missing unknown-model stderr warning"
+fi
+
+set +e
+cum_out=$(CLAUDE_CONFIG_DIR="$fixture_root" python3 "$SCRIPT" --cumulative-only 2>"$fixture_root/cumulative.err")
+cum_exit=$?
+set -e
+if [ "$cum_exit" -eq 3 ] && printf '%s' "$cum_out" | grep -qE '^[0-9]+
+
+echo ""
+echo "Results: $PASS passed, $FAIL failed"
+if [ "$FAIL" -gt 0 ]; then
+    exit 1
+fi
+exit 0
+; then
+    pass "(d) --cumulative-only preserves integer stdout and exits 3 for partial total"
+else
+    fail "(d) --cumulative-only contract/exit wrong (exit=$cum_exit, output='$cum_out')"
+fi
+if grep -q 'PARTIAL total; unpriced model(s): claude-zeta-9' "$fixture_root/cumulative.err"; then
+    pass "(d) --cumulative-only emits unknown-model warning on stderr"
+else
+    fail "(d) --cumulative-only missing unknown-model stderr warning"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 
