@@ -200,6 +200,10 @@ def main():
         today_summary = summarize(today_entries)
         cents = int(round(today_summary['cost'] * 100))
         print(cents)
+        if UNPRICED_MODELS:
+            names = ', '.join(sorted(UNPRICED_MODELS))
+            print(f"[session-cost] PARTIAL total; unpriced model(s): {names}", file=sys.stderr)
+            return 3
         return 0
 
     session_path = files[-1]  # most recently modified
@@ -214,7 +218,13 @@ def main():
         out = {'session': session_summary, 'session_file': str(session_path)}
         if today_summary is not None:
             out['today'] = today_summary
+        out['partial'] = bool(UNPRICED_MODELS)
+        out['unpriced_models'] = sorted(UNPRICED_MODELS)
         print(json.dumps(out, indent=2))
+        if UNPRICED_MODELS:
+            names = ', '.join(sorted(UNPRICED_MODELS))
+            print(f"[session-cost] PARTIAL total; unpriced model(s): {names}", file=sys.stderr)
+            return 3
         return 0
 
     s = session_summary
