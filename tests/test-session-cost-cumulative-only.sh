@@ -147,15 +147,7 @@ set +e
 cum_out=$(CLAUDE_CONFIG_DIR="$fixture_root" python3 "$SCRIPT" --cumulative-only 2>"$fixture_root/cumulative.err")
 cum_exit=$?
 set -e
-if [ "$cum_exit" -eq 3 ] && printf '%s' "$cum_out" | grep -qE '^[0-9]+
-
-echo ""
-echo "Results: $PASS passed, $FAIL failed"
-if [ "$FAIL" -gt 0 ]; then
-    exit 1
-fi
-exit 0
-; then
+if [ "$cum_exit" -eq 3 ] && printf '%s' "$cum_out" | grep -qE '^[0-9]+$'; then
     pass "(d) --cumulative-only preserves integer stdout and exits 3 for partial total"
 else
     fail "(d) --cumulative-only contract/exit wrong (exit=$cum_exit, output='$cum_out')"
