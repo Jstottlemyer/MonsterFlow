@@ -2,7 +2,7 @@
 # scripts/onboard.sh — post-install onboarding panel
 #
 # Re-run anytime:
-#   bash ~/Projects/MonsterFlow/scripts/onboard.sh
+#   bash <your MonsterFlow checkout>/scripts/onboard.sh
 #
 # Honours env vars set by install.sh:
 #   MONSTERFLOW_NON_INTERACTIVE=1  — suppress interactive prompts
@@ -34,7 +34,7 @@ cat <<'PANEL'
 │    1. cd into a project                                      │
 │    2. /flow            — see the workflow card               │
 │    3. /spec            — design your first feature           │
-│    4. open ~/Projects/MonsterFlow/dashboard/index.html       │
+│    4. open dashboard/index.html in your MonsterFlow checkout │
 │                                                              │
 PANEL
 

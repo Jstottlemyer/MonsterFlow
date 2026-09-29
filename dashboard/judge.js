@@ -99,7 +99,7 @@ function renderJudgeMain() {
       `<div class="card wide"><div class="empty">
         No judge data found yet. Run <code>/spec-review</code>, <code>/plan</code>,
         or <code>/check</code> on a feature in <code>docs/specs/&lt;feature&gt;/</code>,
-        then <code>bash ~/Projects/MonsterFlow/scripts/judge-dashboard-bundle.sh</code>.
+        then <code>bash ${decodeURIComponent(location.pathname).replace(/\/dashboard\/[^\/]*$/, "")}/scripts/judge-dashboard-bundle.sh</code>.
        </div></div>`
     );
     return;
@@ -403,7 +403,7 @@ window.__renderJudgeView = function () {
       document.getElementById("main").innerHTML =
         `<div class="card wide"><div class="empty">
           judge-bundle.js not found. Run:
-          <code>bash ~/Projects/MonsterFlow/scripts/judge-dashboard-bundle.sh</code>
+          <code>bash ${decodeURIComponent(location.pathname).replace(/\/dashboard\/[^\/]*$/, "")}/scripts/judge-dashboard-bundle.sh</code>
         </div></div>`;
       document.getElementById("tabs").innerHTML = "";
       return;

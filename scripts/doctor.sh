@@ -651,7 +651,7 @@ except Exception:
 
     # Owner-mode override — adopters should NEVER set this
     if [ -n "${MONSTERFLOW_OWNER:-}" ]; then
-        if [ "$PWD" = "$HOME/Projects/MonsterFlow" ]; then
+        if [ "$PWD" = "$(cd "$SCRIPT_DIR/.." && pwd -P)" ]; then
             echo "ok   MONSTERFLOW_OWNER=$MONSTERFLOW_OWNER (cwd matches repo — expected for owner)"
         else
             echo "WARN MONSTERFLOW_OWNER=$MONSTERFLOW_OWNER but cwd is not the MonsterFlow repo"
@@ -727,7 +727,7 @@ except Exception:
 
     echo "## Workflow Clone State"
     echo '```'
-    CLONE="$HOME/Projects/MonsterFlow"
+    CLONE="$(cd "$SCRIPT_DIR/.." && pwd -P)"
     if [ -d "$CLONE/.git" ]; then
         echo "Path: $CLONE"
         echo ""

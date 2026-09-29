@@ -242,7 +242,7 @@
     if (window.__GRAPHIFY_BUNDLE_MISSING) {
       const e = document.getElementById("error");
       e.style.display = "block";
-      e.textContent = "data-bundle.js not found — run: bash ~/Projects/MonsterFlow/scripts/dashboard-bundle.sh";
+      e.textContent = "data-bundle.js not found — run: bash " + decodeURIComponent(location.pathname).replace(/\/dashboard\/[^\/]*$/, "") + "/scripts/dashboard-bundle.sh";
     }
   });
 </script>
