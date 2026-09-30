@@ -10,7 +10,8 @@ Public API:
     deep_merge_tier_policy(base, override, allowed_keys=None) -> dict
     validate_tier_pins(tier_pins, persona_registry, security_floor) -> int
     assign_tiers(scored, opus_min, sonnet_min=1,
-                 remainder_tiebreak="sonnet", tier_pins=None) -> list
+                 remainder_tiebreak="sonnet", tier_pins=None,
+                 persona_registry=None, security_floor="opus") -> list
 
 Re-exports for resolver convenience:
     assert_baseline_subset, TagDriftError (from _tag_baseline)
@@ -200,6 +201,8 @@ def assign_tiers(
     sonnet_min: int = 1,
     remainder_tiebreak: Tier = "sonnet",
     tier_pins: dict | None = None,
+    persona_registry: dict[str, list[str]] | None = None,
+    security_floor: Tier = "opus",
 ) -> list[TierAssignment]:
     """Tier-mix per plan D6.
 
@@ -211,6 +214,12 @@ def assign_tiers(
     ranking. If pins push the opus cohort above the budget, the lowest-scoring
     non-pinned non-security persona is demoted to sonnet (D14 simplification
     for Slice 3; full accumulate-drop logic lives in the resolver).
+
+    Selected security-tagged personas are promoted to at least
+    security_floor even when they were not explicitly tier-pinned. When
+    possible, the lowest-scoring unpinned non-security Opus persona is demoted
+    so enforcing the floor does not increase the configured Opus seat count.
+    Explicit Opus pins are never demoted.
     """
     n = len(scored)
     if n == 0:
@@ -257,6 +266,42 @@ def assign_tiers(
             assignments[r["persona"]] = "opus"
         for r in unpinned[opus_budget_remaining:]:
             assignments[r["persona"]] = "sonnet"
+
+    # SEC-01 selected-persona floor: the floor is an execution guarantee,
+    # not only a validation rule for explicit tier pins. Auto-selected
+    # security personas must run at least at security_floor.
+    registry = persona_registry or {}
+    rank = {"sonnet": 0, "opus": 1}
+    floor_rank = rank[security_floor]
+    promoted_security: set[str] = set()
+    for r in ordered:
+        persona = r["persona"]
+        fit_tags = registry.get(persona) or []
+        current = assignments.get(persona, "sonnet")
+        if "security" in fit_tags and rank[current] < floor_rank:
+            assignments[persona] = security_floor
+            promoted_security.add(persona)
+
+    # Preserve the normal tier-mix cost envelope when possible. A security
+    # promotion consumes an existing Opus seat by demoting the lowest-scoring
+    # unpinned, non-security Opus persona. If all Opus seats are protected by
+    # explicit pins or the security floor, the floor wins and Opus count may
+    # exceed base_opus.
+    if promoted_security and security_floor == "opus":
+        current_opus = sum(1 for tier in assignments.values() if tier == "opus")
+        demotion_candidates = [
+            r["persona"]
+            for r in reversed(ordered)
+            if assignments.get(r["persona"]) == "opus"
+            and r["persona"] not in promoted_security
+            and "security" not in (registry.get(r["persona"]) or [])
+            and flat_pins.get(r["persona"]) != "opus"
+        ]
+        for persona in demotion_candidates:
+            if current_opus <= base_opus:
+                break
+            assignments[persona] = "sonnet"
+            current_opus -= 1
 
     # Hint: remainder_tiebreak is reflected by the sort + slice (default
     # behaviour favors sonnet for the *cut* persona on a tie because the

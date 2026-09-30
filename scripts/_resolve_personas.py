@@ -814,6 +814,8 @@ def run_with_tier(
         sonnet_min=1,
         remainder_tiebreak="sonnet",
         tier_pins=tier_pins or None,
+        persona_registry=registry,
+        security_floor="opus",  # TODO(slice4): read from constitution
     )
 
     # 8. Emit stdout (`<persona>:<tier>` + bare codex).
