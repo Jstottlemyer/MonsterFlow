@@ -198,6 +198,49 @@ axis_1_tag_matching() {
     teardown_case
 }
 
+
+##############################################################################
+# Axis 1b: SEC-01 floor applies to auto-selected personas, not only tier pins.
+# Reproduces the adopter bug: security-architect is persona-pinned into a
+# budget=3 panel but has a lower score than scope-discipline, so ordinary tier
+# mixing would assign it Sonnet. security_floor=opus must promote it while
+# preserving the normal 1-Opus / 2-Sonnet cost envelope by swapping seats.
+##############################################################################
+axis_1b_security_floor_auto_promotion() {
+    setup_case
+    local name="axis-1b: selected security persona is auto-promoted to opus"
+    local slug="security-floor-auto"
+    write_spec "$slug" "docs, refactor" ""
+    write_config '{"agent_budget": 3, "persona_pins": {"check": ["scope-discipline", "security-architect"]}}'
+
+    local rc; rc=$(run_resolver check --with-tier --feature "$slug" --emit-selection-json)
+    if [ "$rc" != "0" ]; then
+        _fail "$name" "exit=$rc (expected 0)"; _dump_case; teardown_case; return
+    fi
+    if ! grep -qxF "security-architect:opus" "$CASE_OUT"; then
+        _fail "$name" "security-architect was not promoted to opus"
+        _dump_case; teardown_case; return
+    fi
+
+    local sel="$CASE_PROJECT/docs/specs/$slug/check/selection.json"
+    if ! python3 -c "
+import json
+d = json.load(open('$sel'))
+rows = {r['persona']: r['tier'] for r in d.get('selected', [])}
+assert rows.get('security-architect') == 'opus', rows
+tpa = d.get('tier_policy_applied') or {}
+assert tpa.get('security_floor') == 'opus', tpa
+assert tpa.get('opus_count_actual') == 1, tpa
+assert tpa.get('sonnet_count_actual') == 2, tpa
+" 2>>"$CASE_ERR"; then
+        _fail "$name" "selection.json did not match emitted tiers/floor"
+        _dump_case; teardown_case; return
+    fi
+
+    _pass "$name"
+    teardown_case
+}
+
 ##############################################################################
 # Axis 2: tier (D6) — N=6 panel, opus_min=1 default → opus=3, sonnet=3
 ##############################################################################
@@ -543,6 +586,7 @@ echo ""
 
 echo "--- Matrix axes (1-9) ---"
 axis_1_tag_matching
+axis_1b_security_floor_auto_promotion
 axis_2_tier_d6
 axis_3_budget_lt_opus_min
 axis_4_opus_min_override
