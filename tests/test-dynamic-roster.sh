@@ -203,8 +203,9 @@ axis_1_tag_matching() {
 # Axis 1b: SEC-01 floor applies to auto-selected personas, not only tier pins.
 # Reproduces the adopter bug: security-architect is persona-pinned into a
 # budget=3 panel but has a lower score than scope-discipline, so ordinary tier
-# mixing would assign it Sonnet. security_floor=opus must promote it while
-# preserving the normal 1-Opus / 2-Sonnet cost envelope by swapping seats.
+# mixing can assign it Sonnet. security_floor=opus must promote it. The third
+# selected persona is risk, which is also fit_tags:[security], so this exact
+# adopter panel correctly requires 2 Opus / 1 Sonnet.
 ##############################################################################
 axis_1b_security_floor_auto_promotion() {
     setup_case
@@ -221,6 +222,10 @@ axis_1b_security_floor_auto_promotion() {
         _fail "$name" "security-architect was not promoted to opus"
         _dump_case; teardown_case; return
     fi
+    if ! grep -qxF "risk:opus" "$CASE_OUT"; then
+        _fail "$name" "risk (also security-tagged) was not kept/promoted at opus"
+        _dump_case; teardown_case; return
+    fi
 
     local sel="$CASE_PROJECT/docs/specs/$slug/check/selection.json"
     if ! python3 -c "
@@ -228,10 +233,11 @@ import json
 d = json.load(open('$sel'))
 rows = {r['persona']: r['tier'] for r in d.get('selected', [])}
 assert rows.get('security-architect') == 'opus', rows
+assert rows.get('risk') == 'opus', rows
 tpa = d.get('tier_policy_applied') or {}
 assert tpa.get('security_floor') == 'opus', tpa
-assert tpa.get('opus_count_actual') == 1, tpa
-assert tpa.get('sonnet_count_actual') == 2, tpa
+assert tpa.get('opus_count_actual') == 2, tpa
+assert tpa.get('sonnet_count_actual') == 1, tpa
 " 2>>"$CASE_ERR"; then
         _fail "$name" "selection.json did not match emitted tiers/floor"
         _dump_case; teardown_case; return
