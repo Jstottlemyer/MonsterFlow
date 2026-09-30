@@ -55,6 +55,10 @@ SEED: dict[str, list[str]] = {
 
 VALID_GATES = set(SEED.keys())
 
+# Current constitution default. Slice 4 will plumb this from pipeline-config;
+# until then keep one effective value for validation, assignment, and audit.
+SECURITY_FLOOR = "opus"
+
 # Gate name → persona directory name. spec-review uses personas/review/;
 # design and check share their gate name as the directory.
 GATE_TO_DIR: dict[str, str] = {
@@ -546,6 +550,7 @@ def _emit_v2_selection_json(
     codex_authed: bool,
     codex_disabled: bool,
     cli_override_seen: bool,
+    security_floor: str,
 ) -> None:
     """Write selection.json v2 (schema_version:2, prompt_version selection-emit@2.0)."""
     gate_dir = feature_dir / gate
@@ -564,7 +569,7 @@ def _emit_v2_selection_json(
         "opus_min": int(opus_min or 0),
         "opus_count_actual": opus_count,
         "sonnet_count_actual": sonnet_count,
-        "security_floor": "opus",
+        "security_floor": security_floor,
     }
     if tier_pins:
         tpa["tier_pins"] = tier_pins
@@ -752,7 +757,7 @@ def run_with_tier(
     tier_pins.update(cli_pins_gate_scoped)
 
     if tier_pins:
-        rc = validate_tier_pins(tier_pins, registry, "opus")  # TODO(slice4): read from constitution
+        rc = validate_tier_pins(tier_pins, registry, SECURITY_FLOOR)  # TODO(slice4): read from constitution
         if rc != 0:
             return rc
 
@@ -802,6 +807,20 @@ def run_with_tier(
         warn(f"no personas selected for gate '{gate}' (degenerate state)")
         return 3
 
+    # SEC-01: security_floor is an assignment floor, not only a validator for
+    # explicit tier pins. Treat every selected security-tagged persona as an
+    # implicit floor pin unless the operator/spec already supplied a valid pin.
+    # This lets assign_tiers preserve its existing seat accounting: floor
+    # personas occupy Opus seats first, and only overflow the base mix when the
+    # selected security cohort itself is larger than the normal Opus budget.
+    assignment_tier_pins: dict = dict(tier_pins)
+    auto_floor_personas: list[str] = []
+    if SECURITY_FLOOR == "opus":
+        for slug in chosen:
+            if "security" in registry.get(slug, []) and slug not in assignment_tier_pins:
+                assignment_tier_pins[slug] = "opus"
+                auto_floor_personas.append(slug)
+
     # 6. Score: use rankings + cold-start defaults.
     rankings_path = repo_dir / "dashboard" / "data" / "persona-rankings.jsonl"
     panel = [(slug, registry[slug]) for slug in chosen]
@@ -813,7 +832,7 @@ def run_with_tier(
         opus_min=opus_min_effective,
         sonnet_min=1,
         remainder_tiebreak="sonnet",
-        tier_pins=tier_pins or None,
+        tier_pins=assignment_tier_pins or None,
     )
 
     # 8. Emit stdout (`<persona>:<tier>` + bare codex).
@@ -850,6 +869,7 @@ def run_with_tier(
             codex_authed=codex_avail,
             codex_disabled=codex_disabled,
             cli_override_seen=(opus_min_arg is not None) or bool(tier_pins),
+            security_floor=SECURITY_FLOOR,
         )
 
     if args.why:
@@ -862,6 +882,11 @@ def run_with_tier(
               file=sys.stderr)
         print(f"opus_min: {opus_min_effective}; tier_pins: {tier_pins or '(none)'}",
               file=sys.stderr)
+        print(
+            f"security_floor: {SECURITY_FLOOR}; auto_floor: "
+            f"{', '.join(sorted(auto_floor_personas)) or '(none)'}",
+            file=sys.stderr,
+        )
 
     return 0
 
