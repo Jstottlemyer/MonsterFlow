@@ -4,9 +4,10 @@
 #
 # SEC-01 floor-enforcement fixtures for dynamic-roster-per-gate Slice 5 (T20).
 #
-# Plan D7 enforces SEC-01 at two sites:
-#   1. `_tier_assign.validate_tier_pins`  (spec-level tier_pins block)
-#   2. CLI `--tier-pin` parse site in `_resolve_personas.py`
+# Plan D7/SEC-01 enforces the floor at three surfaces:
+#   1. `_tier_assign.validate_tier_pins` rejects spec-level downgrades
+#   2. CLI `--tier-pin` rejects interactive downgrades
+#   3. automatic tier assignment promotes selected security personas to the floor
 #
 # Spec AC A21 (line 520) covers spec-level rejection; CLI rejection is the
 # operational guard that prevents an interactive operator from downgrading a
@@ -263,6 +264,71 @@ if printf '%s' "$err" | grep -qF "$SEC01_FIXED"; then
 else
   _fail "A6 canonical fixed-string match" \
         "expected substring='$SEC01_FIXED' actual='$err'"
+fi
+
+# ---------------------------------------------------------------------------
+# Assertion 7: Automatic assignment honors the security floor.
+#
+# Regression for an adopter run where selection.json reported
+# security_floor=opus while security-architect actually emitted as sonnet.
+# Budget=3 with two check pins reproduces the small-panel shape:
+# scope-discipline + security-architect + risk. Both security-tagged personas
+# must run at Opus; the non-security scope-discipline seat remains Sonnet.
+# ---------------------------------------------------------------------------
+case_ "A7 automatic assignment promotes selected security personas to Opus"
+
+auto_dir="$TMPROOT/a7"
+auto_home="$TMPROOT/a7-home"
+mkdir -p "$auto_dir/docs/specs/sec01-auto" "$auto_home/.config/monsterflow"
+cat > "$auto_dir/docs/specs/sec01-auto/spec.md" <<'EOF'
+---
+name: sec01-auto
+tags: [security]
+tags_provenance:
+  baseline: [security]
+---
+# Body
+oauth token authorization review.
+EOF
+cat > "$auto_home/.config/monsterflow/config.json" <<'EOF'
+{
+  "$schema_version": 1,
+  "agent_budget": 3,
+  "persona_pins": {
+    "check": ["scope-discipline", "security-architect"]
+  },
+  "codex_disabled": true
+}
+EOF
+
+set +e
+out="$(HOME="$auto_home" PROJECT_DIR="$auto_dir" MONSTERFLOW_CODEX_AUTH=0 \
+  bash "$RESOLVER" check --feature sec01-auto --with-tier --emit-selection-json 2>"$TMPROOT/a7.err")"
+rc=$?
+set -e
+
+selection="$auto_dir/docs/specs/sec01-auto/check/selection.json"
+if [ "$rc" = "0" ] \
+  && printf '%s\n' "$out" | grep -qx 'security-architect:opus' \
+  && printf '%s\n' "$out" | grep -qx 'risk:opus' \
+  && printf '%s\n' "$out" | grep -qx 'scope-discipline:sonnet' \
+  && python3 - "$selection" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+tiers = {row["persona"]: row["tier"] for row in data["selected"]}
+assert tiers["security-architect"] == "opus", tiers
+assert tiers["risk"] == "opus", tiers
+assert tiers["scope-discipline"] == "sonnet", tiers
+policy = data["tier_policy_applied"]
+assert policy["security_floor"] == "opus", policy
+assert policy["opus_count_actual"] == 2, policy
+assert policy["sonnet_count_actual"] == 1, policy
+PY
+then
+  _ok "A7 automatic security floor matches emitted tiers + selection.json"
+else
+  _fail "A7 automatic security floor matches emitted tiers + selection.json" \
+        "rc=$rc out='$out' err='$(cat "$TMPROOT/a7.err" 2>/dev/null)'"
 fi
 
 # ---------------------------------------------------------------------------
