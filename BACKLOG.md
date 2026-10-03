@@ -10,6 +10,12 @@ Move an item to a `docs/specs/<feature>/spec.md` (via `/spec`) when you're ready
 
 ---
 
+## Captured 2026-10-02 (session ideas)
+
+- **`build-pr-stack-materialize` (spec candidate, M)** — `/build` commits by wave and task, but `design.md`'s PR stack groups tasks differently, so publishing the stack today is a manual history rebuild: reorder commits into PR order, split commits that span PRs, prove every PR tip green on its own, check the final tree equals the tested tip, then push and open stacked drafts. Done by hand for Red Rabbit's 12-PR canon-isolation stack (2026-10-02); the spike scripts and the step list are in `scripts/spike/stack-materialize/`. Either have `/build` commit per PR from the start (simplest: order waves and commits by the plan's PR map), or add a post-build `materialize` step that does the rebuild with the project's verification commands. **Why:** without it the plan's PR stack is aspirational, and the manual rebuild is long and error-prone (one commit had to be split by hunk; dependency declarations had to move). **Entry points:** `commands/build.md` (commit grouping, PR open step), `scripts/spike/stack-materialize/`. **Size:** M. **Sequencing:** unblocked; pairs with `build-codex-workers`.
+
+---
+
 ## Captured 2026-06-12 (session ideas)
 
 - **`spec-lifecycle-status` (spec candidate, S)** — spec dirs carry no machine-readable lifecycle state, so any survey of `docs/specs/` misreads them: a 2026-06-12 repo evaluation classified shipped features (`persona-metrics`, `pipeline-wiki-integration`, `account-type-agent-scaling`) as "abandoned mid-pipeline" because their artifacts use the older flat-file layout, while the only genuinely parked spec (`docs-rewrite`) and two intentional drafts (`install-sh-manifest-emit`, `install-sh-claude-md-ownership`) looked identical to in-flight work. Add a `status:` frontmatter field to spec.md (`draft | in-flight | shipped | parked`), have `/spec` and `/build` maintain it (set `shipped` at merge), and add a `/wrap` Phase 2 check that flags specs sitting in `draft`/`in-flight` untouched >30 days for archive-or-demote. **Why:** prevents false "abandoned spec" alarms and gives the dashboard/wrap a truthful spec-state source instead of artifact-presence heuristics. **Entry points:** `commands/spec.md` (frontmatter write), `commands/build.md` (ship transition), `commands/wrap.md` Phase 2, plus a one-time backfill pass over the 23 existing spec dirs. **Size:** S. **Sequencing:** unblocked.
