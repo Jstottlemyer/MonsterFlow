@@ -193,7 +193,7 @@ RANKINGS_PRESENT_BEFORE=0
 [ -f "$RANKINGS_FILE" ] && RANKINGS_PRESENT_BEFORE=1
 
 if [ -f "$PERSONA_VALUE_BIN" ]; then
-  python3 "$PERSONA_VALUE_BIN" --best-effort 2>&1 || true
+  python3 "$PERSONA_VALUE_BIN" --best-effort --out "$RANKINGS_FILE" 2>&1 || true
 fi
 
 # v3 trigger: invoke persona-metrics-validator subagent ONLY on first creation.
