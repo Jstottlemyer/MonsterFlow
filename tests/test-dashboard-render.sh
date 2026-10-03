@@ -24,6 +24,7 @@ set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 HTML_FILE="$ROOT_DIR/dashboard/index.html"
 JS_FILE="$ROOT_DIR/dashboard/persona-insights.js"
+JUDGE_JS_FILE="$ROOT_DIR/dashboard/judge.js"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -52,6 +53,12 @@ if command -v node >/dev/null 2>&1; then
   fi
 else
   echo "SKIP: node not available; using textual JS source checks only"
+fi
+
+if grep -qF 's.outcome === "addressed"' "$JUDGE_JS_FILE"; then
+  note_pass "Judge survival panel counts current schema outcome=addressed"
+else
+  note_fail "Judge survival panel ignores current schema outcome=addressed"
 fi
 
 # ------------------------------------------------------------------------------
