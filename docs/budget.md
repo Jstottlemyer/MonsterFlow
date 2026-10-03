@@ -69,7 +69,9 @@ Example:
       }
     },
     "codex_disabled": {"type": "boolean"},
-    "tier_hint": {"type": "string"}
+    "tier_hint": {"type": "string"},
+    "build_workers": {"type": "string", "enum": ["claude", "codex"]},
+    "codex_worker_model": {"type": "string"}
   },
   "additionalProperties": true
 }
@@ -85,6 +87,8 @@ Example:
 | `persona_pins` | object | `{}` | Per-gate pin lists. Each entry validated against on-disk personas |
 | `codex_disabled` | bool | `false` | Set `true` to opt out of Codex even when authenticated |
 | `tier_hint` | string | absent | Display-only context (e.g. `"pro"`, `"free-or-max"`) |
+| `build_workers` | `"claude"` \| `"codex"` | `"claude"` | Who implements `/build` tasks. `codex` routes each task to a Codex CLI worker through `scripts/build-codex-worker.sh`; the orchestrator still verifies, commits and owns remote actions. See `commands/build.md` Phase 2 |
+| `codex_worker_model` | string | absent (Codex default) | Model for Codex `/build` workers, passed as `codex exec -m`. Check it with `scripts/build-codex-worker.sh --probe-model` |
 
 Unknown top-level keys are preserved across writes (read-modify-write
 in `install.sh`), enabling forward-compat with future shared config.
