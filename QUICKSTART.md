@@ -290,6 +290,43 @@ present → full roster (existing-user behavior preserved).
 
 Full reference + schema + reset paths: [`docs/budget.md`](docs/budget.md).
 
+## 6c. Codex implementation workers for `/build` (optional, opt-in)
+
+By default `/build` implements each task with Claude subagents. You can hand
+the implementation of each task to Codex workers instead, for example to use
+your OpenAI quota or a different model. Claude Code stays the orchestrator:
+the task graph, wave approvals, verification, commits and every push or PR
+step are unchanged. This is **additive**: without the setting, `/build`
+behaves exactly as before.
+
+Needs the Codex CLI installed and signed in (see [2b](#2b-enable-codex-multi-model-reviews-optional)).
+
+```bash
+# Turn it on (and optionally pin a model) in ~/.config/monsterflow/config.json
+python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/.config/monsterflow/config.json")
+c = json.load(open(p)) if os.path.exists(p) else {"$schema_version": 1}
+c["build_workers"] = "codex"
+# c["codex_worker_model"] = "<model>"   # optional; default is Codex's own
+json.dump(c, open(p, "w"), indent=2)
+PY
+
+# Check the model works on your account before a long build
+bash scripts/build-codex-worker.sh --probe-model
+
+# Turn it off: set "build_workers": "claude", or delete the key
+```
+
+You can also switch for a single run without editing config: tell `/build`
+"use Codex workers" (or "use Claude subagents") at a wave approval prompt.
+
+Defaults: `build_workers` absent = `claude`. If Codex isn't installed or
+signed in, `/build` falls back to Claude subagents and says so.
+
+Full reference, sandbox limits, project-specific worker rules and
+troubleshooting: [`docs/build-workers.md`](docs/build-workers.md).
+
 ## 7. Run the pipeline overnight (optional)
 
 Write a spec, then let `/autorun` drive the rest while you sleep — no interactive session needed.

@@ -4,6 +4,16 @@ All notable changes to `MonsterFlow` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`build-codex-workers` (opt-in)** — `/build` can hand each plan task to a Codex CLI worker instead of a Claude subagent: set `"build_workers": "codex"` in `~/.config/monsterflow/config.json` (optionally `"codex_worker_model"`), or ask for it at a wave prompt. Additive: with the key absent `/build` is unchanged, and it falls back to Claude subagents when Codex isn't installed or signed in. Claude Code stays the orchestrator (task graph, approvals, verification, commits, remote actions). New `scripts/build-codex-worker.sh` (sandboxed `codex exec`, workspace-write, network off; `--probe-model`), generic `templates/build-worker-preamble.md` plus an optional per-repo `.monsterflow/build-worker-preamble.md`. How to switch: QUICKSTART §6c; full reference: `docs/build-workers.md`. Spec: `docs/specs/build-codex-workers/spec.md`.
+- **`tests/test-build-codex-worker.sh`** — 46 checks with a PATH-stub fake `codex` (the real CLI is never invoked): sandbox flags, prompt assembly order, model precedence, exit codes, stdin never left open, the review script, `build.md` anchors, config schema and docs.
+
+### Fixed
+
+- **`/build` Phase 3 Codex review saw nothing.** It ran `codex exec review --uncommitted`, but `/build` commits every wave. New `scripts/build-codex-review.sh` reviews the commits since the build's base plus uncommitted changes, with custom instructions, in a read-only sandbox, and closes stdin (a backgrounded `codex exec` with open stdin blocks forever on "Reading additional input from stdin").
+- **`/build` Phase 4 called `scripts/build-mark-addressed.py` relative to the project**, which only exists inside the MonsterFlow repo; it now uses `<REPO_DIR>/scripts/build-mark-addressed.py`.
+
 ## [0.18.0] - 2026-05-17
 
 ### Added

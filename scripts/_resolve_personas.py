@@ -75,6 +75,8 @@ CONFIG_SCHEMA: dict[str, Any] = {
         },
         "codex_disabled": {"type": "boolean"},
         "tier_hint": {"type": "string"},
+        "build_workers": {"type": "string", "enum": ["claude", "codex"]},
+        "codex_worker_model": {"type": "string"},
     },
     "additionalProperties": True,
 }
