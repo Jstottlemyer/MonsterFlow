@@ -78,6 +78,8 @@
 ║  /goal       autonomous pipeline - EDUCATIONAL (prose below) ║
 ║  /rewind     roll back code+history to checkpoint - OPT-IN   ║
 ║  /autofix-pr  cloud PR watcher - AVOID (remote session)      ║
+║  /doctor prompt-audit  audit CLAUDE.md - EDUCATIONAL         ║
+║  /plugin-authoring  write Claude Mods - EDUCATIONAL          ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  AGENTS (on-disk): review(7) design(7) check(6) cr(9)          ║
