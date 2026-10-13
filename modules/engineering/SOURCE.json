@@ -5,7 +5,7 @@
     "scope": "inherited cascade lessons only; see historical provenance; no CGG content copied or edited"
   },
   "bundle_version": "0.3.3-draft",
-  "canonical_layout": "skills/engineering/",
+  "canonical_layout": "modules/engineering/",
   "canonical_source_commit": null,
   "fidelity_corrections": [
     "G1 conditional specialist applicability",
@@ -16,7 +16,7 @@
   ],
   "files_sha256": {
     "LICENSE": "2bdbec7ee46c45a164331621fae99fcf4ed4c2004149fa4c06b50752ea9013ce",
-    "README.md": "4f8f4f0aab135faff254bb76f0a198a07141f7b2b9cf9cf679fbff7ac6e2c0ed",
+    "README.md": "90c583d9137e3ba010a360a0e0d67460e11ed5b3ae82d11bb2722d058a6a2c44",
     "coverage.json": "eef8f277536371ad05769d9c8879f3571e8bfe4e20a17b57f31b2559161a1438",
     "skills/adversarial-review/LICENSE": "2bdbec7ee46c45a164331621fae99fcf4ed4c2004149fa4c06b50752ea9013ce",
     "skills/adversarial-review/SKILL.md": "52170d0c0c32af73ec4066d5db291b6c3e9d290387bc794fb125e348ab78a00e",
@@ -84,9 +84,9 @@
     "skills/scope-review/SKILL.md": "547c49378b8293e26649f4f053b94510f7597b50e8cb69d4b9c22375f170e75b"
   },
   "generator": {
-    "path": "scripts/build_engineering_plugin.py",
-    "sha256": "1af1932a2684d46af2047ea00e18571212670217a0caa3e77415c3ae2b1912e7",
-    "version": "1.1.0"
+    "path": "modules/engineering/scripts/build_plugin.py",
+    "sha256": "0c5a621dc05178fc73085d8c46ea0aa86204032af770f178a5e24d8b997e3e3d",
+    "version": "1.1.1"
   },
   "host_policy_additions": [
     "external-premise activation before dependent readiness",
@@ -2519,6 +2519,12 @@
     "skills/scope-review/SKILL.md": "547c49378b8293e26649f4f053b94510f7597b50e8cb69d4b9c22375f170e75b"
   },
   "predecessor_version": "0.3.2-draft",
+  "relocation": {
+    "from_commit": "23eb73d11bb2a663e541e44bd17bcb698c4e0104",
+    "from_layout": "skills/engineering/",
+    "prior_source_manifest_sha256": "fa6dd70785549f566872ed01b73be6efcc02ea029ff2d30787594e0ee6868bf2",
+    "scope": "single module relocation and packaging paths only; skill bytes and native source mappings unchanged"
+  },
   "review_entrypoint_additions": {
     "adversarial-review": "optional native-derived design/plan challenge; host independence/not-run disclosure adaptations",
     "review-synthesis": "routes to existing judge/synthesis; no new native criteria coverage"

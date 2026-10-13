@@ -8,7 +8,7 @@
       "name": "mf-engineering-skills-draft",
       "source": {
         "source": "local",
-        "path": "./dist/mf-engineering-skills-draft"
+        "path": "./modules/engineering/dist/mf-engineering-skills-draft"
       },
       "policy": {
         "installation": "AVAILABLE",

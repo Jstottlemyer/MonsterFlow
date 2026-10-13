@@ -1,8 +1,9 @@
 """Structural package invariants and rejection controls, discovered by unittest."""
 import copy, importlib.util, io, json, unittest, zipfile
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[2]
-spec=importlib.util.spec_from_file_location('build_engineering_plugin',ROOT/'scripts/build_engineering_plugin.py')
+ROOT=Path(__file__).resolve().parents[1]
+REPO=ROOT.parents[1]
+spec=importlib.util.spec_from_file_location('build_engineering_plugin',ROOT/'scripts/build_plugin.py')
 build=importlib.util.module_from_spec(spec);spec.loader.exec_module(build)
 
 class PackageTests(unittest.TestCase):
@@ -25,12 +26,12 @@ class PackageTests(unittest.TestCase):
    self.assertTrue(all(i.date_time==(1980,1,1,0,0,0) for i in z.infolist()))
   self.assertFalse(any(k.startswith(('tests/','results/','scripts/','integrations/')) for k in files))
  def test_portable_marketplace_entry(self):
-  marketplace=json.loads((ROOT/'.agents/plugins/marketplace.json').read_text())
+  marketplace=json.loads((REPO/'.agents/plugins/marketplace.json').read_text())
   self.assertEqual(marketplace['name'],'mf-engineering-draft')
   self.assertEqual(len(marketplace['plugins']),1)
   entry=marketplace['plugins'][0]
   self.assertEqual(entry['name'],self.plugin['name'])
-  self.assertEqual(entry['source'],{'source':'local','path':'./dist/'+self.plugin['name']})
+  self.assertEqual(entry['source'],{'source':'local','path':'./modules/engineering/dist/'+self.plugin['name']})
   self.assertEqual(entry['policy'],{'installation':'AVAILABLE','authentication':'ON_INSTALL'})
   self.assertEqual(entry['category'],'Productivity')
   self.assertTrue(marketplace['interface']['displayName'])
@@ -38,10 +39,10 @@ class PackageTests(unittest.TestCase):
   self.assertEqual(set(entry),{'name','source','policy','category'})
  def test_marketplace_source_resolves_extracted_plugin(self):
   import tempfile
-  marketplace=json.loads((ROOT/'.agents/plugins/marketplace.json').read_text())
+  marketplace=json.loads((REPO/'.agents/plugins/marketplace.json').read_text())
   name,files=build.members()
   with tempfile.TemporaryDirectory(prefix='mf-marketplace-discovery-') as tmp:
-   repo=Path(tmp);dist=repo/'dist';dist.mkdir()
+   repo=Path(tmp);dist=repo/'modules/engineering/dist';dist.mkdir(parents=True)
    with zipfile.ZipFile(io.BytesIO(build.archive(name,files))) as z:z.extractall(dist)
    source=marketplace['plugins'][0]['source']['path']
    self.assertTrue(source.startswith('./'))

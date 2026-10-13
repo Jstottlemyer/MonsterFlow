@@ -10,8 +10,8 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 ROOT=Path(__file__).resolve().parents[1]
-CANON=ROOT/'skills/engineering'
-VERSION='1.1.0'
+CANON=ROOT
+VERSION='1.1.1'
 SCHEMA_ASSERTIONS={'type','properties','required','additionalProperties','const','minLength','maxLength','pattern','items'}
 SCHEMA_ANNOTATIONS={'$schema','$id','title','description'}
 
@@ -79,7 +79,8 @@ def canonical_identity():
  source=json.loads((CANON/'SOURCE.json').read_text());actual={}
  for p in sorted(CANON.rglob('*')):
   ensure(not p.is_symlink(),'canonical symlink '+str(p.relative_to(CANON)))
-  if p.is_file() and p.name!='SOURCE.json': actual[str(p.relative_to(CANON))]=digest(p.read_bytes())
+  rel=str(p.relative_to(CANON))
+  if p.is_file() and (rel in ['LICENSE','README.md','coverage.json'] or rel.startswith('skills/')): actual[rel]=digest(p.read_bytes())
  ensure(source['files_sha256']==actual,'canonical member hashes stale or inventory changed')
  for name in source['unchanged_existing_modules']:
   for k,h in source['predecessor_files_sha256'].items():
