@@ -24,6 +24,37 @@ class PackageTests(unittest.TestCase):
    self.assertTrue(all(p.startswith(name+'/') and '..' not in Path(p).parts for p in z.namelist()))
    self.assertTrue(all(i.date_time==(1980,1,1,0,0,0) for i in z.infolist()))
   self.assertFalse(any(k.startswith(('tests/','results/','scripts/','integrations/')) for k in files))
+ def test_portable_marketplace_entry(self):
+  marketplace=json.loads((ROOT/'.agents/plugins/marketplace.json').read_text())
+  self.assertEqual(marketplace['name'],'mf-engineering-draft')
+  self.assertEqual(len(marketplace['plugins']),1)
+  entry=marketplace['plugins'][0]
+  self.assertEqual(entry['name'],self.plugin['name'])
+  self.assertEqual(entry['source'],{'source':'local','path':'./dist/'+self.plugin['name']})
+  self.assertEqual(entry['policy'],{'installation':'AVAILABLE','authentication':'ON_INSTALL'})
+  self.assertEqual(entry['category'],'Productivity')
+  self.assertTrue(marketplace['interface']['displayName'])
+  self.assertEqual(set(marketplace),{'name','interface','plugins'})
+  self.assertEqual(set(entry),{'name','source','policy','category'})
+ def test_marketplace_source_resolves_extracted_plugin(self):
+  import tempfile
+  marketplace=json.loads((ROOT/'.agents/plugins/marketplace.json').read_text())
+  name,files=build.members()
+  with tempfile.TemporaryDirectory(prefix='mf-marketplace-discovery-') as tmp:
+   repo=Path(tmp);dist=repo/'dist';dist.mkdir()
+   with zipfile.ZipFile(io.BytesIO(build.archive(name,files))) as z:z.extractall(dist)
+   source=marketplace['plugins'][0]['source']['path']
+   self.assertTrue(source.startswith('./'))
+   self.assertNotIn('..',Path(source).parts)
+   plugin_root=(repo/source).resolve()
+   self.assertTrue(plugin_root.is_relative_to(repo.resolve()))
+   manifest=json.loads((plugin_root/'plugin.json').read_text())
+   self.assertEqual(manifest,self.plugin)
+   discovered={p.parent.name for p in (plugin_root/'skills').glob('*/SKILL.md')}
+   self.assertEqual(discovered,set(build.canonical_identity()['module_sources']))
+   self.assertEqual(len(discovered),14)
+   actual={str(p.relative_to(plugin_root)):p.read_bytes() for p in plugin_root.rglob('*') if p.is_file()}
+   self.assertEqual(actual,files)
  def test_forbidden_top_level_fields_rejected(self):
   for key in ['skills','interface','mcpServers']:
    data=copy.deepcopy(self.plugin);data[key]={}

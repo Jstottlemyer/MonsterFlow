@@ -94,3 +94,6 @@ personal/
 
 # followups.jsonl flock files — intentionally not unlinked on release (see scripts/_followups_lock.py)
 docs/specs/*/.followups.jsonl.lock
+
+# Generated portable Codex package and extracted marketplace payload
+/dist/

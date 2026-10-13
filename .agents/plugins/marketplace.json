@@ -1,0 +1,20 @@
+{
+  "name": "mf-engineering-draft",
+  "interface": {
+    "displayName": "MF Portable Engineering Draft"
+  },
+  "plugins": [
+    {
+      "name": "mf-engineering-skills-draft",
+      "source": {
+        "source": "local",
+        "path": "./dist/mf-engineering-skills-draft"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
