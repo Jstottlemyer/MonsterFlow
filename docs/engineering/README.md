@@ -10,6 +10,12 @@ This source home keeps the portable module together and out of `.claude/skills/`
 
 The adaptation pins MF 0.18.0 at `53de60aa005126d5ee8a1b23ffc4f775c1cb5a25`. At upstream base `2513b51dab60588b8b0972aeaee934108c0f2b39`, 51 of its 55 mapped source files match, `commands/build.md` differs, and `scripts/build-codex-review.sh`, `scripts/build-codex-worker.sh`, and `templates/build-worker-preamble.md` are absent. This contribution preserves the existing extraction rather than retargeting its criteria. All 55 original source hashes were verified against the pinned native checkout before packaging. Source hash identity is not behavioral validation.
 
+## Vendor-neutral module and integrations
+
+The portable guidance and criteria in `skills/engineering/` form the shared core. Host packaging lives separately under `integrations/`; the initial existing integration is `integrations/codex/`. Later Claude or other host wrappers can sit alongside it and reuse the same canonical core, without separately edited skill copies. This draft introduces no integration registry or framework.
+
+The extracted artifact is an Agent Plugins 1.0 skills-only manifest and Codex-oriented export, not an OpenAPI specification, API server or OpenAPI plugin. No such OpenAPI artifact was found in the prepared contribution. If “OpenAPI plugin” denotes a distinct required artifact, its identity and source must be supplied before adding it; this draft does not invent that component. The current PR therefore delivers the existing shared guidance and initial Codex package, with future integrations left unimplemented.
+
 ## Local checks and export
 
 Python 3.9+ and PyYAML must already be available; these commands do not install dependencies:
