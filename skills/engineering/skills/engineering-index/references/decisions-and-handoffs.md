@@ -1,0 +1,5 @@
+# Material decisions and continuity
+
+For material findings, consolidate by failure mechanism and next action. Keep source references and a disposition for each: must-fix, accepted/deferred risk, rejected with reason, or unresolved decision. Retain material disagreements, both positions and resolution rationale. Each retained item needs a next action or explicit risk acceptance by the existing authority; reviewer votes do not create authority. Never drop a blocker or soften an evidenced required failure in synthesis. Resolved history is context; reopen it only for a current contract violation or materially new evidence.
+
+At a material stage handoff, update or return one existing durable project/Dot locator with the artifact/version, required outcomes, material dispositions and accepted risks, next dependency, remaining evidence and holds. Use authorized persistence, not a new sidecar engine. If no durable mechanism is available or writable, disclose that limit and supply a compact handoff for authorized persistence. A trivial task needs no extra file or ceremony. The next worker should recover the governing contract without hidden conversation context.
