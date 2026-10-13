@@ -23,6 +23,7 @@ TESTS=(
   test-hooks.sh
   test-agents.sh
   test-skills.sh
+  test-portable-engineering.sh
   test-bump-version.sh
   # token-economics tests (cheapest first per code-review rec)
   test-no-raw-print.sh
