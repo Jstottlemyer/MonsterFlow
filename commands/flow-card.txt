@@ -78,6 +78,9 @@
 ║  /goal       autonomous pipeline - EDUCATIONAL (prose below) ║
 ║  /rewind     roll back code+history to checkpoint - OPT-IN   ║
 ║  /autofix-pr  cloud PR watcher - AVOID (remote session)      ║
+║  /advisor    second-model guidance - OPT-IN (token cost)     ║
+║  /plugin-authoring  write mods extension - EDUCATIONAL       ║
+║  /security-review  branch security scan - OPT-IN at /build   ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  AGENTS (on-disk): review(7) design(7) check(6) cr(9)          ║
