@@ -449,9 +449,7 @@ def remove_draft(file_path, section_name):
 # Public API — extract-links
 # ---------------------------------------------------------------------------
 
-# TODO: add path containment when Phase 4 CI gate ships (reject absolute
-# paths, .. traversal, symlink escapes via realpath, URL-scheme links;
-# anchor to git rev-parse --show-toplevel)
+# Reject repository escapes in current on-demand extraction, independent of the deferred CI gate.
 
 def extract_links(file_path, repo_root=None):
     """Extract all markdown links from a chapter file.
@@ -468,8 +466,10 @@ def extract_links(file_path, repo_root=None):
                 "cannot determine repo root; pass --repo-root explicitly"
             )
 
-    repo_root = os.path.abspath(repo_root)
-    chapter_dir = os.path.dirname(os.path.abspath(file_path))
+    repo_root = os.path.realpath(os.path.abspath(repo_root))
+    chapter_dir = os.path.dirname(os.path.realpath(os.path.abspath(file_path)))
+    if os.path.commonpath([repo_root, chapter_dir]) != repo_root:
+        raise ValueError("chapter must be inside the repository")
 
     content = _read_file(file_path)
     results = []
@@ -478,29 +478,30 @@ def extract_links(file_path, repo_root=None):
     for m in LINK_RE.finditer(content):
         target = m.group(1)
 
-        # Skip URL-scheme links (http, https, ftp, mailto, file, etc.).
-        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target) or target.startswith("mailto:"):
+        # Do not treat URLs, mailto, file:, or other schemes as source links.
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target):
             continue
 
-        # Strip fragment identifiers (#anchor).
-        target = target.split("#")[0]
-        if not target:
+        target = target.split("#", 1)[0]
+        # Reject absolute/drive/UNC links; never interpret them inside a repo.
+        if (not target or os.path.isabs(target)
+                or re.match(r"^[A-Za-z]:[/\\]", target)
+                or target.startswith("\\\\")):
             continue
 
-        # Resolve relative path from the chapter's directory.
-        abs_target = os.path.normpath(os.path.join(chapter_dir, target))
+        # realpath resolves symlinks; lexical normpath alone cannot prevent
+        # escaping through a symlink located inside a chapter directory.
+        abs_target = os.path.realpath(os.path.join(chapter_dir, target))
+        try:
+            if os.path.commonpath([repo_root, abs_target]) != repo_root:
+                continue
+        except ValueError:
+            continue  # Cross-volume link on Windows.
 
-        # Skip non-existent targets.
         if not os.path.exists(abs_target):
             continue
 
-        # Convert to repo-relative path.
-        try:
-            rel_path = os.path.relpath(abs_target, repo_root)
-        except ValueError:
-            # Different drives on Windows — skip.
-            continue
-
+        rel_path = os.path.relpath(abs_target, repo_root).replace(os.sep, "/")
         if rel_path not in seen:
             seen.add(rel_path)
             results.append(rel_path)
