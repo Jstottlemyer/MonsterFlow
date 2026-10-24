@@ -26,8 +26,8 @@ You are a spec-building assistant. Your job is to run an interactive Q&A intervi
    - If constitution declares `auto_threshold` / `auto_floor` / `auto_enabled`, use those as defaults (CLI `--auto` flag overrides).
 
 3. **Check for existing spec**: If a feature name can be inferred from `$ARGUMENTS`, check `docs/specs/<feature-name>/spec.md`.
-   - If found, present the work-size selector (see below).
-   - If not found, proceed with new spec.
+   - If found, read its YAML `status:` field (`draft | in-flight | shipped | parked`) if present, and present the work-size selector. Missing status is **unknown**, not implicitly in-flight. Preserve an existing status on revision; never silently reopen shipped or parked work.
+   - If not found, proceed with new spec and initialize its status to `draft`.
 
 ## Work-Size Selection (existing spec found)
 
@@ -296,6 +296,10 @@ When the gate is met (manual approval or auto-run criteria — see below):
    Pipeline gate behavior knobs — see `commands/_gate-mode.md` for the CLI flag truth table and override semantics.
 
    ```markdown
+   ---
+   status: draft
+   ---
+
    # [Feature Name] Spec
 
    **Created:** [date]
@@ -339,6 +343,8 @@ When the gate is met (manual approval or auto-run criteria — see below):
    ## Open Questions
    [Anything below 0.95 confidence, if proceeding with gaps]
    ```
+
+   **Lifecycle invariant:** The template above is for new specs only. Existing specs retain their status unless the owner explicitly changes it. A completed draft or passing tests is not verified shipment; `shipped` requires actual delivery evidence.
 
 2. **Self-review pass** (hybrid — new):
    - **Auto-fix silently**: placeholders (TBD/TODO without substance), formatting inconsistencies, obvious duplicates.
