@@ -86,6 +86,34 @@ def _parse_heading(line):
     return None
 
 
+def _iter_headings(lines):
+    """Yield Markdown headings, ignoring heading-like text inside code fences."""
+    fence_char = None
+    fence_size = 0
+    for i, line in enumerate(lines):
+        stripped = line.lstrip(" ")
+        if len(line) - len(stripped) <= 3:
+            m = re.match(r"^(`{3,}|~{3,})(.*)$", stripped)
+            if m:
+                marker, rest = m.groups()
+                if fence_char is None:
+                    # A backtick fence's info string cannot contain backticks.
+                    if marker[0] == "~" or "`" not in rest:
+                        fence_char, fence_size = marker[0], len(marker)
+                        continue
+                elif (
+                    marker[0] == fence_char
+                    and len(marker) >= fence_size
+                    and not rest.strip()
+                ):
+                    fence_char, fence_size = None, 0
+                    continue
+        if fence_char is None:
+            parsed = _parse_heading(line)
+            if parsed is not None:
+                yield i, parsed[0], parsed[1]
+
+
 def _find_section(lines, section_name):
     """Return (start, end, level) for the section named *section_name*.
 
@@ -98,11 +126,7 @@ def _find_section(lines, section_name):
     """
     start = None
     level = None
-    for i, line in enumerate(lines):
-        parsed = _parse_heading(line)
-        if parsed is None:
-            continue
-        h_level, h_text = parsed
+    for i, h_level, h_text in _iter_headings(lines):
         if start is None:
             if h_text == section_name:
                 start = i
@@ -534,11 +558,7 @@ def status(file_path):
     content = _read_file(file_path)
     lines = content.split("\n")
 
-    sections = []
-    for i, line in enumerate(lines):
-        parsed = _parse_heading(line)
-        if parsed is not None:
-            sections.append((i, parsed[0], parsed[1]))
+    sections = list(_iter_headings(lines))
 
     total = len(sections)
     stale_count = 0
