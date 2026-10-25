@@ -96,6 +96,76 @@ check "no model flag by default" '! arg_present -m'
 check "stdin starts with the generic preamble" 'head -1 "$FAKE_DIR/stdin" | grep -q "implementation worker in a MonsterFlow"'
 check "stdin ends with the task contract" '[ "$(tail -1 "$FAKE_DIR/stdin")" = "TASK CONTRACT happy" ]'
 
+# Task paths: nested/relative inputs work, but no file operations may
+# traverse outside TASK_DIR through ../ or symlinked input/output files.
+reset_case nested-task
+mkdir -p "$CASE/tasks/wave2"
+printf 'NESTED CONTRACT\n' > "$CASE/tasks/wave2/task-17.prompt.md"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" wave2/task-17 >/dev/null 2>&1); rc=$?
+check "nested task ID works" '[ "$rc" -eq 0 ] && [ -s "$CASE/tasks/wave2/task-17.last.md" ] && [ -s "$CASE/tasks/wave2/task-17.events.jsonl" ]'
+
+reset_case relative-dir
+mkdir -p "$CASE/tasks/wave2"
+printf 'RELATIVE CONTRACT\n' > "$CASE/tasks/wave2/task-17.prompt.md"
+(cd "$CASE" && with_deadline bash "$WORKER" tasks wave2/task-17 >/dev/null 2>&1); rc=$?
+check "relative task directory with nested task ID works" '[ "$rc" -eq 0 ] && [ -s "$CASE/tasks/wave2/task-17.last.md" ]'
+
+reset_case in-root-relative
+mkdir -p "$CASE/tasks/wave2"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" wave2/../T1 >/dev/null 2>&1); rc=$?
+check "in-root parent component is allowed" '[ "$rc" -eq 0 ] && [ -s "$CASE/tasks/T1.last.md" ]'
+
+reset_case in-root-symlink
+mkdir -p "$CASE/tasks/wave2"
+printf 'IN ROOT\n' > "$CASE/tasks/wave2/task-17.prompt.md"
+ln -s wave2 "$CASE/tasks/alias"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" alias/task-17 >/dev/null 2>&1); rc=$?
+check "nested symlink resolving inside task directory works" '[ "$rc" -eq 0 ] && [ -s "$CASE/tasks/wave2/task-17.last.md" ]'
+
+reset_case task-traversal
+mkdir -p "$CASE/outside"
+printf 'OUTSIDE CONTRACT\n' > "$CASE/outside/T1.prompt.md"
+printf 'DO NOT DELETE\n' > "$CASE/outside/T1.last.md"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" ../outside/T1 >/dev/null 2>&1); rc=$?
+check "task traversal is rejected before report cleanup" '[ "$rc" -eq 2 ] && [ "$(cat "$CASE/outside/T1.last.md")" = "DO NOT DELETE" ] && [ ! -e "$FAKE_DIR/args" ]'
+
+reset_case task-symlink-dir
+mkdir -p "$CASE/outside"
+printf 'OUTSIDE CONTRACT\n' > "$CASE/outside/T1.prompt.md"
+ln -s "$CASE/outside" "$CASE/tasks/link"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" link/T1 >/dev/null 2>&1); rc=$?
+check "task parent symlink escape is rejected" '[ "$rc" -eq 2 ] && [ ! -e "$FAKE_DIR/args" ]'
+
+reset_case contract-symlink
+printf 'OUTSIDE CONTRACT\n' > "$CASE/outside-contract"
+rm "$CASE/tasks/T1.prompt.md"
+ln -s "$CASE/outside-contract" "$CASE/tasks/T1.prompt.md"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "contract symlink escape is rejected" '[ "$rc" -eq 2 ] && [ ! -e "$FAKE_DIR/args" ]'
+
+reset_case report-symlink
+printf 'DO NOT DELETE\n' > "$CASE/outside-report"
+ln -s "$CASE/outside-report" "$CASE/tasks/T1.last.md"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "report symlink escape cannot delete external data" '[ "$rc" -eq 2 ] && [ -L "$CASE/tasks/T1.last.md" ] && [ "$(cat "$CASE/outside-report")" = "DO NOT DELETE" ]'
+
+reset_case events-symlink
+printf 'DO NOT WRITE\n' > "$CASE/outside-events"
+ln -s "$CASE/outside-events" "$CASE/tasks/T1.events.jsonl"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "event-log symlink escape is rejected" '[ "$rc" -eq 2 ] && [ "$(cat "$CASE/outside-events")" = "DO NOT WRITE" ]'
+
+reset_case stderr-symlink
+printf 'DO NOT WRITE\n' > "$CASE/outside-stderr"
+ln -s "$CASE/outside-stderr" "$CASE/tasks/T1.stderr.log"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "stderr symlink escape is rejected" '[ "$rc" -eq 2 ] && [ "$(cat "$CASE/outside-stderr")" = "DO NOT WRITE" ]'
+
+reset_case dangling-symlink
+ln -s "$CASE/nonexistent-external-target" "$CASE/tasks/T1.last.md"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "dangling report symlink outside root is rejected" '[ "$rc" -eq 2 ] && [ -L "$CASE/tasks/T1.last.md" ]'
+
 reset_case overlay
 mkdir -p "$CASE/repo/.monsterflow"
 printf 'PROJECT RULE: never run pnpm\n' > "$CASE/repo/.monsterflow/build-worker-preamble.md"
