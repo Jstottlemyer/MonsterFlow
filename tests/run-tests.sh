@@ -36,6 +36,8 @@ TESTS=(
   test-dashboard-render.sh
   test-compute-persona-value.sh
   test-build-final.sh
+  # build-codex-workers — Codex /build workers + Phase 3 branch review
+  test-build-codex-worker.sh
   autorun-dryrun.sh
   # install-rewrite W4 — supply-chain gate first (cheap), then full install harness
   test-config-content.sh

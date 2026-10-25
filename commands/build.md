@@ -137,9 +137,23 @@ Reply with `a` or `b <reason>` + Enter.
 
 ## Phase 2: Execute Waves
 
+### Implementation workers: Claude subagents or Codex
+
+`build_workers` in `~/.config/monsterflow/config.json` picks who implements each task: `claude` (the default, Agent-tool subagents) or `codex` (Codex CLI workers). Justin can also switch for one run ("use Codex workers from Wave 2"). Either way the orchestrator (this session) keeps the task graph, wave order, approvals, verification, commits and every remote action. Only the implementation of each task moves.
+
+When workers are `codex`:
+
+1. **Probe before the first wave:** `bash <REPO_DIR>/scripts/build-codex-worker.sh --probe-model`. Exit 3 (Codex not installed or not authenticated): use Claude subagents and say so. Exit 6 (the configured `codex_worker_model` is not usable on this account): stop and ask which model to use.
+2. **Write each task contract** to `<task-dir>/<task-id>.prompt.md`, where `<task-dir>` is outside the repo (the session scratchpad). Give it the same content a Claude subagent would get: the plan task, the files it owns, the commands to verify with, and the build note to write.
+3. **Dispatch** each task as a background Bash command, one per task, in parallel within a wave: `bash <REPO_DIR>/scripts/build-codex-worker.sh <task-dir> <task-id>`. The worker's status is the first line of `<task-dir>/<task-id>.last.md`; the four statuses below apply unchanged.
+4. **Watch for stalls.** A worker that adds no lines to `<task-dir>/<task-id>.events.jsonl` for about 10 minutes is stuck: report it, and decide whether to kill and re-run it.
+5. **Do what the sandbox prevents.** Workers have no network, a read-only `.git` and no localhost sockets. The orchestrator installs any dependency a worker reports (keeping the lockfile change minimal), runs tests that need local servers or sockets (and any parity harness), commits, and re-runs the full suites itself. A worker's "this was already failing" claim is not authoritative.
+6. **Project-specific worker rules** go in the target repo's `.monsterflow/build-worker-preamble.md` (for example "never run `pnpm`; use package binaries"). The adapter appends it after the generic preamble (`templates/build-worker-preamble.md`).
+7. **Record the switch.** If the provider or model changes mid-build, note it in the feature's build notes, with the wave it took effect.
+
 On `a`:
 
-1. **Dispatch Wave 1** — launch parallel agents for independent tasks using the Agent tool.
+1. **Dispatch Wave 1** — launch parallel agents for independent tasks using the Agent tool (or Codex workers, per the section above).
    - Each agent receives: the spec, plan, relevant plan tasks, constitution
    - Each agent writes thorough tests alongside implementation
    - Each agent reports: DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, or BLOCKED
@@ -220,14 +234,13 @@ When `AUTORUN_CHANGES` is non-empty, **you must**:
 2. **Codex implementation review (if available)** — silent skip if not installed/authenticated:
 
    ```bash
-   if command -v codex >/dev/null 2>&1 && codex login status >/dev/null 2>&1; then
-     codex exec review --uncommitted --full-auto --ephemeral \
-       --output-last-message /tmp/codex-build-review.txt \
-       "Challenge the implementation. Look for: security issues, deviations from the plan, better approaches that weren't taken, and correctness problems the tests might not catch."
-   fi
+   bash <REPO_DIR>/scripts/build-codex-review.sh --base <base> \
+     --output /tmp/codex-build-review.txt
    ```
 
-   If `/tmp/codex-build-review.txt` exists and contains findings, include a **Codex Review** section in the build complete summary. If skipped or no findings, omit.
+   `<base>` is the branch the build started from (the PR base, or the commit `/build` began on); omit `--base` to use the merge-base with the default branch. The script reviews the build's commits **and** any uncommitted changes. `/build` commits every wave, so a review of uncommitted changes alone would see nothing. It runs Codex in a read-only sandbox with stdin closed, and exits 0 without writing the file when Codex is not installed or authenticated. Run it in the background; it can take several minutes on a large branch.
+
+   Verify every finding against the code and the design before acting on it. If `/tmp/codex-build-review.txt` exists and contains findings, include a **Codex Review** section in the build complete summary, with each finding marked confirmed or rejected and why. If skipped or no findings, omit.
 
 3. **Run `/preship`** — pre-commit gate before declaring done:
    - `git status` for uncommitted WIP
@@ -281,7 +294,7 @@ For each followup whose `finding_id` was addressed in this `/build`'s wave-final
 
 ```bash
 WAVE_FINAL_SHA=$(git rev-parse HEAD)
-python3 scripts/build-mark-addressed.py \
+python3 <REPO_DIR>/scripts/build-mark-addressed.py \
   --feature <slug> \
   --finding-ids <id1,id2,...> \
   --commit-sha "$WAVE_FINAL_SHA"
