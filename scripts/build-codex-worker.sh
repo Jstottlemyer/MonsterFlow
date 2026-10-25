@@ -117,6 +117,39 @@ fi
 [ $# -eq 2 ] || usage
 TASK_DIR="$1"
 TASK="$2"
+
+# Task IDs may be nested (e.g. wave2/task-17); both relative and absolute
+# task directories are valid. Reject only paths that escape the task directory,
+# including existing/dangling symlinks on inputs or output files. Check all
+# destinations before any report cleanup or output redirection.
+if ! python3 - "$TASK_DIR" "$TASK" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+task_dir, task_id = sys.argv[1:]
+try:
+    root = Path(task_dir).resolve(strict=True)
+    if not root.is_dir() or not task_id or Path(task_id).is_absolute():
+        raise ValueError("invalid task directory or ID")
+    if any(ord(char) < 32 or ord(char) == 127 for char in task_id):
+        raise ValueError("control character in task ID")
+
+    for suffix in (".prompt.md", ".last.md", ".events.jsonl", ".stderr.log"):
+        path = root / (task_id + suffix)
+        resolved = path.resolve(strict=False)
+        if os.path.commonpath((str(root), str(resolved))) != str(root):
+            raise ValueError("task path escapes the task directory")
+        if resolved == root or not path.parent.is_dir():
+            raise ValueError("task path is not an existing subdirectory")
+except (OSError, RuntimeError, ValueError) as exc:
+    print("build-codex-worker: unsafe task path: " + str(exc), file=sys.stderr)
+    sys.exit(2)
+PY
+then
+  exit 2
+fi
+
 CONTRACT="$TASK_DIR/$TASK.prompt.md"
 if [ ! -s "$CONTRACT" ]; then
   echo "build-codex-worker: missing task contract $CONTRACT" >&2
