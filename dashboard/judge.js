@@ -294,7 +294,9 @@ function addSurvivalCard(main, rows) {
     </tr></thead><tbody>`;
   for (const c of checks) {
     const total = c.survival.length;
-    const survived = c.survival.filter(s => s.survived === true || s.outcome === "survived").length;
+    const survived = c.survival.filter(s =>
+      s.survived === true || s.outcome === "survived" || s.outcome === "addressed"
+    ).length;
     const rate = total ? ((survived / total) * 100).toFixed(0) : "—";
     html += `<tr><td>${c.project}</td><td>${c.feature}</td>
       <td>${total}</td><td>${survived}</td><td>${rate}%</td></tr>`;

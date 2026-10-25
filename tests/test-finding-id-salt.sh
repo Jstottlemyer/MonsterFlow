@@ -247,6 +247,39 @@ PROJ_C3="$TMP_ROOT/proj-c3"
 mkdir -p "$PROJ_C3/dashboard/data"
 regen_check "$XDG_C3" "$PROJ_C3/dashboard/data/persona-rankings.jsonl" "world-readable"
 
+# Explicit output path must win over cwd. /wrap runs the engine from an
+# adopter project and writes rankings to MonsterFlow's dashboard.
+XDG_C4="$TMP_ROOT/xdg-c4"
+PROJ_C4="$TMP_ROOT/project-c4"
+ENGINE_C4="$TMP_ROOT/engine-c4"
+mkdir -p "$PROJ_C4/dashboard/data" "$ENGINE_C4/dashboard/data"
+printf 'engine-row\n' > "$ENGINE_C4/dashboard/data/persona-rankings.jsonl"
+printf 'wrong-cwd-row\n' > "$PROJ_C4/dashboard/data/persona-rankings.jsonl"
+mkdir -p "$XDG_C4/monsterflow"
+printf 'invalid' > "$XDG_C4/monsterflow/finding-id-salt"
+chmod 600 "$XDG_C4/monsterflow/finding-id-salt"
+(
+  cd "$PROJ_C4"
+  XDG_CONFIG_HOME="$XDG_C4" python3 - "$ENGINE_C4/dashboard/data/persona-rankings.jsonl" <<PY
+import sys
+from pathlib import Path
+sys.path.insert(0, "$REPO_ROOT/scripts")
+import importlib.util
+spec = importlib.util.spec_from_file_location(
+    "cpv_explicit", "$REPO_ROOT/scripts/compute-persona-value.py"
+)
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+m.get_or_create_salt(Path(sys.argv[1]))
+PY
+)
+if [ ! -s "$ENGINE_C4/dashboard/data/persona-rankings.jsonl" ] && \
+   grep -qF 'wrong-cwd-row' "$PROJ_C4/dashboard/data/persona-rankings.jsonl"; then
+  note_pass "M7 explicit rankings path clears engine output, not adopter cwd"
+else
+  note_fail "M7 explicit rankings path routing" "engine output not cleared or adopter output changed"
+fi
+
 echo ""
 echo "test-finding-id-salt: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
