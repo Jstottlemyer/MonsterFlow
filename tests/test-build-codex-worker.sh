@@ -114,6 +114,28 @@ check "model comes from config" 'arg_present -m && arg_present cfg-model'
 check "env overrides config" 'arg_present env-model && ! arg_present cfg-model'
 (cd "$CASE/repo" && MONSTERFLOW_CODEX_WORKER_MODEL=env-model with_deadline bash "$WORKER" --model flag-model "$CASE/tasks" T1 >/dev/null 2>&1)
 check "--model overrides env" 'arg_present flag-model && ! arg_present env-model'
+check "one model flag and one model argument" '[ "$(grep -cFx -- "-m" "$FAKE_DIR/args")" -eq 1 ] && [ "$(grep -cFx -- "flag-model" "$FAKE_DIR/args")" -eq 1 ]'
+
+reset_case model-safe-punct
+(cd "$CASE/repo" && with_deadline bash "$WORKER" --model 'vendor:gpt-6/mini+fast' "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "valid punctuation remains a single model token" '[ "$rc" -eq 0 ] && [ "$(grep -cFx -- "vendor:gpt-6/mini+fast" "$FAKE_DIR/args")" -eq 1 ]'
+
+reset_case model-injected
+(cd "$CASE/repo" && with_deadline bash "$WORKER" --model 'gpt-6 --sandbox danger-full-access' "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "CLI model cannot inject arguments" '[ "$rc" -eq 2 ] && [ ! -e "$FAKE_DIR/args" ]'
+
+reset_case model-leading-dash
+(cd "$CASE/repo" && with_deadline bash "$WORKER" --model '--dangerously-bypass-approvals-and-sandbox' "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "leading dash model is rejected" '[ "$rc" -eq 2 ] && [ ! -e "$FAKE_DIR/args" ]'
+
+reset_case model-env-injected
+(cd "$CASE/repo" && MONSTERFLOW_CODEX_WORKER_MODEL='gpt-6 --json' with_deadline bash "$WORKER" "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "environment model cannot inject arguments" '[ "$rc" -eq 2 ] && [ ! -e "$FAKE_DIR/args" ]'
+
+reset_case model-config-injected
+printf '{"codex_worker_model": "gpt-6 --json"}\n' > "$MONSTERFLOW_CONFIG"
+(cd "$CASE/repo" && with_deadline bash "$WORKER" "$CASE/tasks" T1 >/dev/null 2>&1); rc=$?
+check "config model cannot inject arguments" '[ "$rc" -eq 2 ] && [ ! -e "$FAKE_DIR/args" ]'
 
 reset_case codexfail
 (cd "$CASE/repo" && FAKE_EXIT=1 with_deadline bash "$WORKER" "$CASE/tasks" T1 >/dev/null 2>&1)
@@ -154,6 +176,15 @@ reset_case review-fail
 git -C "$CASE/repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 (cd "$CASE/repo" && FAKE_EXIT=1 with_deadline bash "$REVIEW" --base HEAD --output "$CASE/review.txt" >/dev/null 2>&1)
 check "review exits 4 when codex fails" '[ $? -eq 4 ]'
+reset_case review-model-safe
+git -C "$CASE/repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+(cd "$CASE/repo" && with_deadline bash "$REVIEW" --base HEAD --model 'vendor:gpt-6/mini+fast' --output "$CASE/review.txt" >/dev/null 2>&1); rc=$?
+check "review passes valid model as one token" '[ "$rc" -eq 0 ] && [ "$(grep -cFx -- "vendor:gpt-6/mini+fast" "$FAKE_DIR/args")" -eq 1 ]'
+
+reset_case review-model-injected
+git -C "$CASE/repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+(cd "$CASE/repo" && with_deadline bash "$REVIEW" --base HEAD --model 'gpt-6 --sandbox danger-full-access' --output "$CASE/review.txt" >/dev/null 2>&1); rc=$?
+check "review rejects injected model before invoking Codex" '[ "$rc" -eq 2 ] && [ ! -e "$FAKE_DIR/args" ]'
 
 echo "commands/build.md"
 check "Phase 2 documents Codex workers" 'grep -q "^### Implementation workers: Claude subagents or Codex" "$BUILD_MD"'
