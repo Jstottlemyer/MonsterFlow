@@ -78,8 +78,15 @@ except Exception:
     v = ""
 print(v if isinstance(v, str) else "")' "$CONFIG" 2>/dev/null || true)"
 fi
-MODEL_ARGS=""
-[ -n "$MODEL" ] && MODEL_ARGS="-m $MODEL"
+# A model identifier must remain one argv token; never split config/env input.
+MODEL_ARGS=()
+if [ -n "$MODEL" ]; then
+  if [[ ! "$MODEL" =~ ^[A-Za-z0-9][A-Za-z0-9._:/+-]*$ ]]; then
+    echo "build-codex-worker: invalid model identifier" >&2
+    exit 2
+  fi
+  MODEL_ARGS=(-m "$MODEL")
+fi
 
 if ! command -v "$CODEX" >/dev/null 2>&1; then
   echo "build-codex-worker: codex is not installed; use Claude subagents" >&2
@@ -93,8 +100,7 @@ fi
 if [ "$PROBE" -eq 1 ]; then
   out="$(mktemp -t mf-codex-probe.XXXXXX)"
   err="$(mktemp -t mf-codex-probe-err.XXXXXX)"
-  # shellcheck disable=SC2086  # MODEL_ARGS is intentionally word-split
-  "$CODEX" exec $MODEL_ARGS --sandbox read-only --ephemeral -o "$out" \
+  "$CODEX" exec "${MODEL_ARGS[@]}" --sandbox read-only --ephemeral -o "$out" \
     "Reply with exactly: OK" < /dev/null > /dev/null 2> "$err"
   rc=$?
   if [ "$rc" -eq 0 ] && [ -s "$out" ]; then
@@ -140,8 +146,7 @@ trap 'rm -f "$PROMPT"' EXIT
 
 REPORT="$TASK_DIR/$TASK.last.md"
 rm -f "$REPORT"
-# shellcheck disable=SC2086  # MODEL_ARGS is intentionally word-split
-"$CODEX" exec --cd "$REPO" $MODEL_ARGS \
+"$CODEX" exec --cd "$REPO" "${MODEL_ARGS[@]}" \
   --sandbox workspace-write \
   -c sandbox_workspace_write.network_access=false \
   --ephemeral --json \
