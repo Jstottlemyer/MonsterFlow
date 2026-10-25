@@ -439,7 +439,7 @@ _GATE_PREFIX = {"spec-review": "sr", "design": "pl", "check": "ck"}
 # Task 1.6 — Salt management (M7)
 # --------------------------------------------------------------------------
 
-def get_or_create_salt() -> bytes:
+def get_or_create_salt(rankings_path: Path | None = None) -> bytes:
     """M7 — validate-on-read 32-byte salt with regenerate-on-failure.
 
     Read path validates:
@@ -515,7 +515,11 @@ def get_or_create_salt() -> bytes:
 
     # Continuity reset — clear the rankings file so downstream readers do not
     # try to link old salted IDs against the new salt namespace.
-    rankings_default = Path.cwd() / "dashboard" / "data" / "persona-rankings.jsonl"
+    rankings_default = (
+        rankings_path
+        if rankings_path is not None
+        else Path.cwd() / "dashboard" / "data" / "persona-rankings.jsonl"
+    )
     try:
         if rankings_default.exists():
             # Truncate (don't delete — keeps file presence stable for the
@@ -1617,10 +1621,14 @@ def main(argv=None):
     # A1.5 cross-check (forcing function for spike Q1).
     a15_crosscheck(cost_dispatches, best_effort=args.best_effort)
 
+    output_path = Path(args.out)
+    if not output_path.is_absolute():
+        output_path = Path.cwd() / output_path
+
     # Salt — required even on dry-run so any regen-induced reset happens
     # deterministically (otherwise a dry-run could mask a salt-corruption
     # signal).
-    salt = get_or_create_salt()
+    salt = get_or_create_salt(output_path)
 
     rows = aggregate_rankings(value_records, cost_dispatches, salt)
 
@@ -1631,9 +1639,6 @@ def main(argv=None):
         # MONSTERFLOW_DEBUG_PATHS=1 (Stage 1B wires the debug log).
         return 0
 
-    output_path = Path(args.out)
-    if not output_path.is_absolute():
-        output_path = Path.cwd() / output_path
     emit_rankings(rows, output_path)
     return 0
 
