@@ -86,8 +86,8 @@ def _parse_heading(line):
     return None
 
 
-def _iter_headings(lines):
-    """Yield Markdown headings, ignoring heading-like text inside code fences."""
+def _iter_unfenced_lines(lines):
+    """Yield indexed lines outside Markdown fences, including neither delimiter."""
     fence_char = None
     fence_size = 0
     for i, line in enumerate(lines):
@@ -109,9 +109,15 @@ def _iter_headings(lines):
                     fence_char, fence_size = None, 0
                     continue
         if fence_char is None:
-            parsed = _parse_heading(line)
-            if parsed is not None:
-                yield i, parsed[0], parsed[1]
+            yield i, line
+
+
+def _iter_headings(lines):
+    """Yield Markdown headings, ignoring heading-like text inside code fences."""
+    for i, line in _iter_unfenced_lines(lines):
+        parsed = _parse_heading(line)
+        if parsed is not None:
+            yield i, parsed[0], parsed[1]
 
 
 def _find_section(lines, section_name):
@@ -155,8 +161,13 @@ def _find_callout_block(lines, start_idx, end_idx, callout_re):
 
     Returns None if no matching callout is found.
     """
+    visible_lines = {i for i, _ in _iter_unfenced_lines(lines)}
     block_start = None
     for i in range(start_idx, end_idx):
+        if i not in visible_lines:
+            if block_start is not None:
+                return block_start, i
+            continue
         line = lines[i]
         if block_start is None:
             if callout_re.match(line):
