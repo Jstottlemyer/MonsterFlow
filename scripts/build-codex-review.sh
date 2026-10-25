@@ -71,14 +71,20 @@ if [ -z "$BASE_SHA" ]; then
   exit 2
 fi
 
-MODEL_ARGS=""
-[ -n "$MODEL" ] && MODEL_ARGS="-m $MODEL"
+# Keep the model as one argv token, rejecting option and whitespace injection.
+MODEL_ARGS=()
+if [ -n "$MODEL" ]; then
+  if [[ ! "$MODEL" =~ ^[A-Za-z0-9][A-Za-z0-9._:/+-]*$ ]]; then
+    echo "build-codex-review: invalid model identifier" >&2
+    exit 2
+  fi
+  MODEL_ARGS=(-m "$MODEL")
+fi
 
 INSTRUCTIONS="You are reviewing the changes on the current branch of this repository: the commits since base $BASE_SHA (inspect them with git, e.g. \`git log $BASE_SHA..HEAD\` and \`git diff $BASE_SHA..HEAD -- <paths>\`) plus any uncommitted changes (\`git status\`, \`git diff\`). The feature's spec and implementation plan are under docs/specs/<feature>/ (spec.md, design.md). Challenge the implementation. Look for: security issues, deviations from the plan, better approaches that weren't taken, and correctness problems the tests might not catch. Do not modify files. Report concrete findings ranked by severity (High/Medium/Low), each with file:line, the failure scenario and a suggested fix. If you find nothing in a category, say so."
 
 rm -f "$OUT"
-# shellcheck disable=SC2086  # MODEL_ARGS is intentionally word-split
-"$CODEX" exec --cd "$REPO" $MODEL_ARGS --sandbox read-only --ephemeral \
+"$CODEX" exec --cd "$REPO" "${MODEL_ARGS[@]}" --sandbox read-only --ephemeral \
   -o "$OUT" "$INSTRUCTIONS" < /dev/null > /dev/null 2> "$OUT.stderr"
 rc=$?
 if [ "$rc" -ne 0 ]; then
