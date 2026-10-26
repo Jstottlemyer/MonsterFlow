@@ -31,6 +31,20 @@ class ExtractLinksContainmentTests(unittest.TestCase):
                 ["overview.md", "docs/scene.md"],
             )
 
+    def test_auto_detects_worktree_gitfile_and_contains_links(self):
+        # Linked worktrees use a .git pointer file, not a .git directory.
+        with tempfile.TemporaryDirectory() as temp:
+            top = Path(temp)
+            root = top / "worktree"
+            docs = root / "docs"
+            docs.mkdir(parents=True)
+            (root / ".git").write_text("gitdir: ../common/.git/worktrees/worktree\\n")
+            (root / "overview.md").write_text("inside")
+            (top / "secret.md").write_text("outside")
+            chapter = docs / "plot.md"
+            chapter.write_text("[inside](../overview.md) [escape](../../secret.md)")
+            self.assertEqual(extract_links(str(chapter)), ["overview.md"])
+
     def test_outside_chapter_and_sibling_prefix_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
             top = Path(temp)
