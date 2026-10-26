@@ -31,6 +31,7 @@ and os.replace()s onto the target. Same-FS atomic on POSIX.
 
 import argparse
 import datetime
+import ntpath
 import os
 import re
 import sys
@@ -60,9 +61,6 @@ LINK_RE = re.compile(r"\[(?:[^\]]*)\]\(([^)]+)\)")
 # Maximum stale reasons before oldest-drop.
 MAX_STALE_REASONS = 3
 
-# TODO: add path containment when Phase 4 CI gate ships (reject absolute
-# paths, .. traversal, symlink escapes via realpath, URL-scheme links;
-# anchor to git rev-parse --show-toplevel)
 
 
 # ---------------------------------------------------------------------------
@@ -484,58 +482,52 @@ def remove_draft(file_path, section_name):
 # Public API — extract-links
 # ---------------------------------------------------------------------------
 
-# TODO: add path containment when Phase 4 CI gate ships (reject absolute
-# paths, .. traversal, symlink escapes via realpath, URL-scheme links;
-# anchor to git rev-parse --show-toplevel)
 
 def extract_links(file_path, repo_root=None):
-    """Extract all markdown links from a chapter file.
+    """Extract existing Markdown targets contained within the repository.
 
-    Returns a list of repo-relative paths (compatible with
-    ``git diff --name-only`` output). Skips non-existent targets
-    and URL-scheme links.
+    Accepts nested and parent-relative references that remain inside the root;
+    rejects absolute paths, URL schemes, traversal, and symlink escapes.
     """
     if repo_root is None:
-        # Default: walk up from the file to find .git.
         repo_root = _find_repo_root(file_path)
         if repo_root is None:
             raise ValueError(
                 "cannot determine repo root; pass --repo-root explicitly"
             )
 
-    repo_root = os.path.abspath(repo_root)
-    chapter_dir = os.path.dirname(os.path.abspath(file_path))
+    root = os.path.realpath(repo_root)
+    chapter = os.path.realpath(file_path)
+    try:
+        if os.path.commonpath((root, chapter)) != root:
+            raise ValueError("chapter file is outside repository root")
+    except ValueError as exc:
+        raise ValueError("chapter file is outside repository root") from exc
+    chapter_dir = os.path.dirname(chapter)
 
     content = _read_file(file_path)
     results = []
     seen = set()
 
     for m in LINK_RE.finditer(content):
-        target = m.group(1)
-
-        # Skip URL-scheme links (http, https, ftp, mailto, file, etc.).
-        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target) or target.startswith("mailto:"):
-            continue
-
-        # Strip fragment identifiers (#anchor).
-        target = target.split("#")[0]
+        target = m.group(1).strip().split("#", 1)[0]
         if not target:
             continue
-
-        # Resolve relative path from the chapter's directory.
-        abs_target = os.path.normpath(os.path.join(chapter_dir, target))
-
-        # Skip non-existent targets.
-        if not os.path.exists(abs_target):
+        # Cover mailto:, javascript:, file:, drive prefixes, and Windows
+        # absolute paths as well as conventional URL schemes.
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target):
             continue
-
-        # Convert to repo-relative path.
+        if os.path.isabs(target) or ntpath.isabs(target):
+            continue
+        resolved = os.path.realpath(os.path.join(chapter_dir, target))
         try:
-            rel_path = os.path.relpath(abs_target, repo_root)
+            if os.path.commonpath((root, resolved)) != root:
+                continue
         except ValueError:
-            # Different drives on Windows — skip.
+            continue  # Differing Windows volumes cannot share a repo root.
+        if not os.path.exists(resolved):
             continue
-
+        rel_path = os.path.relpath(resolved, root)
         if rel_path not in seen:
             seen.add(rel_path)
             results.append(rel_path)
