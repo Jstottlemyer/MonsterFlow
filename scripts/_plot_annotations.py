@@ -536,12 +536,13 @@ def extract_links(file_path, repo_root=None):
 
 
 def _find_repo_root(start_path):
-    """Walk up from *start_path* looking for a .git directory."""
+    """Walk up from *start_path* looking for a .git directory or worktree file."""
     current = os.path.abspath(start_path)
     if os.path.isfile(current):
         current = os.path.dirname(current)
     while True:
-        if os.path.isdir(os.path.join(current, ".git")):
+        git_marker = os.path.join(current, ".git")
+        if os.path.isdir(git_marker) or os.path.isfile(git_marker):
             return current
         parent = os.path.dirname(current)
         if parent == current:
