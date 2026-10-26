@@ -38,7 +38,7 @@ class ExtractLinksContainmentTests(unittest.TestCase):
             root = top / "worktree"
             docs = root / "docs"
             docs.mkdir(parents=True)
-            (root / ".git").write_text("gitdir: ../common/.git/worktrees/worktree\\n")
+            (root / ".git").write_text("gitdir: ../common/.git/worktrees/worktree\n")
             (root / "overview.md").write_text("inside")
             (top / "secret.md").write_text("outside")
             chapter = docs / "plot.md"
