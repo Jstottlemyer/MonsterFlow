@@ -77,6 +77,22 @@ class ExtractLinksContainmentTests(unittest.TestCase):
                 ["real.md"],
             )
 
+    def test_escaped_open_bracket_is_not_a_link(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "example.md").write_text("example")
+            (root / "real.md").write_text("real")
+            chapter = root / "plot.md"
+            for markdown, expected in (
+                (r"\[literal](example.md) [real](real.md)", ["real.md"]),
+                (r"\\[valid](example.md) [real](real.md)", ["example.md", "real.md"]),
+            ):
+                with self.subTest(markdown=markdown):
+                    chapter.write_text(markdown)
+                    self.assertEqual(
+                        extract_links(str(chapter), repo_root=str(root)), expected,
+                    )
+
     def test_link_extraction_ignores_fenced_markdown_examples(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "repo"
