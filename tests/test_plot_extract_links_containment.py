@@ -61,6 +61,22 @@ class ExtractLinksContainmentTests(unittest.TestCase):
                 extract_links(str(sibling / "secret.md"), repo_root=str(root))
 
 
+    def test_link_extraction_ignores_inline_code_examples(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("example.md", "real.md"):
+                (root / name).write_text(name)
+            chapter = root / "plot.md"
+            chapter.write_text(
+                "`[inline](example.md)` [real](real.md)\n"
+                "``[long](example.md)``\n"
+                "`[multiline](example.md)\ncontinued`\n"
+            )
+            self.assertEqual(
+                extract_links(str(chapter), repo_root=str(root)),
+                ["real.md"],
+            )
+
     def test_link_extraction_ignores_fenced_markdown_examples(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "repo"
