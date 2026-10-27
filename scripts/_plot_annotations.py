@@ -509,7 +509,14 @@ def extract_links(file_path, repo_root=None):
     results = []
     seen = set()
 
-    for m in LINK_RE.finditer(content):
+    # Keep examples inside Markdown fences out of dependency extraction.
+    # Reuse the same fence parser as callout and heading handling, while
+    # preserving newline-separated link detection in unfenced prose.
+    lines = content.splitlines()
+    visible = {i for i, _ in _iter_unfenced_lines(lines)}
+    unfenced_content = "\n".join(line if i in visible else "" for i, line in enumerate(lines))
+
+    for m in LINK_RE.finditer(unfenced_content):
         target = m.group(1).strip().split("#", 1)[0]
         if not target:
             continue
