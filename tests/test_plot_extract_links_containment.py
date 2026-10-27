@@ -61,5 +61,25 @@ class ExtractLinksContainmentTests(unittest.TestCase):
                 extract_links(str(sibling / "secret.md"), repo_root=str(root))
 
 
+    def test_link_extraction_ignores_fenced_markdown_examples(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "repo"
+            docs = root / "docs"
+            docs.mkdir(parents=True)
+            for name in ("inside.md", "example.md", "after.md"):
+                (docs / name).write_text(name)
+            chapter = docs / "plot.md"
+            chapter.write_text(
+                "[before](inside.md)\n"
+                "```md\n[example](example.md)\n```\n"
+                "[after](after.md)\n"
+                "~~~txt\n[another example](example.md)\n~~~\n"
+            )
+            self.assertEqual(
+                extract_links(str(chapter), repo_root=str(root)),
+                ["docs/inside.md", "docs/after.md"],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
