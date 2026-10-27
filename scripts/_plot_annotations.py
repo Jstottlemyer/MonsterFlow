@@ -483,6 +483,34 @@ def remove_draft(file_path, section_name):
 # ---------------------------------------------------------------------------
 
 
+def _mask_inline_code_spans(text):
+    """Hide Markdown backtick code spans before dependency extraction."""
+    chars = list(text)
+    runs = list(re.finditer(r"`+", text))
+    i = 0
+    while i < len(runs):
+        opener = runs[i]
+        backslashes = 0
+        k = opener.start() - 1
+        while k >= 0 and text[k] == "\\":
+            backslashes += 1
+            k -= 1
+        if backslashes % 2:
+            i += 1  # Escaped opening backtick is literal Markdown text.
+            continue
+        j = i + 1
+        while j < len(runs) and len(runs[j].group()) != len(opener.group()):
+            j += 1
+        if j == len(runs):
+            i += 1  # Unmatched backtick run is literal text.
+            continue
+        for k in range(opener.start(), runs[j].end()):
+            if chars[k] != "\n":
+                chars[k] = " "
+        i = j + 1
+    return "".join(chars)
+
+
 def extract_links(file_path, repo_root=None):
     """Extract existing Markdown targets contained within the repository.
 
@@ -516,7 +544,7 @@ def extract_links(file_path, repo_root=None):
     visible = {i for i, _ in _iter_unfenced_lines(lines)}
     unfenced_content = "\n".join(line if i in visible else "" for i, line in enumerate(lines))
 
-    for m in LINK_RE.finditer(unfenced_content):
+    for m in LINK_RE.finditer(_mask_inline_code_spans(unfenced_content)):
         target = m.group(1).strip().split("#", 1)[0]
         if not target:
             continue
