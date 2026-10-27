@@ -545,6 +545,15 @@ def extract_links(file_path, repo_root=None):
     unfenced_content = "\n".join(line if i in visible else "" for i, line in enumerate(lines))
 
     for m in LINK_RE.finditer(_mask_inline_code_spans(unfenced_content)):
+        # Markdown escapes an opening bracket after an odd number of
+        # backslashes; even numbers escape one another, leaving a real link.
+        slash_count = 0
+        before = m.start() - 1
+        while before >= 0 and unfenced_content[before] == "\\":
+            slash_count += 1
+            before -= 1
+        if slash_count % 2:
+            continue
         target = m.group(1).strip().split("#", 1)[0]
         if not target:
             continue
