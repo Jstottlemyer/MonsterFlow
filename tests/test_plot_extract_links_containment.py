@@ -127,7 +127,7 @@ class ExtractLinksContainmentTests(unittest.TestCase):
                 "[single](scene.md 'another title') "
                 "[escape](../secret.md \"outside\") "
                 "[url](https://example.org/scene \"remote\") "
-                "`[code](scene.md "not a link")`"
+                '`[code](scene.md "not a link")`'
             )
             self.assertEqual(extract_links(str(chapter), repo_root=str(root)), ["scene.md"])
 
