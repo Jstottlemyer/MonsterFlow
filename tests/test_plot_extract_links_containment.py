@@ -113,5 +113,24 @@ class ExtractLinksContainmentTests(unittest.TestCase):
             )
 
 
+    def test_quoted_markdown_titles_are_not_part_of_local_paths(self):
+        # Standard Markdown link titles must not be interpreted as filenames.
+        with tempfile.TemporaryDirectory() as temp:
+            top = Path(temp)
+            root = top / "repo"
+            root.mkdir()
+            (root / "scene.md").write_text("inside")
+            (top / "secret.md").write_text("outside")
+            chapter = root / "plot.md"
+            chapter.write_text(
+                "[double](scene.md \"Scene #1\") "
+                "[single](scene.md 'another title') "
+                "[escape](../secret.md \"outside\") "
+                "[url](https://example.org/scene \"remote\") "
+                "`[code](scene.md "not a link")`"
+            )
+            self.assertEqual(extract_links(str(chapter), repo_root=str(root)), ["scene.md"])
+
+
 if __name__ == "__main__":
     unittest.main()
