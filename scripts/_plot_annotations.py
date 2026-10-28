@@ -554,7 +554,10 @@ def extract_links(file_path, repo_root=None):
             before -= 1
         if slash_count % 2:
             continue
-        target = m.group(1).strip().split("#", 1)[0]
+        raw_target = m.group(1).strip()
+        # Markdown link titles are not part of local filenames.
+        title_match = re.fullmatch(r"(\S+)\s+(?:\"[^\"]*\"|'[^']*')", raw_target)
+        target = (title_match.group(1) if title_match else raw_target).split("#", 1)[0]
         if not target:
             continue
         # Cover mailto:, javascript:, file:, drive prefixes, and Windows
