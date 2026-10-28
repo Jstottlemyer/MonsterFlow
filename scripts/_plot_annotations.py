@@ -56,7 +56,7 @@ STALE_REASON_RE = re.compile(
 )
 
 # Markdown link: [text](target)
-LINK_RE = re.compile(r"\[(?:[^\]]*)\]\(([^)]+)\)")
+LINK_RE = re.compile(r"\[(?:[^\]]*)\]\((<[^>]+>(?:\s+(?:\"[^\"]*\"|'[^']*'))?|[^)]+)\)")
 
 # Maximum stale reasons before oldest-drop.
 MAX_STALE_REASONS = 3
