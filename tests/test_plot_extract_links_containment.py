@@ -132,5 +132,29 @@ class ExtractLinksContainmentTests(unittest.TestCase):
             self.assertEqual(extract_links(str(chapter), repo_root=str(root)), ["scene.md"])
 
 
+    def test_angle_bracket_destinations_with_spaces_titles_and_fragments(self):
+        # Contained paths with spaces use standard Markdown angle destinations.
+        with tempfile.TemporaryDirectory() as temp:
+            top = Path(temp)
+            root = top / "repo"
+            root.mkdir()
+            (root / "scene one.md").write_text("inside")
+            (root / "plain.md").write_text("plain")
+            (top / "secret.md").write_text("outside")
+            chapter = root / "plot.md"
+            chapter.write_text(
+                '[space](<scene one.md>) '
+                '[title](<scene one.md> "Scene Title") '
+                '[fragment](<scene one.md#section>) '
+                '[plain](plain.md) '
+                '[escape](<../secret.md>) '
+                '[url](<https://example.org/scene>)'
+            )
+            self.assertEqual(
+                extract_links(str(chapter), repo_root=str(root)),
+                ["scene one.md", "plain.md"],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
