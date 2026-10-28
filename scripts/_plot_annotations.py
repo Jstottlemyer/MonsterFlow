@@ -556,8 +556,12 @@ def extract_links(file_path, repo_root=None):
             continue
         raw_target = m.group(1).strip()
         # Markdown link titles are not part of local filenames.
-        title_match = re.fullmatch(r"(\S+)\s+(?:\"[^\"]*\"|'[^']*')", raw_target)
-        target = (title_match.group(1) if title_match else raw_target).split("#", 1)[0]
+        # Angle-bracket destinations may contain spaces, unlike bare paths.
+        title_match = re.fullmatch(r"(<[^>]+>|\S+)\s+(?:\"[^\"]*\"|'[^']*')", raw_target)
+        target = title_match.group(1) if title_match else raw_target
+        if target.startswith("<") and target.endswith(">"):
+            target = target[1:-1]
+        target = target.split("#", 1)[0]
         if not target:
             continue
         # Cover mailto:, javascript:, file:, drive prefixes, and Windows
