@@ -156,5 +156,29 @@ class ExtractLinksContainmentTests(unittest.TestCase):
             )
 
 
+
+    def test_parentheses_in_angle_bracket_destinations(self):
+        # Markdown angle destinations can include literal closing parentheses.
+        with tempfile.TemporaryDirectory() as temp:
+            top = Path(temp)
+            root = top / "repo"
+            root.mkdir()
+            (root / "scene (draft).md").write_text("inside")
+            (root / "ordinary.md").write_text("ordinary")
+            (top / "secret (draft).md").write_text("outside")
+            chapter = root / "plot.md"
+            chapter.write_text(
+                '[draft](<scene (draft).md>) '
+                '[title](<scene (draft).md> "Review (v2)") '
+                '[ordinary](ordinary.md) '
+                '[escape](<../secret (draft).md>) '
+                '[url](<https://example.org/a(b)>)'
+            )
+            self.assertEqual(
+                extract_links(str(chapter), repo_root=str(root)),
+                ["scene (draft).md", "ordinary.md"],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
