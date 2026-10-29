@@ -606,6 +606,9 @@ def extract_links(file_path, repo_root=None):
         target = title_match.group(1) if title_match else raw_target
         if target.startswith("<") and target.endswith(">"):
             target = target[1:-1]
+        # Decode Markdown punctuation escapes after parsing structure, then
+        # apply traversal/symlink containment to the decoded destination.
+        target = re.sub(r"\\([()])", r"\1", target)
         target = target.split("#", 1)[0]
         if not target:
             continue
