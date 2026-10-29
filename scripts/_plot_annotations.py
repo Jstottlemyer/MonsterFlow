@@ -31,6 +31,7 @@ and os.replace()s onto the target. Same-FS atomic on POSIX.
 
 import argparse
 import datetime
+import ntpath
 import os
 import re
 import sys
@@ -54,15 +55,13 @@ STALE_REASON_RE = re.compile(
     r"\(detected\s+(\d{4}-\d{2}-\d{2})\)\.?\s*$"
 )
 
-# Markdown link: [text](target)
-LINK_RE = re.compile(r"\[(?:[^\]]*)\]\(([^)]+)\)")
+# Markdown link opener; parse the destination's parentheses with a scanner.
+# A regex ending at the first ')' truncates bare names like scene_(draft).md.
+LINK_START_RE = re.compile(r"\\[(?:[^\\]]*)\\]\\(")
 
 # Maximum stale reasons before oldest-drop.
 MAX_STALE_REASONS = 3
 
-# TODO: add path containment when Phase 4 CI gate ships (reject absolute
-# paths, .. traversal, symlink escapes via realpath, URL-scheme links;
-# anchor to git rev-parse --show-toplevel)
 
 
 # ---------------------------------------------------------------------------
@@ -484,58 +483,150 @@ def remove_draft(file_path, section_name):
 # Public API — extract-links
 # ---------------------------------------------------------------------------
 
-# TODO: add path containment when Phase 4 CI gate ships (reject absolute
-# paths, .. traversal, symlink escapes via realpath, URL-scheme links;
-# anchor to git rev-parse --show-toplevel)
+
+def _mask_inline_code_spans(text):
+    """Hide Markdown backtick code spans before dependency extraction."""
+    chars = list(text)
+    runs = list(re.finditer(r"`+", text))
+    i = 0
+    while i < len(runs):
+        opener = runs[i]
+        backslashes = 0
+        k = opener.start() - 1
+        while k >= 0 and text[k] == "\\":
+            backslashes += 1
+            k -= 1
+        if backslashes % 2:
+            i += 1  # Escaped opening backtick is literal Markdown text.
+            continue
+        j = i + 1
+        while j < len(runs) and len(runs[j].group()) != len(opener.group()):
+            j += 1
+        if j == len(runs):
+            i += 1  # Unmatched backtick run is literal text.
+            continue
+        for k in range(opener.start(), runs[j].end()):
+            if chars[k] != "\n":
+                chars[k] = " "
+        i = j + 1
+    return "".join(chars)
+
+
+
+def _iter_link_destinations(text):
+    """Yield (opening-bracket offset, raw target) with balanced parentheses.
+
+    A quoted Markdown title may contain ')' without closing the link. An
+    apostrophe inside a filename does not begin a title.
+    """
+    for opener in LINK_START_RE.finditer(text):
+        depth = 1
+        quote = None
+        angle = False
+        escaped = False
+        for index in range(opener.end(), len(text)):
+            ch = text[index]
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped = True
+                continue
+            if quote:
+                if ch == quote:
+                    quote = None
+                continue
+            if ch in ('"', "'") and index > opener.end() and text[index - 1].isspace():
+                quote = ch
+                continue
+            if ch == "<" and index == opener.end():
+                angle = True
+                continue
+            if ch == ">" and angle:
+                angle = False
+                continue
+            if angle:
+                continue
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    yield opener.start(), text[opener.end():index]
+                    break
+
 
 def extract_links(file_path, repo_root=None):
-    """Extract all markdown links from a chapter file.
+    """Extract existing Markdown targets contained within the repository.
 
-    Returns a list of repo-relative paths (compatible with
-    ``git diff --name-only`` output). Skips non-existent targets
-    and URL-scheme links.
+    Accepts nested and parent-relative references that remain inside the root;
+    rejects absolute paths, URL schemes, traversal, and symlink escapes.
     """
     if repo_root is None:
-        # Default: walk up from the file to find .git.
         repo_root = _find_repo_root(file_path)
         if repo_root is None:
             raise ValueError(
                 "cannot determine repo root; pass --repo-root explicitly"
             )
 
-    repo_root = os.path.abspath(repo_root)
-    chapter_dir = os.path.dirname(os.path.abspath(file_path))
+    root = os.path.realpath(repo_root)
+    chapter = os.path.realpath(file_path)
+    try:
+        if os.path.commonpath((root, chapter)) != root:
+            raise ValueError("chapter file is outside repository root")
+    except ValueError as exc:
+        raise ValueError("chapter file is outside repository root") from exc
+    chapter_dir = os.path.dirname(chapter)
 
     content = _read_file(file_path)
     results = []
     seen = set()
 
-    for m in LINK_RE.finditer(content):
-        target = m.group(1)
+    # Keep examples inside Markdown fences out of dependency extraction.
+    # Reuse the same fence parser as callout and heading handling, while
+    # preserving newline-separated link detection in unfenced prose.
+    lines = content.splitlines()
+    visible = {i for i, _ in _iter_unfenced_lines(lines)}
+    unfenced_content = "\n".join(line if i in visible else "" for i, line in enumerate(lines))
 
-        # Skip URL-scheme links (http, https, ftp, mailto, file, etc.).
-        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target) or target.startswith("mailto:"):
+    for match_start, raw_target in _iter_link_destinations(_mask_inline_code_spans(unfenced_content)):
+        # Markdown escapes an opening bracket after an odd number of
+        # backslashes; even numbers escape one another, leaving a real link.
+        slash_count = 0
+        before = match_start - 1
+        while before >= 0 and unfenced_content[before] == "\\":
+            slash_count += 1
+            before -= 1
+        if slash_count % 2:
             continue
-
-        # Strip fragment identifiers (#anchor).
-        target = target.split("#")[0]
+        raw_target = raw_target.strip()
+        # Markdown link titles are not part of local filenames.
+        # Angle-bracket destinations may contain spaces, unlike bare paths.
+        title_match = re.fullmatch(r"(<[^>]+>|\S+)\s+(?:\"[^\"]*\"|'[^']*')", raw_target)
+        target = title_match.group(1) if title_match else raw_target
+        if target.startswith("<") and target.endswith(">"):
+            target = target[1:-1]
+        # Decode Markdown punctuation escapes after parsing structure, then
+        # apply traversal/symlink containment to the decoded destination.
+        target = re.sub(r"\\([()])", r"\1", target)
+        target = target.split("#", 1)[0]
         if not target:
             continue
-
-        # Resolve relative path from the chapter's directory.
-        abs_target = os.path.normpath(os.path.join(chapter_dir, target))
-
-        # Skip non-existent targets.
-        if not os.path.exists(abs_target):
+        # Cover mailto:, javascript:, file:, drive prefixes, and Windows
+        # absolute paths as well as conventional URL schemes.
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target):
             continue
-
-        # Convert to repo-relative path.
+        if os.path.isabs(target) or ntpath.isabs(target):
+            continue
+        resolved = os.path.realpath(os.path.join(chapter_dir, target))
         try:
-            rel_path = os.path.relpath(abs_target, repo_root)
+            if os.path.commonpath((root, resolved)) != root:
+                continue
         except ValueError:
-            # Different drives on Windows — skip.
+            continue  # Differing Windows volumes cannot share a repo root.
+        if not os.path.exists(resolved):
             continue
-
+        rel_path = os.path.relpath(resolved, root)
         if rel_path not in seen:
             seen.add(rel_path)
             results.append(rel_path)
@@ -544,12 +635,13 @@ def extract_links(file_path, repo_root=None):
 
 
 def _find_repo_root(start_path):
-    """Walk up from *start_path* looking for a .git directory."""
+    """Walk up from *start_path* looking for a .git directory or worktree file."""
     current = os.path.abspath(start_path)
     if os.path.isfile(current):
         current = os.path.dirname(current)
     while True:
-        if os.path.isdir(os.path.join(current, ".git")):
+        git_marker = os.path.join(current, ".git")
+        if os.path.isdir(git_marker) or os.path.isfile(git_marker):
             return current
         parent = os.path.dirname(current)
         if parent == current:
