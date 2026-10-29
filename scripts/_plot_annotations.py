@@ -55,8 +55,9 @@ STALE_REASON_RE = re.compile(
     r"\(detected\s+(\d{4}-\d{2}-\d{2})\)\.?\s*$"
 )
 
-# Markdown link: [text](target)
-LINK_RE = re.compile(r"\[(?:[^\]]*)\]\((<[^>]+>(?:\s+(?:\"[^\"]*\"|'[^']*'))?|[^)]+)\)")
+# Markdown link opener; parse the destination's parentheses with a scanner.
+# A regex ending at the first ')' truncates bare names like scene_(draft).md.
+LINK_START_RE = re.compile(r"\\[(?:[^\\]]*)\\]\\(")
 
 # Maximum stale reasons before oldest-drop.
 MAX_STALE_REASONS = 3
@@ -511,6 +512,50 @@ def _mask_inline_code_spans(text):
     return "".join(chars)
 
 
+
+def _iter_link_destinations(text):
+    """Yield (opening-bracket offset, raw target) with balanced parentheses.
+
+    A quoted Markdown title may contain ')' without closing the link. An
+    apostrophe inside a filename does not begin a title.
+    """
+    for opener in LINK_START_RE.finditer(text):
+        depth = 1
+        quote = None
+        angle = False
+        escaped = False
+        for index in range(opener.end(), len(text)):
+            ch = text[index]
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped = True
+                continue
+            if quote:
+                if ch == quote:
+                    quote = None
+                continue
+            if ch in ('"', "'") and index > opener.end() and text[index - 1].isspace():
+                quote = ch
+                continue
+            if ch == "<" and index == opener.end():
+                angle = True
+                continue
+            if ch == ">" and angle:
+                angle = False
+                continue
+            if angle:
+                continue
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    yield opener.start(), text[opener.end():index]
+                    break
+
+
 def extract_links(file_path, repo_root=None):
     """Extract existing Markdown targets contained within the repository.
 
@@ -544,17 +589,17 @@ def extract_links(file_path, repo_root=None):
     visible = {i for i, _ in _iter_unfenced_lines(lines)}
     unfenced_content = "\n".join(line if i in visible else "" for i, line in enumerate(lines))
 
-    for m in LINK_RE.finditer(_mask_inline_code_spans(unfenced_content)):
+    for match_start, raw_target in _iter_link_destinations(_mask_inline_code_spans(unfenced_content)):
         # Markdown escapes an opening bracket after an odd number of
         # backslashes; even numbers escape one another, leaving a real link.
         slash_count = 0
-        before = m.start() - 1
+        before = match_start - 1
         while before >= 0 and unfenced_content[before] == "\\":
             slash_count += 1
             before -= 1
         if slash_count % 2:
             continue
-        raw_target = m.group(1).strip()
+        raw_target = raw_target.strip()
         # Markdown link titles are not part of local filenames.
         # Angle-bracket destinations may contain spaces, unlike bare paths.
         title_match = re.fullmatch(r"(<[^>]+>|\S+)\s+(?:\"[^\"]*\"|'[^']*')", raw_target)
