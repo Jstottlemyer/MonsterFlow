@@ -180,5 +180,30 @@ class ExtractLinksContainmentTests(unittest.TestCase):
             )
 
 
+
+    def test_bare_destinations_balance_parentheses_and_quoted_titles(self):
+        # Ordinary Markdown bare link targets may contain balanced parentheses.
+        with tempfile.TemporaryDirectory() as temp:
+            top = Path(temp)
+            root = top / "repo"
+            root.mkdir()
+            for name in ("scene_(draft).md", "scene_(part(v2)).md", "it's.md", "ordinary.md"):
+                (root / name).write_text(name)
+            (top / "secret_(draft).md").write_text("outside")
+            chapter = root / "plot.md"
+            chapter.write_text(
+                '[draft](scene_(draft).md) '
+                '[nested](scene_(part(v2)).md "Review (v2)") '
+                "[apostrophe](it's.md) "
+                '[outside](../secret_(draft).md) '
+                '[remote](https://example.org/a(b)) '
+                '[ordinary](ordinary.md)'
+            )
+            self.assertEqual(
+                extract_links(str(chapter), repo_root=str(root)),
+                ["scene_(draft).md", "scene_(part(v2)).md", "it's.md", "ordinary.md"],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
