@@ -205,5 +205,25 @@ class ExtractLinksContainmentTests(unittest.TestCase):
             )
 
 
+    def test_markdown_escaped_parentheses_resolve_inside_root_only(self):
+        # Escaped '(' and ')' denote filename punctuation, not path separators.
+        with tempfile.TemporaryDirectory() as temp:
+            top = Path(temp)
+            root = top / "repo"
+            root.mkdir()
+            (root / "scene_(draft).md").write_text("inside")
+            (root / "scene (draft).md").write_text("inside")
+            (top / "secret(draft).md").write_text("outside")
+            chapter = root / "plot.md"
+            chapter.write_text(
+                r"[bare](scene_\(draft\).md) "
+                r"[angle](<scene \(draft\).md>) "
+                r"[escape](../secret\(draft\).md)"
+            )
+            self.assertEqual(
+                extract_links(str(chapter), repo_root=str(root)),
+                ["scene_(draft).md", "scene (draft).md"],
+            )
+
 if __name__ == "__main__":
     unittest.main()
