@@ -57,7 +57,7 @@ STALE_REASON_RE = re.compile(
 
 # Markdown link opener; parse the destination's parentheses with a scanner.
 # A regex ending at the first ')' truncates bare names like scene_(draft).md.
-LINK_START_RE = re.compile(r"\\[(?:[^\\]]*)\\]\\(")
+LINK_START_RE = re.compile(r"\[[^\]]*\]\(")
 
 # Maximum stale reasons before oldest-drop.
 MAX_STALE_REASONS = 3
