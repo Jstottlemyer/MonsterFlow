@@ -39,7 +39,7 @@ trap 'rm -rf "$STAGE"' EXIT
 "$GRAPHIFY" extract "$VAULT" --out "$STAGE"
 NEXT="$STAGE/graphify-out"
 [ -s "$NEXT/graph.json" ] || { echo "Missing extracted graph"; exit 2; }
-"$GRAPHIFY" cluster-only "$NEXT/graph.json" --no-label
+"$GRAPHIFY" cluster-only "$STAGE" --graph "$NEXT/graph.json" --no-label
 [ -f "$NEXT/GRAPH_REPORT.md" ] || { echo "Missing cluster report"; exit 2; }
 
 BACKUP=""
