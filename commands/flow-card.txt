@@ -78,6 +78,9 @@
 ║  /goal       autonomous pipeline - EDUCATIONAL (prose below) ║
 ║  /rewind     roll back code+history to checkpoint - OPT-IN   ║
 ║  /autofix-pr  cloud PR watcher - AVOID (remote session)      ║
+║  /effort ultracode  multi-agent mode - OPT-IN (token cost)   ║
+║  /doctor prompt-audit  audit CLAUDE.md - EDUCATIONAL         ║
+║  /restart  resume after update - EDUCATIONAL (utility)       ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  AGENTS (on-disk): review(7) design(7) check(6) cr(9)          ║
