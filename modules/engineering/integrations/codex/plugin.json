@@ -1,0 +1,16 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "author": {
+    "name": "Fadi Chalfoun (portable adaptation; Codex-assisted)"
+  },
+  "description": "Community draft of fourteen portable MF engineering judgment skills. No runtime or account dependencies; not an official MF release.",
+  "keywords": [
+    "engineering",
+    "review",
+    "planning",
+    "portable-skills"
+  ],
+  "license": "MIT",
+  "name": "mf-engineering-skills-draft",
+  "version": "0.3.3-draft"
+}

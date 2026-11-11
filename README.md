@@ -15,6 +15,8 @@ Then open any project and type `/kickoff` to initialize, or `/flow` to see the r
 
 **License:** MIT — see [LICENSE](LICENSE).
 
+A separate [portable engineering skills draft](modules/engineering/README.md) provides fourteen skills and a deterministic Codex plugin export.
+
 ## What This Is
 
 A complete workflow system that scales to the size of the work:
