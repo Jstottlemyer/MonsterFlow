@@ -78,6 +78,7 @@
 ║  /goal       autonomous pipeline - EDUCATIONAL (prose below) ║
 ║  /rewind     roll back code+history to checkpoint - OPT-IN   ║
 ║  /autofix-pr  cloud PR watcher - AVOID (remote session)      ║
+║  /auto-mode-setup  configure auto mode env - EDUCATIONAL     ║
 ║                                                              ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  AGENTS (on-disk): review(7) design(7) check(6) cr(9)          ║
